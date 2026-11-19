@@ -4,10 +4,10 @@ Each package is the repository at HEAD (git archive: our code, the setup in setu
 PC cannot be asked to build before the setup runs:
 
   Windows  AgeOfCalamityRecomp-<v>-Windows.zip
-             AgeOfCalamityRecomp Setup.exe     the setup: python/pythonw.exe under another name (its signature kept,
-                                               so Smart App Control lets it start; Explorer shows Python's icon), with
-                                               its ._pth and the Python DLLs beside it; the name makes
-                                               setup/sitecustomize.py open setup/setup.py
+             AgeOfCalamityRecomp Setup.exe     setup/launcher.c with the game icon: starts python/Setup (if blocked).exe
+             python/Setup (if blocked).exe     the setup itself: pythonw.exe under another name (its signature kept, so
+                                               Smart App Control lets it start), whose name makes setup/sitecustomize.py
+                                               open setup/setup.py
              python/                           Python 3.13 embeddable + Tcl/Tk (tcltk.msi) + cryptography, lz4, numpy
                                                (runs the setup, make_build.py, the dump extraction, the C generator)
              prebuilt/hactool/win-x64/         hactool 1.4.0 (ISC) for the RomFS merge
@@ -48,13 +48,13 @@ TCLTK = ("https://www.python.org/ftp/python/3.13.17/amd64/tcltk.msi",
 WHEELS = ["cryptography", "lz4", "numpy"]
 # MSYS2 has no git of its own by default: Git for Windows, else the one on PATH.
 GIT = next((g for g in ("C:/Program Files/Git/cmd/git.exe",) if Path(g).is_file()), None) or shutil.which("git") or "git"
-# Python's own search path for make_build.py and the tools it starts: with a ._pth file the embeddable Python ignores
-# the script's folder, so tools/ and recomp/ are listed (no module name is in both).
-PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\tools\n..\\recomp\nimport site\n"
-# The same for AgeOfCalamityRecomp Setup.exe at the top of the folder, plus setup/ (its sitecustomize.py opens the setup).
-SETUP_EXE = "AgeOfCalamityRecomp Setup"
-SETUP_PTH = "python\\python313.zip\npython\npython\\Lib\npython\\Lib\\site-packages\nsetup\ntools\nrecomp\nimport site\n"
-SETUP_DLLS = ("python313.dll", "python3.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+# Python's search path for every exe in python/: with a ._pth file the embeddable Python ignores the script's folder, so
+# tools/ and recomp/ are listed (no module name is in both). Python reads python313._pth (the DLL's name) before a
+# ._pth named after the exe, so this one file also serves "Setup (if blocked).exe": setup/ is listed for its
+# sitecustomize.py, which opens the setup only when the exe's name does not start with "python".
+PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\setup\n..\\tools\n..\\recomp\nimport site\n"
+SETUP_EXE = "AgeOfCalamityRecomp Setup"   # setup/launcher.c, with the game icon
+SIGNED = "Setup (if blocked)"             # python/pythonw.exe under another name, its signature kept
 
 
 def sh(cmd, **kw):
@@ -110,12 +110,22 @@ def tcltk(stage: Path) -> list:
     return files
 
 
-def setup_exe(python: list) -> list:
-    """AgeOfCalamityRecomp Setup.exe and what it needs beside it: pythonw.exe renamed (Windows sees the same signature), its
-    ._pth and the DLLs python313.dll loads."""
+def setup_exe(python: list, stage: Path) -> list:
+    """The two ways into the setup, as WondersBeyondRecomp's package has them: "AgeOfCalamityRecomp Setup.exe" at the
+    top (setup/launcher.c with the game icon, compiled here with clang and llvm-windres) and, for a PC whose Smart App
+    Control refuses that unsigned program, python/Setup (if blocked).exe (pythonw.exe renamed, which keeps Python's
+    signature; python313._pth lists setup/, whose sitecustomize.py opens the setup)."""
+    work = stage / "launcher"
+    work.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "assets" / "icon.ico", work / "icon.ico")
+    (work / "launcher.rc").write_text('1 ICON "icon.ico"\n', encoding="ascii")
+    windres = shutil.which("llvm-windres") or shutil.which("windres") or "llvm-windres"
+    sh([windres, "launcher.rc", "-O", "coff", "-o", "launcher.res.o"], cwd=work)
+    sh(["clang", "--target=x86_64-w64-mingw32", "-Os", "-s", "-mwindows", "-municode", "-fuse-ld=lld",
+        ROOT / "setup" / "launcher.c", work / "launcher.res.o", "-o", work / "setup.exe"])
     by_name = {n: d for n, _, d in python}
-    files = [(f"{SETUP_EXE}.exe", 0o755, by_name["python/pythonw.exe"]), (f"{SETUP_EXE}._pth", 0o644, SETUP_PTH.encode())]
-    return files + [(dll, 0o644, by_name[f"python/{dll}"]) for dll in SETUP_DLLS]
+    return [(f"{SETUP_EXE}.exe", 0o755, (work / "setup.exe").read_bytes()),
+            (f"python/{SIGNED}.exe", 0o755, by_name["python/pythonw.exe"])]
 
 
 def python_embed(wheel_dir: Path, stage: Path) -> list:
@@ -171,7 +181,7 @@ def install_local() -> int:
     sh([sys.executable, "-m", "pip", "download", "-q", "--only-binary=:all:", "--platform", "win_amd64",
         "--python-version", "3.13", "--implementation", "cp", "-d", wheels, *WHEELS])
     python = python_embed(wheels, stage)
-    for name, _, data in python + setup_exe(python):
+    for name, _, data in python + setup_exe(python, stage):
         dst = ROOT / name
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(data)
@@ -229,7 +239,7 @@ def main() -> int:
     # ---- Windows
     win = list(tree)
     python = python_embed(stage / "wheels", stage)
-    win += python + setup_exe(python)
+    win += python + setup_exe(python, stage)
     win.append(("prebuilt/hactool/win-x64/hactool.exe", 0o755, (ROOT / "toolchain/hactool-1.4.0-win/hactool.exe").read_bytes()))
     win.append(("prebuilt/hactool/LICENSE", 0o644, lic))
     for f in ("xlate.exe", "xlate.id"):

@@ -21,7 +21,8 @@ First version of AgeOfCalamityRecomp, based on AoC Recomp 0.1.5.
 - The ImGui launcher is replaced by a plain setup window (tkinter), started by `AgeOfCalamityRecomp Setup.exe` on Windows and
   `setup.sh` on Linux: the game folder with a check mark for each file found, the platforms, a progress bar and the
   log behind **Show details**. After the build the same window shows the game's settings, with **Play**. The release
-  no longer needs `SDL3.dll` or an MSYS2-built launcher.
+  no longer needs `SDL3.dll` or an MSYS2-built launcher. `AgeOfCalamityRecomp Setup.exe` shows the game icon; where
+  Smart App Control refuses it, `python/Setup (if blocked).exe` opens the same setup.
 - The game has its own icon, on its exe, its window and the setup window. On Windows the setup puts the game in the
   Start Menu, and on the desktop unless the box is unticked, as **AgeOfCalamityRecomp**.
 - The Steam Deck part of the setup says what it does: how the folder reaches the Deck (copied by hand or sent over

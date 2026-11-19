@@ -78,6 +78,8 @@ the Steam Deck version), extracts the game code from your files, translates it a
 
 > [!TIP]
 > **Windows says it "protected your PC"?** The setup is not signed: click *More info*, then *Run anyway*.
+> If Windows refuses it outright (Smart App Control), open the `python` folder and start **`Setup (if blocked).exe`**
+> instead: it is the same setup, run by the signed official Python.
 >
 > **"WSL is not installed"?** Only the Steam Deck version needs it. Answer **Yes** when the setup offers to install it,
 > accept the administrator prompt, restart the PC and press **Build** again: it continues where it stopped.

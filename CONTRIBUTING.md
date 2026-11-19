@@ -71,11 +71,13 @@ Finished steps are skipped, so building again is incremental:
 
 The setup (`setup/setup.py`, tkinter) runs this script and reads its `@@PLAN`, `@@STEP`, `@@NEED` and `@@DONE`
 lines. In a copy of the repository, `python tools/make_release.py --local` puts `AgeOfCalamityRecomp Setup.exe` and
-`python/` in the folder as the Windows package has them; `setup.bat` (any Python 3 with tkinter) and `sh setup.sh`
-also open it. Release
-packages come from `tools/make_release.py`: the repository at HEAD plus an embeddable Python with Tcl/Tk,
-`AgeOfCalamityRecomp Setup.exe` (its `pythonw.exe` renamed, which `setup/sitecustomize.py` turns into the setup), hactool and
-the prebuilt translator, and nothing of the game.
+`python/` in the folder as the Windows package has them (it needs MSYS2's clang and llvm-windres on PATH);
+`setup.bat` (any Python 3 with tkinter) and `sh setup.sh` also open it. Release packages come from
+`tools/make_release.py`: the repository at HEAD plus an embeddable Python with Tcl/Tk, hactool, the prebuilt
+translator and the two ways into the setup, and nothing of the game. `AgeOfCalamityRecomp Setup.exe` is
+`setup/launcher.c` with the game icon; it starts `python/Setup (if blocked).exe`, which is `pythonw.exe` renamed (its
+signature kept, for PCs whose Smart App Control refuses the unsigned launcher) and which `setup/sitecustomize.py`
+turns into the setup.
 
 The icon (`assets/icon.ico` for the game's `AgeOfCalamityRecomp.exe`, its shortcuts and the setup window, `assets/icon.png` on Linux) is cut from
 `assets/key-art.jpg` by `tools/make_icon.py` (Pillow); `--list` shows the other crops kept aside.
