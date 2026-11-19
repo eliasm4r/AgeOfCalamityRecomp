@@ -24,6 +24,11 @@ other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setu
   winxlate  xlate.exe, the shader translator for Windows (prebuilt/xlate/win-x64 from the release package)
   winbuild  AgeOfCalamityRecomp.exe in MSYS2 UCRT64 (tools/build.py guest host)
   windist   dist/windows: AgeOfCalamityRecomp.exe, its DLLs, the translator, exefs/, romfs/ (a hard link), romfs-index.bin
+  dlss      dist/windows/nvngx_dlss.dll, NVIDIA's DLSS library, downloaded from NVIDIA's DLSS SDK repository when the PC
+            has an NVIDIA RTX GPU (skipped otherwise; a failed download warns and the game runs without DLAA)
+  shaders   every game shader translated into dist/windows/shader-cache and built into the GPU driver's cache
+            (tools/prepare_shaders.py, AgeOfCalamityRecomp.exe --prepare-shaders), so fights do not stutter; skipped
+            while shader-prepared.bin is newer than the translator id
   send      the Deck folder's changed files to the Steam Deck over SSH (tools/deck/deploy.sh --no-build)
 
 Nothing here reads or prints key values: the key file's path goes to the tools that need it.
@@ -69,6 +74,8 @@ TEXT = {
     "t_winxlate": "Prepare the shader translator",
     "t_winbuild": "Build for Windows",
     "t_windist": "Put the Windows game folder together",
+    "t_dlss": "Download NVIDIA DLSS",
+    "t_shaders": "Prepare the shaders (once, so fights do not stutter)",
     "t_send": "Send to the Steam Deck",
     # messages
     "no_dir": "the game folder does not exist: {0}",
@@ -83,7 +90,7 @@ TEXT = {
     "wsl_old": "WSL could not create the distro: update it (in an administrator terminal: wsl --update) and build again",
     "no_distro": "the WSL distro \"{0}\" does not exist (wsl -l -v)",
     "msys_get": "downloading MSYS2 ({0:.0f} MB, first time only)...",
-    "msys_hash": "the MSYS2 download does not match the pinned hash",
+    "msys_hash": "the download of {0} does not match its pinned hash",
     "msys_pkgs": "installing the compiler and libraries into MSYS2 (~1.5 GB, first time only)...",
     "tools_ok": "tools ready",
     "exit": "the command ended with code {0}",
@@ -93,6 +100,11 @@ TEXT = {
     "no_xlate": "the Windows shader translator is missing (prebuilt/xlate/win-x64) and there is no .NET to build it",
     "no_bash": "Git Bash is not in C:/Program Files/Git (sending uses its ssh and scp)",
     "unexpected": "Unexpected ERROR: {0}",
+    "dlss_no_rtx": "no NVIDIA RTX graphics card found ({0}): DLSS is not downloaded",
+    "dlss_get": "downloading nvngx_dlss.dll {0} from NVIDIA's DLSS SDK (license: {1})...",
+    "dlss_kept": "a DLSS library of another version is already in the game folder: kept",
+    "dlss_failed": "WARNING: NVIDIA DLSS could not be downloaded ({0}). The game runs without DLAA; the next build tries again",
+    "shaders_kept": "the shaders are already prepared for this translator",
     # what tools/extract.py inventory found wrong in the dump ("@@PROBLEM <code> <detail>")
     "p_base": "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)",
     "p_update": "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder",
@@ -138,7 +150,7 @@ class StepFailed(Exception):
 # "emitted a/b chunks" and ninja's "[n/m]" lines move it forward. In a step that compiles, the first ninja run is the
 # game code (most of the time) and any later one is the runtime.
 WEIGHTS = {"check": 5, "tools": 120, "extract": 30, "romfs": 300, "dlc": 60, "deck": 900, "wingen": 40,
-           "winxlate": 5, "winbuild": 480, "windist": 15, "send": 60}
+           "winxlate": 5, "winbuild": 480, "windist": 15, "dlss": 10, "shaders": 900, "send": 60}
 NINJA = re.compile(r"^\[(\d+)/(\d+)\] ")
 EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
 
@@ -365,7 +377,7 @@ def download(url: str, sha: str, dst: Path) -> None:
                 out(f"  {got / 1e6:.0f} / {total / 1e6:.0f} MB")
     if h.hexdigest() != sha:
         part.unlink(missing_ok=True)
-        raise StepFailed(tr("msys_hash"))
+        raise StepFailed(tr("msys_hash", dst.name))
     part.replace(dst)
 
 
@@ -586,6 +598,56 @@ def s_windist(args) -> str:
     return "ok"
 
 
+# ---- NVIDIA DLSS (runtime/vk_dlaa.c): NGX loads nvngx_dlss.dll from the folder of AgeOfCalamityRecomp.exe. The package
+# does not ship it: NVIDIA's own copy comes from the DLSS SDK repository (NVIDIA RTX SDK license) at a pinned tag and
+# hash, as TotK's installer gets it.
+DLSS_DLL = "nvngx_dlss.dll"
+DLSS_VERSION = "310.9.1"
+DLSS_URL = f"https://raw.githubusercontent.com/NVIDIA/DLSS/v{DLSS_VERSION}/lib/Windows_x86_64/rel/{DLSS_DLL}"
+DLSS_SHA256 = "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
+DLSS_LICENSE = "https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt"
+
+
+def gpu_names() -> list:
+    """The display adapters Windows knows (Win32_VideoController), empty when the query fails."""
+    p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                        "(Get-CimInstance Win32_VideoController).Name"],
+                       capture_output=True, creationflags=0x08000000)
+    return [l.strip() for l in p.stdout.decode("utf-8", "replace").splitlines() if l.strip()]
+
+
+def s_dlss(args) -> str:
+    gpus = gpu_names()
+    if not any("NVIDIA" in g.upper() and "RTX" in g.upper() for g in gpus):
+        out(tr("dlss_no_rtx", ", ".join(gpus) or "?"))
+        return "skip"
+    dst = ROOT / "dist/windows" / DLSS_DLL
+    if dst.is_file() and hashlib.sha256(dst.read_bytes()).hexdigest() != DLSS_SHA256:
+        out(tr("dlss_kept"))   # the player put another version there on purpose
+        return "ok"
+    out(tr("dlss_get", DLSS_VERSION, DLSS_LICENSE))
+    try:
+        download(DLSS_URL, DLSS_SHA256, dst)
+    except Exception as e:   # urllib's errors, a cut connection (http.client, not OSError), a bad hash
+        out(tr("dlss_failed", str(e)[:300]))
+        return "skip"
+    out(f"  {DLSS_DLL} {DLSS_VERSION}")
+    return "ok"
+
+
+# ---- shaders (tools/prepare_shaders.py): every game shader translated and built into the GPU driver's cache before
+# the first fight, as TotK's setup prepares its shaders. Skipped when shader-prepared.bin is newer than the translator
+# id: the translations are keyed by it, so a rebuild of the game code keeps them.
+def s_shaders(args) -> str:
+    dist = ROOT / "dist/windows"
+    done, xid = dist / "shader-prepared.bin", dist / "xlate.id"
+    if done.is_file() and xid.is_file() and done.stat().st_mtime >= xid.stat().st_mtime:
+        out(tr("shaders_kept"))
+        return "skip"
+    msys(args, f"python3 -u tools/prepare_shaders.py {sh_quote(msys_path(dist))}")
+    return "ok"
+
+
 def s_send(args) -> str:
     bash = Path("C:/Program Files/Git/bin/bash.exe") if WIN else Path(shutil.which("bash") or "/bin/bash")
     if not bash.is_file():
@@ -629,6 +691,8 @@ def main() -> int:
         plan.append(("deck", s_deck))
     if args.windows:
         plan += [("wingen", s_wingen), ("winxlate", s_winxlate), ("winbuild", s_winbuild), ("windist", s_windist)]
+        if WIN:
+            plan += [("dlss", s_dlss), ("shaders", s_shaders)]
     if args.send:
         plan.append(("send", s_send))
     if args.check_only:

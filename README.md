@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/key-art.jpg" alt="Hyrule Warriors: Age of Calamity" width="100%">
+<img src="assets/icon.png" width="140" alt="AgeOfCalamityRecomp icon">
 
 # AgeOfCalamityRecomp
 
@@ -129,7 +129,7 @@ The Deck does not compile anything: it receives the folder built on your PC.
 4. In Steam: *Games*, *Add a Non-Steam Game*, tick **Hyrule Warriors: Age of Calamity** and add it. It is now in your
    library in **Game Mode**.
 
-Hold **L3+R3** for the quick menu (frame rate, internal resolution, overlay); **Minus + Plus** opens the full menu.
+Hold **L3+R3** for the quick menu (frame rate, console mode, overlay); **Minus + Plus** opens the full menu.
 
 <br>
 
@@ -193,7 +193,9 @@ faster. The 60 fps mode needs three of the game's clocks patched together, and i
 <summary><b>DLSS / DLAA is greyed out.</b></summary>
 <br>
 
-It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `AgeOfCalamityRecomp.exe`. Put the file there and restart the game.
+It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `AgeOfCalamityRecomp.exe`. The Windows build
+downloads it from NVIDIA's DLSS SDK when it finds an RTX card. If that download failed (see the build log), build again
+or put the file there yourself, then restart the game.
 </details>
 
 <details>

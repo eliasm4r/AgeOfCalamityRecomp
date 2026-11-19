@@ -73,5 +73,7 @@ Besides the repository, the release packages (`tools/make_release.py`) carry the
 | hactool 1.4.0 (release `hactool.exe`; Linux built by `tools/build_hactool_linux.sh`) | https://github.com/SciresM/hactool, Copyright (c) 2018 SciresM | ISC (text in `prebuilt/hactool/LICENSE`) | `prebuilt/hactool/` (RomFS merge, `tools/merge_romfs.py`) |
 | `xlate` shader translator (Ryujinx 1.3.2 + `tools/xlate/patches/`, with the .NET runtime built into the Windows executable) | `tools/vendor/ryujinx` and `tools/xlate/`; .NET: https://github.com/dotnet/runtime | MIT | `prebuilt/xlate/` |
 
+Not in any package: on Windows with an NVIDIA RTX card the build (`tools/make_build.py`, step `dlss`) downloads NVIDIA's DLSS library `nvngx_dlss.dll` 310.9.1, unmodified, from https://github.com/NVIDIA/DLSS (tag `v310.9.1`, SHA-256 checked) into the player's game folder, under the NVIDIA RTX SDK licence (https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt).
+
 The project's own code is under the [MIT License](LICENSE). The licence grants nothing over the game, which belongs to
 Nintendo and Koei Tecmo.

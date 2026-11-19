@@ -92,7 +92,7 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 |---|---|
 | `recomp/` | ARM64 to C lifter (from Astral Chain Recomp, itself from LAS Recomp): `gen.py` generates the C of the three modules, `layout.py` decides module bases, `patches-v130.txt` holds the game patches and spin waits |
 | `runtime/` | the host "Horizon": loader, dispatch, memory, kernel, IPC, `nn::*` overrides, audio, RomFS, DLCs, saves, NVN front end, Vulkan back end, input, window, ImGui menu |
-| `setup/` | the setup (tkinter): runs `tools/make_build.py`, then edits `settings.ini` and starts the game |
+| `setup/` | the setup (tkinter): runs `tools/make_build.py` (install, or update over an installed game), then starts the game; settings are in the game's F1 menu |
 | `assets/` | the key art and the icon cut from it (`tools/make_icon.py`) |
 | `tools/` | extraction, RomFS merge, build, release, reports, censuses, Deck tools (`tools/deck/`) |
 | `tests/` | differential lifter tests against Unicorn and tool tests |
@@ -162,7 +162,7 @@ and Minus+Plus opens the full menu. B closes it.
 | Row | Values | Note |
 |---|---|---|
 | Frame rate | **30** (default); 60 shows greyed out | the game moves a fixed step per frame, so it runs at 30 until the 60 fps patch exists |
-| Internal resolution | **Handheld** (Deck default) / TV | the Switch operation mode; switched live, like docking a Switch |
+| Console mode | **Handheld** (Deck default) / TV | the Switch operation mode; switched live, like docking a Switch |
 | Performance overlay | off / FPS / full | same as a short L3+R3 press |
 
 For less power use, Steam's own performance menu limits TDP and refresh rate.

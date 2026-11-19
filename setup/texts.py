@@ -53,8 +53,9 @@ TEXTS = {
     "failed_box": "The build stopped at \"{step}\".\n\n{note}\n\nThe full log is in {path}",
     "cancelled": "Build stopped.",
     "no_python": "Could not start Python: {error}",
-    "update_note": "A new version is installed. Build again to update the game: only what changed is redone, and your "
-                   "saves and settings are kept.",
+    "update_note": "The game is already installed here. Update installs this version over it: only what changed is "
+                   "redone, and your saves and settings are kept.",
+    "update": "Update",
     "need_wsl": "WSL (the Linux inside Windows) is needed for the Steam Deck version. Install it now? Windows asks for "
                 "administrator permission; restart the PC when it is done, then build again.",
     "wsl_started": "WSL is being installed. Restart the PC when it is done, then build again.",
@@ -63,19 +64,10 @@ TEXTS = {
     # the game window
     "ready": "Ready to play",
     "version": "Version {v}, built for this PC",
-    "graphics": "Display and graphics",
-    "controls": "Controls and sound",
-    "framerate": "Frame rate",
-    "framerate_value": "30 fps (the game's own)",
-    "framerate_desc": "30 FPS is the game's own rate: it moves a fixed step per frame. 60 FPS needs a patch that is not "
-                      "ported yet.",
-    "hint": "Changes apply the next time the game starts. More options in the game: F1, or Minus + Plus on a controller.",
+    "installed": "The game is installed. Its settings are in the game: press F1, or Minus + Plus on a controller. Run "
+                 "this setup again to install an update.",
     "play": "Play",
     "playing": "Playing",
-    "save": "Save",
-    "saved": "Settings saved.",
-    "save_failed": "Could not write settings.ini.",
-    "unsaved": "Unsaved changes.",
     "play_failed": "Could not start the game: {error}",
     "report": "Report a problem...",
     "reporting": "Making the report...",
@@ -83,5 +75,4 @@ TEXTS = {
                    "in your browser.",
     "report_failed": "The report could not be made.",
     "game_folder": "Game folder",
-    "build_again": "Rebuild...",
 }
