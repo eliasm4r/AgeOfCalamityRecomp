@@ -49,7 +49,7 @@ static int limit_read;
 
 static int limit_parse(void) {
     const char *e = cfg_get("AOC_FPS_LIMIT");
-    if (!e || !*e) return 30;   // AoC: the game's own 30 fps (cfg.c default)
+    if (!e || !*e) return 30;   // Age of Calamity: the game's own 30 fps (cfg.c default)
     if (!strcmp(e, "display")) return 0;
     char *end;
     long n = strtol(e, &end, 10);

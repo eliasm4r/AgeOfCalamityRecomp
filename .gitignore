@@ -55,8 +55,6 @@ Thumbs.db
 # Pieces only the release packages carry (tools/make_release.py)
 /prebuilt/
 /python/
-/AoC-Launcher.exe
-/SDL3.dll
 /aoc-report.zip
 
 # The setup's own files (setup/setup.py) and the pieces the Windows package puts beside AgeOfCalamityRecomp.exe

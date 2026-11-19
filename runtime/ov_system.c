@@ -566,7 +566,7 @@ static void ov_diag_startup(Cpu *c) { (void)c; rt_log("diag: host diagnostics");
 // nn::aoc::CountAddOnContent and ListAddOnContent and nn::fs::MountAddOnContent)
 static void ov_aoc_initialize(Cpu *c) { (void)c; rt_log("aoc: %d add-on contents", dlc_count()); }
 
-// The copyright frame buffer (AoC 1.3.0, SDK 9.6.0): an overlay the system draws only into screenshots and recordings.
+// The copyright frame buffer (Age of Calamity 1.3.0, SDK 9.6.0): an overlay the system draws only into screenshots and recordings.
 // The SDK hands the buffer to am as transfer memory; the host takes no system captures, so nothing keeps it. Without
 // these the SDK's InitializeCopyrightFrameBuffer read a null applet proxy (nxnative dm/host/hle_oe.c, observed there
 // right after the window setup).

@@ -2,7 +2,7 @@
 // Provenance: that file is based on D2R Mobile dm/gfx/tools/dmsh_xlate/Program.cs. Changes here: SPIR-V for Vulkan is the final
 // output (no MSL service, no VertexCounterLowering, no NEAR_IS_MINUS_W rewrite), depth clip control reported as supported,
 // non-constant texture offsets reported as unsupported, --disasm dropped.
-// AoC Recomp: slots of all three c2 handle tables (TexSlot), as runtime/gfx_shader.c handle_slot numbers them: Age of
+// AgeOfCalamityRecomp: slots of all three c2 handle tables (TexSlot), as runtime/gfx_shader.c handle_slot numbers them: Age of
 // Calamity binds combined textures (nvnCommandBufferBindTexture, 0x20 + 8 r) and images (0x120 + 8 r), which the TotK
 // copy (separate textures only, 0x168 + 8 r) answered as slot -1: every type and format query fell back to 2D / RGBA8.
 // Protocol (stdout carries replies only; diagnostics go to stderr):

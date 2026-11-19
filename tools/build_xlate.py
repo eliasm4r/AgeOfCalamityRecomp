@@ -2,7 +2,7 @@
 """Build the shader translator: build/xlate/aoc_xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
 
 Copies tools/vendor/ryujinx to build/xlate/ryujinx, applies tools/xlate/patches/*.patch there (tools/vendor stays
-byte-identical; 0001-0004 are MNG's, 0005-0011 are TotK Recomp's, 0012-0014 are ours (AoC)), then runs `dotnet publish`. Needs the .NET 10 SDK, the MSVC build
+byte-identical; 0001-0004 are MNG's, 0005-0011 are TotK Recomp's, 0012-0014 are ours (AgeOfCalamityRecomp)), then runs `dotnet publish`. Needs the .NET 10 SDK, the MSVC build
 tools and vswhere.exe (CONTRIBUTING.md). Run with .venv. On Linux it builds build/xlate/aoc_xlate for linux-x64, which
 NativeAOT links with the system's clang (no MSVC); NativeAOT builds for the OS it runs on only.
 

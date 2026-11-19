@@ -59,7 +59,7 @@ works.
 
 ## Install
 
-1. Download **`AoC-Recomp-<version>-Windows.zip`** (or **`-Linux.tar.gz`**) from the
+1. Download **`AgeOfCalamityRecomp-<version>-Windows.zip`** (or **`-Linux.tar.gz`**) from the
    [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it to a folder with
    room, for example `C:\Games`.
 2. Start **`AgeOfCalamityRecomp.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
@@ -97,11 +97,11 @@ With **RecompLauncher**, the game is built again by itself after an update.
 | What | Where | Size |
 |---|---|---|
 | The setup, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 25 GB |
-| Linux for Windows (Steam Deck version only) | WSL distro **AoC-Recomp**, in `%LOCALAPPDATA%\AoC-Recomp\wsl` | about 6 GB |
+| Linux for Windows (Steam Deck version only) | WSL distro **AgeOfCalamityRecomp**, in `%LOCALAPPDATA%\AgeOfCalamityRecomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
 | Linux: build folder and Python packages | `~/aoc-build`, `~/.venvs/aoc` | about 6 GB |
 
-To remove everything, delete the install folder; on Windows also run `wsl --unregister AoC-Recomp` and delete
+To remove everything, delete the install folder; on Windows also run `wsl --unregister AgeOfCalamityRecomp` and delete
 `C:\msys64` if the setup installed it; on Linux delete `~/aoc-build` and `~/.venvs/aoc`.
 </details>
 

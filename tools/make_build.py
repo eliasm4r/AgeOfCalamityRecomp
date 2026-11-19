@@ -9,7 +9,7 @@ Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is 
   check     the dump folder (NSPs of the base, update 1.3.0 and DLCs, and prod.keys; each package is identified by
             its contents, not its file name, and an update of another version is refused), free disk and memory
   tools     the build environment, set up once and then only checked:
-              Windows + Deck: WSL and a private Arch Linux distro "AoC-Recomp" (wsl --install archlinux --name), with
+              Windows + Deck: WSL and a private Arch Linux distro "AgeOfCalamityRecomp" (wsl --install archlinux --name), with
                               tools/setup_wsl.sh --minimal inside (clang, lld, ninja, Python venv)
               Windows target: MSYS2 UCRT64 (C:/msys64; a pinned msys2-base is unpacked there if missing) with clang,
                               SDL3, Opus, libvpx, zstd and Vulkan
@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION = (ROOT / "VERSION").read_text().strip() if (ROOT / "VERSION").is_file() else "?"
 BASE_ID, UPDATE_ID = "01002B00111A2000", "01002B00111A2800"
 WIN = os.name == "nt"
-DISTRO = "AoC-Recomp"   # the private WSL distro the tools step makes
+DISTRO = "AgeOfCalamityRecomp"   # the private WSL distro the tools step makes
 VENV_PY = Path.home() / ".venvs" / "aoc" / "bin" / "python"
 # MSYS2 base, pinned (https://github.com/msys2/msys2-installer/releases/tag/2026-09-27); unpacked only when the PC has
 # no MSYS2. The packages come from MSYS2's own mirrors.
@@ -275,7 +275,7 @@ def tools_wsl(args) -> None:
         if args.wsl_distro and args.wsl_distro != DISTRO:
             raise StepFailed(tr("no_distro", d))
         out(tr("wsl_install", d))
-        loc = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "AoC-Recomp" / "wsl"
+        loc = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "AgeOfCalamityRecomp" / "wsl"
         loc.mkdir(parents=True, exist_ok=True)
         try:
             run(["wsl", "--install", "archlinux", "--name", d, "--location", loc, "--no-launch"])

@@ -1,5 +1,5 @@
 # Copied from astral-chain-pc-recomp recomp/layout.py @ 3bbaf259ac099a321c78b81f5402f6070a77874a (MIT). Change for
-# AoC: no fixed RomFS region. Astral Chain reads the RomFS image at an address written into the binary; AoC mounts the
+# Age of Calamity: no fixed RomFS region. Astral Chain reads the RomFS image at an address written into the binary; the game mounts the
 # RomFS through nn::fs::MountRom and reads the RDBs by file, so nothing is reserved between main and the next modules.
 """Guest address layout of the loaded modules, computed from their sizes.
 
@@ -22,12 +22,12 @@ ALIGN = 0x200000
 ADDRESS_LIMIT = 1 << 39
 ORDER = ['main'] + [f'subsdk{i}' for i in range(10)] + ['sdk']
 
-# AoC: no fixed RomFS region (see the comment at the top). Kept as 0 so the inherited runtime compiles.
+# Age of Calamity: no fixed RomFS region (see the comment at the top). Kept as 0 so the inherited runtime compiles.
 ROMFS_BASE = 0
 
 
 def romfs_size(exefs):
-    """AoC: always 0 — the RomFS is not mapped at a fixed address."""
+    """Age of Calamity: always 0 — the RomFS is not mapped at a fixed address."""
     return 0
 
 

@@ -58,7 +58,7 @@ Finished steps are skipped, so building again is incremental:
 | Step | What it does |
 |---|---|
 | `check` | `prod.keys` and the inventory (packages are identified by their contents; an update other than 1.3.0 is refused), disk space and RAM |
-| `tools` | sets up the environment: the private **`AoC-Recomp`** WSL distro and `tools/setup_wsl.sh --minimal` for the Deck target, MSYS2 UCRT64 in `C:/msys64` for the Windows target, the system package manager on Linux |
+| `tools` | sets up the environment: the private **`AgeOfCalamityRecomp`** WSL distro and `tools/setup_wsl.sh --minimal` for the Deck target, MSYS2 UCRT64 in `C:/msys64` for the Windows target, the system package manager on Linux |
 | `extract` | `build/v130/exefs`, reused only when its build IDs are 1.3.0's |
 | `romfs` | `build/v130/romfs.bin` with `tools/merge_romfs.py` |
 | `dlc` | `build/v130/dlc-<title id>.bin`, the RomFS of each DLC (`tools/extract_dlc.py`) |
@@ -70,7 +70,9 @@ Finished steps are skipped, so building again is incremental:
 | `send` | `tools/deck/deploy.sh --no-build` |
 
 The setup (`setup/setup.py`, tkinter) runs this script and reads its `@@PLAN`, `@@STEP`, `@@NEED` and `@@DONE`
-lines. In a copy of the repository open it with `setup.bat` (any Python 3 with tkinter) or `sh setup.sh`. Release
+lines. In a copy of the repository, `python tools/make_release.py --local` puts `AgeOfCalamityRecomp.exe` and
+`python/` in the folder as the Windows package has them; `setup.bat` (any Python 3 with tkinter) and `sh setup.sh`
+also open it. Release
 packages come from `tools/make_release.py`: the repository at HEAD plus an embeddable Python with Tcl/Tk,
 `AgeOfCalamityRecomp.exe` (its `pythonw.exe` renamed, which `setup/sitecustomize.py` turns into the setup), hactool and
 the prebuilt translator, and nothing of the game.

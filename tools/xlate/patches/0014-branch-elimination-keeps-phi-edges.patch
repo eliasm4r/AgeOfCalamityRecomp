@@ -28,7 +28,7 @@
 +                return false;
 +            }
 +
-+            // AoC Recomp (patch 0014): the two edges into the target must also carry the same values. The next block
++            // AgeOfCalamityRecomp (patch 0014): the two edges into the target must also carry the same values. The next block
 +            // can be "only a branch" because the copies it held were propagated into the target's phis; then the phi
 +            // still tells the edges apart, and dropping the conditional branch sends every thread down the second
 +            // edge. Maxwell `SYNC !P0; MOV R3, R9; SYNC` (if (R3 > R9) R3 = R9) became an unconditional R3 = R9: Age of

@@ -393,7 +393,7 @@ int input_overlay_gate(int *held, uint64_t *buttons) {
     return chord(held, buttons, 1ull << B_STICK_L | 1ull << B_STICK_R);
 }
 
-// L3+R3 as two gestures (AoC: the Steam Deck has no F10 and no spare buttons in Game Mode). Held for hold_ns it opens
+// L3+R3 as two gestures (Age of Calamity: the Steam Deck has no F10 and no spare buttons in Game Mode). Held for hold_ns it opens
 // the quick menu (ui/menu.cpp menu_quick_open), once per hold; let go sooner it steps the performance overlay, as the
 // plain chord did. The game sees neither click while the chord is held. q->held and q->fired are the caller's state.
 int input_quick_gate(InputQuickGate *q, uint64_t *buttons, uint64_t now_ns, uint64_t hold_ns) {

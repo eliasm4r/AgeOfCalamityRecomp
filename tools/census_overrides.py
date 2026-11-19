@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Matches the imports of the AoC modules against the `nn::*` functions the reference runtimes already implement.
+"""Matches the imports of the Age of Calamity modules against the `nn::*` functions the reference runtimes already implement.
 
 The Astral Chain and TotK Recomp runtimes replace SDK functions with host implementations through
 `HOST_OVERRIDE("<mangled name>", ...)` (and observe others with `HOST_OBSERVER`). This census tells, for the imports

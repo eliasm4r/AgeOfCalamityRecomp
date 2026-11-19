@@ -1115,7 +1115,7 @@ static void tab_mods(float scale) {
 
 // ---- the window: title, tabs (L / R or Q / E switch), the page, and the bottom row with "Continue" and "Quit game".
 // B on the gamepad and Esc close it.
-// ---- the quick menu (AoC): L3+R3 held. The three settings that spare the Steam Deck, without the full menu's tabs.
+// ---- the quick menu (AgeOfCalamityRecomp): L3+R3 held. The three settings that spare the Steam Deck, without the full menu's tabs.
 // Frame rate: 30 is the game's own rate and the only one that works today (60 needs
 // the 60 fps patch, docs/NOTES.md; below 30 the game would run slow, as it steps a fixed amount per update). Internal resolution:
 // the Switch's handheld or docked mode, so the game itself picks its lighter or its sharper render resolution

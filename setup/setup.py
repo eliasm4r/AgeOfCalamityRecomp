@@ -319,7 +319,7 @@ class Build:
             return
         if WIN:
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)], capture_output=True, creationflags=0x08000000)
-            subprocess.run(["wsl", "-d", distro or "AoC-Recomp", "-e", "pkill", "-f", "tools/build.py"],
+            subprocess.run(["wsl", "-d", distro or "AgeOfCalamityRecomp", "-e", "pkill", "-f", "tools/build.py"],
                            capture_output=True, creationflags=0x08000000)
         else:
             try:

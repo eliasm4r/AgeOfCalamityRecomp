@@ -12,7 +12,7 @@ Each shader's key is the one the runtime uses to find the translation: the first
 
 GLSLC reading ported from nxnative `dm/gfx/tools/shader_split.py` @ 3ace3df33b81681cdc9d17bfa48eadaccd446b5c
 (functions sph_stage, ctl_len, skey, check, glslc_stage, glslc_layout, glslc_section, glslc_shaders, idrk_data;
-MIT, Copyright (c) 2026 seedds). Without the NVN2 path (Switch 2) and without the game profile (AoC skips no bytes in
+MIT, Copyright (c) 2026 seedds). Without the NVN2 path (Switch 2) and without the game profile (Age of Calamity skips no bytes in
 the key).
 
 Resumes where it stopped (--budget seconds per run). Outputs in build/v130/ (outside git):
@@ -144,7 +144,7 @@ def glslc_shaders(d: bytes):
 
 
 def idrk_inflate(f, start: int, end: int, flags: int) -> bytes:
-    """Real data of an AoC IDRK entry: flag 0x100000 = zlib in blocks (u32 size + stream, 0 ends)."""
+    """Real data of an Age of Calamity IDRK entry: flag 0x100000 = zlib in blocks (u32 size + stream, 0 ends)."""
     d = nx.read_at(f, start, end - start)
     if not flags & 0x100000:
         return d

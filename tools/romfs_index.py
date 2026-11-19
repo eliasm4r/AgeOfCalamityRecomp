@@ -3,7 +3,7 @@
 
 Adapted from astral-chain-pc-recomp tools/romfs_index.py @ 3bbaf259ac099a321c78b81f5402f6070a77874a (MIT), itself
 adapted from MacNativeGames games/totk/scripts/prepare_romfs_backend.py @ b75be8cf (MIT, Copyright (c) 2026
-MacNativeGames contributors). Change for AoC: the file list comes straight from the tables of romfs.bin itself
+MacNativeGames contributors). Change for Age of Calamity: the file list comes straight from the tables of romfs.bin itself
 (tools/nx.py romfs_image_files), without the TotK extractor's index.json.
 
 Input: build/v130/romfs.bin (RomFS 1.3.0 merged by tools/merge_romfs.py). Output, in the build folder (never in the

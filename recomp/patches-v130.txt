@@ -1,4 +1,4 @@
-# Code patches of AoC 1.3.0 (recomp/patches.py). Spin waits: loops that only another thread ends, found by
+# Code patches of Age of Calamity 1.3.0 (recomp/patches.py). Spin waits: loops that only another thread ends, found by
 # tools/spin_waits.py in the three modules of our ExeFS (build IDs in tools/data/known-builds.json). The generator sends
 # the back edges of these loops through rt_spin_gate (runtime/kernel.c). Without them clang can hoist the loop's load
 # and turn it into a "jmp $" (seen in Astral Chain). Regenerate with:

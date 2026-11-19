@@ -952,7 +952,7 @@ def _bounds(st):
         if vals is not None and 0 < len(vals) <= MAX_COUNT:
             a = lo(a) if a[0] in ('zx', 'sx') else a
             out.append((a, vals))
-            # AoC: a `cmp wN` bounds lo(x); when x fits in 32 bits by construction (a few-bit ubfx/and), the same
+            # Age of Calamity: a `cmp wN` bounds lo(x); when x fits in 32 bits by construction (a few-bit ubfx/and), the same
             # bound holds for the 64-bit x that indexes the table (main+0x1867d08: 4-bit ubfx x8, cmp w8, #3).
             if a[0] == 'lo':
                 d = _domain(a[1])

@@ -3,7 +3,7 @@
 Each package is the repository at HEAD (git archive: our code, the setup in setup/, no game data) plus what a player's
 PC cannot be asked to build before the setup runs:
 
-  Windows  AoC-Recomp-<v>-Windows.zip
+  Windows  AgeOfCalamityRecomp-<v>-Windows.zip
              AgeOfCalamityRecomp.exe           the setup: python/pythonw.exe under another name (its signature kept),
                                                with AgeOfCalamityRecomp._pth and the Python DLLs beside it; the name
                                                makes setup/sitecustomize.py open setup/setup.py
@@ -12,13 +12,14 @@ PC cannot be asked to build before the setup runs:
              prebuilt/hactool/win-x64/         hactool 1.4.0 (ISC) for the RomFS merge
              prebuilt/xlate/{win,linux}-x64/   the shader translator (Ryujinx 1.3.2 + our patches, MIT), so nobody
                                                needs .NET: win-x64 for aoc.exe, linux-x64 for the Deck build in WSL
-  Linux    AoC-Recomp-<v>-Linux.tar.gz
+  Linux    AgeOfCalamityRecomp-<v>-Linux.tar.gz
              prebuilt/hactool/linux-x64/, prebuilt/xlate/linux-x64/ (the setup is setup.sh, with the system python3)
 
 Run on Windows in MSYS2 UCRT64, from a clean commit, with the development WSL distro set up (its ~/aoc-build has the
 Linux translator, its venv has pip):
 
   python3 tools/make_release.py [--wsl-distro archlinux] [--win-xlate C:/aoc-win/host] [--allow-dirty]
+  python tools/make_release.py --local    # only AgeOfCalamityRecomp.exe and python/ in this folder, to try the setup
 
 Output in build/release/; the sha256 of each package is printed and written next to it.
 """
@@ -37,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "release"
 DL = OUT / "dl"
-TOP = "AoC-Recomp"   # the folder each package unpacks into
+TOP = "AgeOfCalamityRecomp"   # the folder each package unpacks into
 PY_EMBED = ("https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-amd64.zip",
             "9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38")
 # Tcl/Tk for tkinter (the setup window), from the same Python release; unpacked with msiexec /a, never installed.
@@ -160,13 +161,34 @@ def read(p: Path, mode: int = 0o644) -> tuple:
     return p.read_bytes(), mode
 
 
+def install_local() -> int:
+    """AgeOfCalamityRecomp.exe and python/ in this folder, as the Windows package has them, so a copy of the repository
+    starts the setup the same way (both are ignored by git)."""
+    stage = OUT / "stage"
+    wheels = stage / "wheels"
+    shutil.rmtree(wheels, ignore_errors=True)
+    sh([sys.executable, "-m", "pip", "download", "-q", "--only-binary=:all:", "--platform", "win_amd64",
+        "--python-version", "3.13", "--implementation", "cp", "-d", wheels, *WHEELS])
+    python = python_embed(wheels, stage)
+    for name, _, data in python + setup_exe(python):
+        dst = ROOT / name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+    print(f"{SETUP_EXE}.exe and python/ are in {ROOT}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--wsl-distro", default="archlinux", help="the development WSL distro")
     ap.add_argument("--win-xlate", type=Path, default=Path("C:/aoc-win/host"),
                     help="folder with aoc_xlate.exe and aoc_xlate.id for Windows")
     ap.add_argument("--allow-dirty", action="store_true", help="package HEAD even with uncommitted changes")
+    ap.add_argument("--local", action="store_true",
+                    help="only put AgeOfCalamityRecomp.exe and python/ into this folder (Windows, any Python with pip)")
     args = ap.parse_args()
+    if args.local:
+        return install_local()
     version = (ROOT / "VERSION").read_text().strip()
     dirty = subprocess.run([GIT, "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
                            capture_output=True, text=True).stdout.strip()
@@ -221,8 +243,8 @@ def main() -> int:
     for f in ("aoc_xlate", "aoc_xlate.id"):
         lin.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
 
-    outs = [(OUT / f"AoC-Recomp-{version}-Windows.zip", write_zip, win),
-            (OUT / f"AoC-Recomp-{version}-Linux.tar.gz", write_tgz, lin)]
+    outs = [(OUT / f"AgeOfCalamityRecomp-{version}-Windows.zip", write_zip, win),
+            (OUT / f"AgeOfCalamityRecomp-{version}-Linux.tar.gz", write_tgz, lin)]
     for path, writer, files in outs:
         writer(path, files)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
