@@ -5,17 +5,17 @@ Steps (each one skips what is already done):
 
 0. `extract` — when build/v130/exefs does not exist (new machine), extracts the ExeFS from the update NSP in "Game Files/".
 1. `gen`   — recomp/gen.py: ExeFS 1.3.0 to C in <work>/generated/ (~600 MB, ~3 min).
-2. `guest` — compiles all the generated C into objects and packs them into <work>/lib/libaoc_guest.a. The ~35 giant
+2. `guest` — compiles all the generated C into objects and packs them into <work>/lib/libacr_guest.a. The ~35 giant
              functions of `main` (one file of 1-7 MB of C each) get flags that cut the LLVM passes that grow
              superlinearly (measured: ~40 % less time); they are compiled first so they do not hold up the end.
 3. `dist`  — links the executable and assembles the single folder for the Deck.
 
-Keep the work folder on the Linux disk (e.g. ~/aoc-build), not under /mnt/c or /mnt/d: compiling on the Windows
+Keep the work folder on the Linux disk (e.g. ~/AgeOfCalamityRecomp-build), not under /mnt/c or /mnt/d: compiling on the Windows
 disk through WSL is many times slower. Only the finished folder (dist) goes to the Windows disk.
 
 Usage (at the repository root):
-    python3 tools/build.py --work ~/aoc-build            # gen + guest, on every core
-    python3 tools/build.py --work ~/aoc-build --jobs 8   # limits the cores (each giant uses up to ~2-4 GB of RAM)
+    python3 tools/build.py --work ~/AgeOfCalamityRecomp-build            # gen + guest, on every core
+    python3 tools/build.py --work ~/AgeOfCalamityRecomp-build --jobs 8   # limits the cores (each giant uses up to ~2-4 GB of RAM)
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # double quotes and there is no rm; the runtime takes its Win32 files (platform/win32.c, *_win.*). For tests on a
 # Windows PC with a Vulkan GPU; the Steam Deck build is the Linux one (dist).
 WIN = os.name == "nt"
-EXE = "aoc.exe" if WIN else "aoc"
+EXE = "AgeOfCalamityRecomp.exe" if WIN else "AgeOfCalamityRecomp"
 
 # Flags of the generated code, as in Astral Chain (tools/build_game.py GEN_FLAGS).
 GEN_FLAGS = ["-O1", "-fno-strict-aliasing", "-Wno-return-type", "-Wno-unused-label", "-fvisibility=hidden",
@@ -121,7 +121,7 @@ def step_guest(args, gen: Path) -> Path:
     cc, ar = need("clang"), shutil.which("llvm-ar") or need("ar")
     ninja = need("ninja")
     obj_dir = args.work / "obj"
-    lib = args.work / "lib" / "libaoc_guest.a"
+    lib = args.work / "lib" / "libacr_guest.a"
     sources = []
     for m in MODULES:
         manifest = json.loads((gen / m / "manifest.json").read_text())
@@ -223,7 +223,7 @@ def vma_include() -> Path:
 
 def runtime_sources() -> list[Path]:
     """Every runtime/*.c, *.cpp, platform/*.c, ui/*.cpp and Dear ImGui, without the files of the other system (Win32); on
-    Windows also runtime/aoc.rc (the aoc.exe manifest: per-monitor DPI and the UTF-8 code page)."""
+    Windows also runtime/AgeOfCalamityRecomp.rc (the AgeOfCalamityRecomp.exe manifest: per-monitor DPI and the UTF-8 code page)."""
     pats = ("*.c", "*.cpp", "*.rc", "platform/*.c", "ui/*.cpp", "third_party/imgui/*.cpp",
             "third_party/imgui/backends/*.cpp")
 
@@ -293,7 +293,7 @@ def write_if_changed(path: Path, text: str) -> None:
 
 
 def step_host(args, gen: Path, lib: Path) -> Path:
-    """Compiles the runtime and links <work>/host/aoc with libaoc_guest.a."""
+    """Compiles the runtime and links <work>/host/AgeOfCalamityRecomp with libacr_guest.a."""
     cc, ninja = need("clang"), need("ninja")
     out = args.work / "host"
     out.mkdir(parents=True, exist_ok=True)
@@ -326,7 +326,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
         "  rspfile_content = $in_newline",
         "  description = link $out",
     ]
-    if WIN:   # runtime/aoc.rc, as in Astral Chain's tools/build_game.py (MIT); windres writes no depfile
+    if WIN:   # runtime/AgeOfCalamityRecomp.rc, as in Astral Chain's tools/build_game.py (MIT); windres writes no depfile
         windres = shutil.which("llvm-windres") or need("windres")
         lines += ["rule rc", f"  command = {windres} -I {shell_arg(RUNTIME)} -I {shell_arg(ROOT / 'assets')} -O coff $in -o $out",
                   "  description = rc $in"]
@@ -334,7 +334,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
     for src in runtime_sources() + [out / "modules.c"]:
         o = runtime_object(out, src)
         if src.suffix == ".rc":
-            lines.append(f"build {ninja_escape(o)}: rc {ninja_escape(src)} | {ninja_escape(RUNTIME / 'aoc.manifest')} "
+            lines.append(f"build {ninja_escape(o)}: rc {ninja_escape(src)} | {ninja_escape(RUNTIME / 'AgeOfCalamityRecomp.manifest')} "
                          f"{ninja_escape(ROOT / 'assets' / 'icon.ico')}")
         else:
             lines.append(f"build {ninja_escape(o)}: cc_rt {ninja_escape(src)}")
@@ -451,7 +451,7 @@ def glibc_needed(exe: Path) -> tuple[int, int]:
 
 
 def step_dist(args, gen: Path, lib: Path) -> Path:
-    """Compiles the runtime, links it against the sniper and assembles dist/aoc-deck/ (layout in docs/NOTES.md)."""
+    """Compiles the runtime, links it against the sniper and assembles dist/steamdeck/ (layout in docs/NOTES.md)."""
     clang, ninja = need("clang"), need("ninja")
     sysroot = sniper_sysroot(args.work)
     cc = [clang, "--target=x86_64-linux-gnu", f"--sysroot={sysroot}"]
@@ -492,7 +492,7 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
         o = runtime_object(out, src)
         lines.append(f"build {ninja_escape(o)}: cc_rt {ninja_escape(src)}")
         objs.append(o)
-    exe = out / "aoc"
+    exe = out / "AgeOfCalamityRecomp"
     lines.append(f"build {ninja_escape(exe)}: link " + " ".join(ninja_escape(o) for o in objs) + f" {ninja_escape(lib)}")
     lines.append(f"default {ninja_escape(exe)}")
     build_file = args.work / "dist.ninja"
@@ -504,24 +504,24 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
     if need_glibc > GLIBC_MAX:
         sys.exit(f"ERROR: {exe} needs GLIBC_{need_glibc[0]}.{need_glibc[1]}, above the sniper's {GLIBC_MAX}")
     print(f"dist: executable ready in {time.time() - t0:.0f} s, needs GLIBC_{need_glibc[0]}.{need_glibc[1]} at most")
-    # The shader translator (Ryujinx 1.3.2, NativeAOT), also against the sniper: the runtime looks for it next to aoc
+    # The shader translator (Ryujinx 1.3.2, NativeAOT), also against the sniper: the runtime looks for it next to AgeOfCalamityRecomp
     # (gfx_shader.c init_paths). tools/build_xlate.py redoes the identity on each build; here only when missing.
     xl = args.work / "xlate"
     # The launcher package carries the translator ready (prebuilt/xlate/linux-x64, made by tools/make_release.py from the
     # same commit): whoever forges the game needs no .NET. With --xlate it is always rebuilt.
     pre = ROOT / "prebuilt" / "xlate" / "linux-x64"
-    if not args.xlate and (pre / "aoc_xlate").is_file() and (pre / "aoc_xlate.id").is_file():
+    if not args.xlate and (pre / "xlate").is_file() and (pre / "xlate.id").is_file():
         xl.mkdir(parents=True, exist_ok=True)
-        if not (xl / "aoc_xlate.id").is_file() or (xl / "aoc_xlate.id").read_bytes() != (pre / "aoc_xlate.id").read_bytes():
-            shutil.copy2(pre / "aoc_xlate", xl / "aoc_xlate")
-            shutil.copy2(pre / "aoc_xlate.id", xl / "aoc_xlate.id")
+        if not (xl / "xlate.id").is_file() or (xl / "xlate.id").read_bytes() != (pre / "xlate.id").read_bytes():
+            shutil.copy2(pre / "xlate", xl / "xlate")
+            shutil.copy2(pre / "xlate.id", xl / "xlate.id")
             print(f"dist: shader translator ready from {pre}")
-    if not (xl / "aoc_xlate").is_file() or args.xlate:
+    if not (xl / "xlate").is_file() or args.xlate:
         subprocess.run([sys.executable, str(ROOT / "tools" / "build_xlate.py"), "--out", str(xl),
                         "--sysroot", str(sysroot)], check=True)
-    need_glibc = glibc_needed(xl / "aoc_xlate")
+    need_glibc = glibc_needed(xl / "xlate")
     if need_glibc > GLIBC_MAX:
-        sys.exit(f"ERROR: aoc_xlate needs GLIBC_{need_glibc[0]}.{need_glibc[1]}")
+        sys.exit(f"ERROR: xlate needs GLIBC_{need_glibc[0]}.{need_glibc[1]}")
     return assemble_dist(args, exe, sysroot, host, xl)
 
 
@@ -533,22 +533,22 @@ export MESA_SHADER_CACHE_DIR="$here/mesa-cache"
 export MESA_SHADER_CACHE_MAX_SIZE=4G
 mkdir -p "$here/mesa-cache" "$here/logs"
 # FTP from Windows drops the executable bit: make sure the executables run
-[ -x "$here/aoc" ] || chmod +x "$here/aoc" 2>/dev/null
-[ -x "$here/aoc_xlate" ] || chmod +x "$here/aoc_xlate" 2>/dev/null
+[ -x "$here/AgeOfCalamityRecomp" ] || chmod +x "$here/AgeOfCalamityRecomp" 2>/dev/null
+[ -x "$here/xlate" ] || chmod +x "$here/xlate" 2>/dev/null
 # the previous session goes compressed to logs/sessions/ (named after the time it ended; the 60 newest are kept);
-# ./aoc-logs.sh lists and sums them up
-if [ -s "$here/logs/aoc.log" ]; then
+# ./logs.sh lists and sums them up
+if [ -s "$here/logs/game.log" ]; then
     mkdir -p "$here/logs/sessions"
-    ts=$(date -r "$here/logs/aoc.log" +%Y%m%d-%H%M%S)
-    [ -f "$here/logs/sessions/$ts.log.gz" ] || gzip -c "$here/logs/aoc.log" > "$here/logs/sessions/$ts.log.gz"
+    ts=$(date -r "$here/logs/game.log" +%Y%m%d-%H%M%S)
+    [ -f "$here/logs/sessions/$ts.log.gz" ] || gzip -c "$here/logs/game.log" > "$here/logs/sessions/$ts.log.gz"
     ls -1t "$here/logs/sessions/"*.log.gz 2>/dev/null | tail -n +61 | xargs -r rm -f
 fi
 cd "$here"
-exec "$here/aoc" "$@"
+exec "$here/AgeOfCalamityRecomp" "$@"
 """
 
 
-# First settings of the Deck folder (cfg.c: "key = value", without the AOC_ prefix). Frame rate and mode come from the
+# First settings of the Deck folder (cfg.c: "key = value", without the ACR_ prefix). Frame rate and mode come from the
 # runtime's "deck" profile (30 fps, handheld).
 INI_DECK = """# Age of Calamity Recomp settings. The menu (Minus+Plus) and the quick menu (hold L3+R3) write here.
 """
@@ -559,8 +559,8 @@ README_DECK = """Hyrule Warriors: Age of Calamity - native port for the Steam De
 Personal use only: this folder contains the game (from your own console). Do not share it.
 
 INSTALL (once)
-1. On the Deck, in Desktop Mode, copy the whole "aoc-deck" folder to the SD card (FTP, cloud or cable).
-   Example: /run/media/mmcblk0p1/aoc-deck   (romfs/romfs.bin is 10.9 GiB)
+1. On the Deck, in Desktop Mode, copy the whole "steamdeck" folder to the SD card (FTP, cloud or cable).
+   Example: /run/media/mmcblk0p1/steamdeck   (romfs/romfs.bin is 10.9 GiB)
 2. Open Konsole inside the folder and run once:   sh install-shortcut.sh
    (it makes the files executable and puts the game in the SteamOS application menu)
 3. Steam > Games > "Add a Non-Steam Game" > tick
@@ -568,22 +568,22 @@ INSTALL (once)
 4. Back in Game Mode, the game is in your library under "Non-Steam".
 
 FIRST TEST (Konsole, inside the folder)
-  ./aoc --selftest                         should end with "selftest: passed"
-  AOC_GPU=null AOC_TRACE=perf ./aoc.sh     no picture; should print "fps: ... (30.0 fps)" lines (Ctrl+C to quit)
-  ./aoc.sh                                 the game (the first time translates shaders: stutters until the cache fills)
+  ./AgeOfCalamityRecomp --selftest                         should end with "selftest: passed"
+  ACR_GPU=null ACR_TRACE=perf ./AgeOfCalamityRecomp.sh     no picture; should print "fps: ... (30.0 fps)" lines (Ctrl+C to quit)
+  ./AgeOfCalamityRecomp.sh                                 the game (the first time translates shaders: stutters until the cache fills)
 
 LOGS (power, temperature and fps of each session)
-  ./aoc-logs.sh list                       one line per session played: date, minutes, fps, watts, temperatures
-  ./aoc-logs.sh                            summary of the last session (./aoc-logs.sh summary 2: the one before)
-  ./aoc-logs.sh live                       follows the running session (from another terminal or over SSH)
-  ./aoc-logs.sh system                     TDP, watts, temperatures and clocks right now
-  ./aoc-logs.sh detailed on|off            more performance detail in the next sessions
-  ./aoc-logs.sh performance                where the last session lost fps: stutters, causes, power, marks
-  ./aoc-logs.sh diag                       reads the freeze and black screen reports of the last session
-  ./aoc-logs.sh bundle                     packs everything into logs/bundle-<date>.tar.gz to send
+  ./logs.sh list                       one line per session played: date, minutes, fps, watts, temperatures
+  ./logs.sh                            summary of the last session (./logs.sh summary 2: the one before)
+  ./logs.sh live                       follows the running session (from another terminal or over SSH)
+  ./logs.sh system                     TDP, watts, temperatures and clocks right now
+  ./logs.sh detailed on|off            more performance detail in the next sessions
+  ./logs.sh performance                where the last session lost fps: stutters, causes, power, marks
+  ./logs.sh diag                       reads the freeze and black screen reports of the last session
+  ./logs.sh bundle                     packs everything into logs/bundle-<date>.tar.gz to send
 
 REPORTING A PROBLEM
-  Run ./aoc-logs.sh bundle and attach the file it makes to a report at
+  Run ./logs.sh bundle and attach the file it makes to a report at
   https://github.com/eliasm4r/AgeOfCalamityRecomp/issues
   (never attach game files, keys or saves)
 
@@ -599,12 +599,12 @@ GOING EASY ON THE DECK
   - Steam's performance menu ("..." button > battery) can also limit the TDP and the refresh rate.
 
 FILES
-  aoc, aoc.sh, lib/            the program
+  AgeOfCalamityRecomp, AgeOfCalamityRecomp.sh, lib/            the program
   exefs/, romfs/, romfs-index.bin   the game (romfs/dlc-*.bin are the DLCs; without them the game runs without DLC)
-  aoc.ini                      your settings (never overwritten by updates)
+  settings.ini                      your settings (never overwritten by updates)
   profile/, logs/, mesa-cache/ saves, logs and shader cache (created while playing)
-  aoc-logs.sh, tools/          log readers (logs/sessions/ keeps the earlier sessions)
-UPDATING: copy only "aoc" over the old one (and "lib/" if it changed). The romfs does not change.
+  logs.sh, tools/          log readers (logs/sessions/ keeps the earlier sessions)
+UPDATING: copy only "AgeOfCalamityRecomp" over the old one (and "lib/" if it changed). The romfs does not change.
 """
 
 
@@ -615,11 +615,11 @@ INSTALL_SH = """#!/bin/sh
 #   sh install-shortcut.sh
 # Then: Steam > Games > "Add a Non-Steam Game" > tick "Hyrule Warriors: Age of Calamity".
 here="$(cd "$(dirname "$0")" && pwd)"
-chmod +x "$here/aoc" "$here/aoc.sh" "$here/aoc_xlate"
+chmod +x "$here/AgeOfCalamityRecomp" "$here/AgeOfCalamityRecomp.sh" "$here/xlate"
 mkdir -p "$HOME/.local/share/applications"
-f="$HOME/.local/share/applications/aoc-recomp.desktop"
+f="$HOME/.local/share/applications/AgeOfCalamityRecomp.desktop"
 printf '%s\\n' '[Desktop Entry]' 'Type=Application' 'Name=Hyrule Warriors: Age of Calamity (AgeOfCalamityRecomp)' \\
-    'Comment=Native port (personal use)' "Exec=$here/aoc.sh" "Path=$here" 'Terminal=false' 'Categories=Game;' \\
+    'Comment=Native port (personal use)' "Exec=$here/AgeOfCalamityRecomp.sh" "Path=$here" 'Terminal=false' 'Categories=Game;' \\
     'Icon=applications-games' > "$f"
 chmod +x "$f"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
@@ -629,8 +629,8 @@ echo "Now: Steam > Games > Add a Non-Steam Game > tick Hyrule Warriors: Age of C
 
 
 def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
-    """dist/aoc-deck/: aoc, aoc.sh, lib/libSDL3.so.0, exefs/, romfs-index.bin and romfs/ (the 10.9 GiB romfs.bin is only
-    copied with --with-romfs: on the Deck copying it once is enough; the DLC images always go). Saves, aoc.ini, logs/ and mesa-cache/ are never touched."""
+    """dist/steamdeck/: AgeOfCalamityRecomp, AgeOfCalamityRecomp.sh, lib/libSDL3.so.0, exefs/, romfs-index.bin and romfs/ (the 10.9 GiB romfs.bin is only
+    copied with --with-romfs: on the Deck copying it once is enough; the DLC images always go). Saves, settings.ini, logs/ and mesa-cache/ are never touched."""
     dist = Path(args.dist).expanduser().resolve()
     (dist / "lib").mkdir(parents=True, exist_ok=True)
     (dist / "exefs").mkdir(exist_ok=True)
@@ -641,29 +641,29 @@ def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
             return
         shutil.copy2(src, dst)
 
-    copy(exe, dist / "aoc")
-    (dist / "aoc").chmod(0o755)
-    copy(xl / "aoc_xlate", dist / "aoc_xlate")
-    (dist / "aoc_xlate").chmod(0o755)
-    shutil.copy2(xl / "aoc_xlate.id", dist / "aoc_xlate.id")
+    copy(exe, dist / "AgeOfCalamityRecomp")
+    (dist / "AgeOfCalamityRecomp").chmod(0o755)
+    copy(xl / "xlate", dist / "xlate")
+    (dist / "xlate").chmod(0o755)
+    shutil.copy2(xl / "xlate.id", dist / "xlate.id")
     copy((sysroot / "usr/lib/x86_64-linux-gnu/libSDL3.so.0").resolve(), dist / "lib" / "libSDL3.so.0")
     for f in ("main", "subsdk0", "sdk", "main.npdm"):
         copy(args.exefs / f, dist / "exefs" / f)
     copy(host / "romfs-index.bin", dist / "romfs-index.bin")
-    (dist / "aoc.sh").write_text(LAUNCHER)
-    (dist / "aoc.sh").chmod(0o755)
+    (dist / "AgeOfCalamityRecomp.sh").write_text(LAUNCHER)
+    (dist / "AgeOfCalamityRecomp.sh").chmod(0o755)
     (dist / "README.txt").write_text(README_DECK, encoding="utf-8")
     (dist / "install-shortcut.sh").write_text(INSTALL_SH, encoding="utf-8")
     (dist / "install-shortcut.sh").chmod(0o755)
-    # Deck logs: aoc-logs.sh (list, summary, live, bundle) and the readers it uses.
+    # Deck logs: logs.sh (list, summary, live, bundle) and the readers it uses.
     (dist / "tools").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "tools" / "deck" / "logsum.py", dist / "tools" / "logsum.py")
-    shutil.copy2(ROOT / "tools" / "diag_view.py", dist / "tools" / "diag_view.py")   # aoc-logs.sh diag
-    shutil.copy2(ROOT / "tools" / "perf_view.py", dist / "tools" / "perf_view.py")   # aoc-logs.sh performance
-    shutil.copy2(ROOT / "tools" / "deck" / "aoc-logs.sh", dist / "aoc-logs.sh")
-    (dist / "aoc-logs.sh").chmod(0o755)
-    if not (dist / "aoc.ini").exists():   # the first time only: afterwards the file is the player's (the menu writes it)
-        (dist / "aoc.ini").write_text(INI_DECK, encoding="utf-8")
+    shutil.copy2(ROOT / "tools" / "diag_view.py", dist / "tools" / "diag_view.py")   # logs.sh diag
+    shutil.copy2(ROOT / "tools" / "perf_view.py", dist / "tools" / "perf_view.py")   # logs.sh performance
+    shutil.copy2(ROOT / "tools" / "deck" / "logs.sh", dist / "logs.sh")
+    (dist / "logs.sh").chmod(0o755)
+    if not (dist / "settings.ini").exists():   # the first time only: afterwards the file is the player's (the menu writes it)
+        (dist / "settings.ini").write_text(INI_DECK, encoding="utf-8")
     if args.with_romfs:
         dst = dist / "romfs" / "romfs.bin"
         if not (dst.exists() and dst.stat().st_size == ROMFS_IMAGE.stat().st_size):
@@ -696,14 +696,14 @@ def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--work", type=Path, required=True, help="build folder on the Linux disk (e.g. ~/aoc-build)")
+    ap.add_argument("--work", type=Path, required=True, help="build folder on the Linux disk (e.g. ~/AgeOfCalamityRecomp-build)")
     ap.add_argument("--exefs", type=Path, default=ROOT / "build" / "v130" / "exefs")
     ap.add_argument("--jobs", type=int, default=0, help="cores (default: all)")
     ap.add_argument("--regen", action="store_true", help="generate the C again")
     ap.add_argument("--big-jobs", type=int, default=0, help="giant functions compiled at once (default: from free RAM)")
     ap.add_argument("--ninja-only", action="store_true", help="only writes guest.ninja, without compiling")
     ap.add_argument("--runtime-only", action="store_true", help="host: only compiles the runtime, without linking")
-    ap.add_argument("--dist", default=str(ROOT / "dist" / "aoc-deck"), help="dist: output folder for the Deck")
+    ap.add_argument("--dist", default=str(ROOT / "dist" / "steamdeck"), help="dist: output folder for the Deck")
     ap.add_argument("--xlate", action="store_true", help="dist: recompila o tradutor de shaders")
     ap.add_argument("--with-romfs", action="store_true", help="dist: also puts romfs.bin in (hard link on the same disk, else a copy)")
     ap.add_argument("steps", nargs="*", help="gen, guest, host, dist (default: gen, guest, host)")
@@ -716,7 +716,7 @@ def main(argv=None) -> int:
     if not (args.exefs / "main").exists():
         step_extract(args)
     gen = step_gen(args) if "gen" in args.steps else args.work / "generated"
-    lib = step_guest(args, gen) if "guest" in args.steps else args.work / "lib" / "libaoc_guest.a"
+    lib = step_guest(args, gen) if "guest" in args.steps else args.work / "lib" / "libacr_guest.a"
     if "host" in args.steps:
         step_host(args, gen, lib)
     if "dist" in args.steps:

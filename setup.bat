@@ -1,5 +1,5 @@
 @echo off
-rem Opens the setup from a copy of the repository. The release package has AgeOfCalamityRecomp.exe for this instead.
+rem Opens the setup from a copy of the repository. The release package has AgeOfCalamityRecomp Setup.exe for this instead.
 cd /d "%~dp0"
 if exist "%~dp0python\pythonw.exe" if exist "%~dp0python\tcl" (
     start "" "%~dp0python\pythonw.exe" "%~dp0setup\setup.py"

@@ -19,7 +19,7 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
         |                                   |
         | recomp/ (ARM64 to C lifter)       | shader extraction (G2S/_DOK/main)
         v                                   v
- generated/*.c  --clang/lld-->  aoc (executable)     SPIR-V (Ryujinx translator, separate process)
+ generated/*.c  --clang/lld-->  AgeOfCalamityRecomp (executable)     SPIR-V (Ryujinx translator, separate process)
                                    |
              runtime/: kernel, IPC, nn::*, audio, RomFS, NVN front end, Vulkan back end, SDL3
 ```
@@ -60,7 +60,7 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
   `FlushMappedRange` for video textures.
 - Vulkan back end: replay at `QueueSubmitCommands`, VMA, `VK_EXT_graphics_pipeline_library`, uniform snapshots, a
   recording thread, FSR 1. BC1-BC7 textures upload as they are (the game uses no ASTC).
-- Shaders: the Ryujinx translator (MIT) runs as a separate process (`aoc_xlate`); translations and pipelines are cached
+- Shaders: the Ryujinx translator (MIT) runs as a separate process (`xlate`); translations and pipelines are cached
   on disk.
 - Optional NVIDIA DLSS/DLAA through the driver's NGX core (`vk_dlaa.c`, Windows only, needs `nvngx_dlss.dll`).
 
@@ -92,7 +92,7 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 |---|---|
 | `recomp/` | ARM64 to C lifter (from Astral Chain Recomp, itself from LAS Recomp): `gen.py` generates the C of the three modules, `layout.py` decides module bases, `patches-v130.txt` holds the game patches and spin waits |
 | `runtime/` | the host "Horizon": loader, dispatch, memory, kernel, IPC, `nn::*` overrides, audio, RomFS, DLCs, saves, NVN front end, Vulkan back end, input, window, ImGui menu |
-| `setup/` | the setup (tkinter): runs `tools/make_build.py`, then edits `aoc.ini` and starts the game |
+| `setup/` | the setup (tkinter): runs `tools/make_build.py`, then edits `settings.ini` and starts the game |
 | `assets/` | the key art and the icon cut from it (`tools/make_icon.py`) |
 | `tools/` | extraction, RomFS merge, build, release, reports, censuses, Deck tools (`tools/deck/`) |
 | `tests/` | differential lifter tests against Unicorn and tool tests |
@@ -110,13 +110,13 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 | Platform | `platform/linux.c`, `platform/win32.c`, `platform/platform.h` |
 | CPU of the generated code | `cpu.h`, `simd.h`, `simd_fp.h`, `fma.c` |
 
-Settings are `AOC_*` environment variables backed by `aoc.ini` (`cfg.c` holds the table of keys, defaults and ranges).
+Settings are `ACR_*` environment variables backed by `settings.ini` (`cfg.c` holds the table of keys, defaults and ranges).
 The shader translator is a vendored, unmodified subset of Ryujinx 1.3.2 in `tools/vendor/ryujinx/` (MIT).
 
 ## Steam Deck
 
 Target: Steam Deck (LCD or OLED), SteamOS 3.8 or newer. The Deck compiles nothing: it receives the ready folder
-`dist/aoc-deck` built on a PC ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+`dist/steamdeck` built on a PC ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ### Requirements
 
@@ -131,17 +131,17 @@ Target: Steam Deck (LCD or OLED), SteamOS 3.8 or newer. The Deck compiles nothin
 ### The folder
 
 ```
-aoc-deck/
-  aoc                    Linux x86-64 executable (recompiled game code + runtime)
-  aoc.sh                 starter: Mesa shader cache next to the game, creates logs/, keeps the last 60 sessions
-  aoc-logs.sh            logs: list, summary, live, system, detailed on|off, bundle
+steamdeck/
+  AgeOfCalamityRecomp                    Linux x86-64 executable (recompiled game code + runtime)
+  AgeOfCalamityRecomp.sh                 starter: Mesa shader cache next to the game, creates logs/, keeps the last 60 sessions
+  logs.sh            logs: list, summary, live, system, detailed on|off, bundle
   lib/libSDL3.so.0       SDL 3.4 from the sniper sysroot (the executable looks in $ORIGIN/lib first)
   exefs/                 main, subsdk0, sdk, main.npdm
   romfs-index.bin        RomFS index (checked against romfs.bin)
   romfs/romfs.bin        merged RomFS 1.3.0 (10.9 GiB); `dist --with-romfs` adds it as a hard link
   romfs/dlc-<id>.bin     RomFS of each DLC (1.41 GiB for the four), optional
   README.txt             install, Steam shortcut and controls
-  aoc.ini                created the first time only; the player's afterwards
+  settings.ini                created the first time only; the player's afterwards
   profile/               saves and local account, created next to the executable
 ```
 
@@ -149,14 +149,14 @@ aoc-deck/
   SteamOS. Opus, libvpx and zstd are built in.
 - On the Deck: Desktop Mode, copy the folder, run `sh install-shortcut.sh` once, then add the game as a non-Steam game
   and play in Game Mode.
-- Updating: run `dist` again and copy `aoc` (the rest only changes with the game); saves and `aoc.ini` stay.
-- The runtime has a "deck" profile (`cfg.c`, `AOC_DEVICE_PROFILE=auto|desktop|deck`, detected through DMI): full screen
+- Updating: run `dist` again and copy `AgeOfCalamityRecomp` (the rest only changes with the game); saves and `settings.ini` stay.
+- The runtime has a "deck" profile (`cfg.c`, `ACR_DEVICE_PROFILE=auto|desktop|deck`, detected through DMI): full screen
   1280x800, vsync, **30 fps** and handheld mode, the game's own lighter render resolution.
-- Copying over FTP from Windows loses the executable bit: `chmod +x aoc aoc.sh` once (`aoc.sh` also tries by itself).
+- Copying over FTP from Windows loses the executable bit: `chmod +x AgeOfCalamityRecomp AgeOfCalamityRecomp.sh` once (`AgeOfCalamityRecomp.sh` also tries by itself).
 
 ### Quick menu (hold L3+R3)
 
-Holding L3+R3 for about 1.5 s (`AOC_QUICK_HOLD_MS`) opens a small panel; a short L3+R3 press toggles the FPS overlay,
+Holding L3+R3 for about 1.5 s (`ACR_QUICK_HOLD_MS`) opens a small panel; a short L3+R3 press toggles the FPS overlay,
 and Minus+Plus opens the full menu. B closes it.
 
 | Row | Values | Note |
@@ -254,7 +254,7 @@ natively.
 - Control sections: 27,300 of 0x880 bytes, 13,426 of 0x850 and 3 of 0x7d1.
 - The DLCs carry **no shader container**: the extra content uses the base game's shaders.
 
-#### How the game mounts the DLCs (`AOC_TRACE=fs`)
+#### How the game mounts the DLCs (`ACR_TRACE=fs`)
 
 - `main` imports four DLC functions: `nn::aoc::CountAddOnContent`, `nn::aoc::ListAddOnContent`,
   `nn::fs::QueryMountAddOnContentCacheSize`, `nn::fs::MountAddOnContent`.
@@ -287,11 +287,11 @@ Differential tests against Unicorn, on the game's own code:
 - Full build on an i5-11400H (6c/12t, 11 GB for WSL): `gen` 2 min 46 s, `guest` about 48 min (40 giant functions of
   1-7 MB of C dominate it, up to 1.6 GB of RAM each), runtime about 1 min.
 
-### Boot (`AOC_GPU=null`)
+### Boot (`ACR_GPU=null`)
 
 | Milestone | Result |
 |---|---|
-| `aoc --selftest` | 3 modules, 101,212 functions in the dispatch table, 19 ns per lookup |
+| `AgeOfCalamityRecomp --selftest` | 3 modules, 101,212 functions in the dispatch table, 19 ns per lookup |
 | Loading | `main` 142,157 relocations, `subsdk0` 19,177, `sdk` 31,396; all imports resolved |
 | Main loop | **30.0 fps**, present interval 2, game clock 0.999-1.000x real time |
 | NVN | 8,756 `ProgramSetShaders` at start, about 490 textures, 9 pools |

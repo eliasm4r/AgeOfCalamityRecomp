@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sums up a runtime log (logs/aoc.log of a played session, or the run.log of a measurement): fps, power, temperature,
+"""Sums up a runtime log (logs/game.log of a played session, or the run.log of a measurement): fps, power, temperature,
 GPU, cost of the pool shadows and of write watching, audio and errors, per stretch of the session.
 
 Usage: logsum.py <log> [--from <frame>] [--to <frame>] [--rows]
@@ -7,7 +7,7 @@ Usage: logsum.py <log> [--from <frame>] [--to <frame>] [--rows]
 
 Without --from/--to the summary covers the whole log and, apart, the heaviest stretch (the 60 s window with the lowest
 fps). The "sys:" lines (runtime/sysmon.c, always on under Linux) give power and temperature; the "perf:", "mem:" and
-"fps:" ones only exist with AOC_TRACE=perf. --rows lists the "sys:" lines one by one. --list gives one line per session
+"fps:" ones only exist with ACR_TRACE=perf. --rows lists the "sys:" lines one by one. --list gives one line per session
 (date, length, fps, watts, temperatures, errors) to compare sessions. Also reads compressed logs (.gz, the ones in
 logs/sessions/ on the Deck).
 """
@@ -191,8 +191,8 @@ def main():
                 print(f'  {r["frame"]:6d} {n("fps")} {n("apu")} {n("bat")} {n("cpu_c")} {n("gpu_c")} {n("gpu_busy")} {n("cores")}')
     else:
         print('(no sys: lines in this log: a runtime older than sysmon, or not Linux)')
-    show('Frame (AOC_TRACE=perf)', cut(d['perf']), [('interval', 'interval', ' ms'), ('max', 'worst interval of the window', ' ms')])
-    show('GPU (AOC_TRACE=perf)', cut(d['gpu']), [('gpu', 'GPU time per frame', ' ms'), ('vram', 'VRAM', ' MiB'), ('ram', 'RAM', ' MiB')])
+    show('Frame (ACR_TRACE=perf)', cut(d['perf']), [('interval', 'interval', ' ms'), ('max', 'worst interval of the window', ' ms')])
+    show('GPU (ACR_TRACE=perf)', cut(d['gpu']), [('gpu', 'GPU time per frame', ' ms'), ('vram', 'VRAM', ' MiB'), ('ram', 'RAM', ' MiB')])
     show('Pool shadows, per frame', cut(d['shadow']),
          [('ms', 'time', ' ms'), ('queries', 'queries', ''), ('in', 'copied to the shadow', ' MiB'),
           ('back', 'given back to the game', ' MiB')])

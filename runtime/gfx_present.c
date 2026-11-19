@@ -12,7 +12,7 @@
 //
 // The in-game menu (ui/menu.h) draws over the game image in the present's command buffer, after the picture (the draw
 // of vk_blit.c, or FSR's output through it). The window's
-// size and fullscreen state are the settings AOC_WINDOW_SIZE and AOC_FULLSCREEN, which the back end applies at start
+// size and fullscreen state are the settings ACR_WINDOW_SIZE and ACR_FULLSCREEN, which the back end applies at start
 // and whenever a cfg_set changes them (window_settings_live -> gfx_window_apply_settings).
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,7 +56,7 @@ void gfx_window_mark_dirty(void) { plat_xchg32(&g_dirty, 1); }
 // tells whether an alt-tab or an overlay came before the hang or followed it.
 void gfx_window_focus_changed(int in) {
     plat_xchg32(&g_focused, in);
-    oe_set_focus(in);                          // pinned to 1 by AOC_ASSUME_FOCUS inside
+    oe_set_focus(in);                          // pinned to 1 by ACR_ASSUME_FOCUS inside
     oe_push_message(OE_MSG_FOCUS_STATE_CHANGED);
     plat_inc32(&g_focus_msgs);
     struct tm t;
@@ -76,7 +76,7 @@ void gfx_window_closed(void) {
     vk_pipeline_save();
     prof_write();   // plat_exit runs no atexit handlers
     if (restart) {
-        plat_setenv("AOC_REEXEC", NULL);   // the new process counts its own address-space retries (memory.c)
+        plat_setenv("ACR_REEXEC", NULL);   // the new process counts its own address-space retries (memory.c)
         if (!plat_restart()) rt_log("gfx: the restart could not start the game again");
     }
     plat_exit(0);
@@ -87,19 +87,19 @@ void gfx_window_request_restart(void) {
     gfx_window_request_close();
 }
 
-// AOC_FULLSCREEN=1: borderless window over the monitor. AOC_WINDOW_SIZE=<w>x<h>: client area of the window (the
+// ACR_FULLSCREEN=1: borderless window over the monitor. ACR_WINDOW_SIZE=<w>x<h>: client area of the window (the
 // swapchain follows the window; the game image is scaled to it).
-int gfx_cfg_fullscreen(void) { return cfg_bool("AOC_FULLSCREEN"); }
+int gfx_cfg_fullscreen(void) { return cfg_bool("ACR_FULLSCREEN"); }
 
 void gfx_cfg_window_size(int *w, int *h) {
     int x = 0, y = 0;
-    if (sscanf(cfg_value("AOC_WINDOW_SIZE"), "%dx%d", &x, &y) != 2 || x < 640 || y < 360 || x > 7680 || y > 4320)
+    if (sscanf(cfg_value("ACR_WINDOW_SIZE"), "%dx%d", &x, &y) != 2 || x < 640 || y < 360 || x > 7680 || y > 4320)
         sscanf(cfg_meta("WINDOW_SIZE")->def, "%dx%d", &x, &y);   // unparsable or out of range: the default
     *w = x;
     *h = y;
 }
 
-// The refresh rate of the window's monitor (AOC_FPS_LIMIT=display), measured by the back end's window thread when the
+// The refresh rate of the window's monitor (ACR_FPS_LIMIT=display), measured by the back end's window thread when the
 // window opens, lands on another monitor or the display mode changes; readers take the stored value.
 static volatile int32_t g_rate_mhz;   // millihertz, 0 unknown
 
@@ -114,7 +114,7 @@ double gfx_window_refresh_hz(void) { return plat_cas32(&g_rate_mhz, 0, 0) / 1000
 static PlatRMutex g_pl;
 static VkSwapchainKHR g_sc;
 static VkFormat g_sc_fmt;
-static int g_sc_hdr;                        // HDR10 (AOC_HDR, vk_hdr.c): PQ code values in Rec. 2020
+static int g_sc_hdr;                        // HDR10 (ACR_HDR, vk_hdr.c): PQ code values in Rec. 2020
 static VkExtent2D g_sc_ext;
 static int g_scaler;                        // the last present: 0 the game image 1:1, 1 scaled by the blit, 2 by FSR
 static uint32_t g_sc_n;
@@ -135,7 +135,7 @@ static int g_cap_w, g_cap_h, g_cap_valid;
 static int g_flip_on;            // vk_present_blit submitted the blit of swapchain image g_flip_idx; vk_present_flip presents it
 static uint32_t g_flip_idx;
 
-// ---- AOC_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
+// ---- ACR_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
 // of a host-visible ring. A slot's tag names the frame it holds complete; recording a new frame clears the tag first,
 // and the tag is set once the fence of that present has signalled.
 #define TH_BYTES ((VkDeviceSize)FLIGHT_THUMB_W * FLIGHT_THUMB_H * 4)
@@ -228,16 +228,16 @@ int gfx_window_focused(void) { return g_focused; }
 unsigned gfx_window_focus_messages(void) { return (unsigned)g_focus_msgs; }
 
 // Present path (g_pl held): a settings change (cfg_version) reaches the window thread, which applies a changed size or
-// fullscreen; a changed AOC_VK_PRESENT rebuilds the swapchain at this present.
+// fullscreen; a changed ACR_VK_PRESENT rebuilds the swapchain at this present.
 static void window_settings_live(void) {
     static unsigned seen;
     static int started;
-    static char present[16];   // the AOC_VK_PRESENT the swapchain was made with
+    static char present[16];   // the ACR_VK_PRESENT the swapchain was made with
     unsigned v = cfg_version();
     if (started && v == seen) return;
     seen = v;
     res_fov_live();
-    const char *e = cfg_value("AOC_VK_PRESENT");
+    const char *e = cfg_value("ACR_VK_PRESENT");
     if (!started || strncmp(e, present, sizeof present - 1)) {
         snprintf(present, sizeof present, "%s", e);
         if (started) plat_xchg32(&g_dirty, 1);
@@ -247,10 +247,10 @@ static void window_settings_live(void) {
 }
 
 // ---- swapchain
-static const char *g_present_got = "";   // the AOC_VK_PRESENT value of the mode the swapchain got; "" before one
+static const char *g_present_got = "";   // the ACR_VK_PRESENT value of the mode the swapchain got; "" before one
 
 static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
-    const char *e = cfg_value("AOC_VK_PRESENT");
+    const char *e = cfg_value("ACR_VK_PRESENT");
     VkPresentModeKHR want = !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
                           : !strcmp(e, "immediate") ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     uint32_t n = 0;
@@ -265,7 +265,7 @@ static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
     static int logged = -1;   // the mode last logged: a change from the menu shows in the log
     if ((int)got != logged) {
         logged = (int)got;
-        rt_log("gfx: present mode %s (AOC_VK_PRESENT=%s)", name, e);
+        rt_log("gfx: present mode %s (ACR_VK_PRESENT=%s)", name, e);
     }
     return got;
 }
@@ -315,7 +315,7 @@ static int create_swapchain(void) {
     vkGetPhysicalDeviceSurfaceFormatsKHR(c->phys, g_surface, &nf, fmts);
     if (!nf) return 0;
     // UNORM: the present writes the bytes the game wrote, with no sRGB encode (its draw reads an sRGB picture through a
-    // UNORM view, present_image). AOC_HDR: HDR10 when the surface offers it.
+    // UNORM view, present_image). ACR_HDR: HDR10 when the surface offers it.
     VkSurfaceFormatKHR sf = fmts[0];
     int hdr = vk_hdr_surface_format(fmts, nf, &sf), found = hdr;
     for (uint32_t i = 0; i < nf && !found; i++)
@@ -543,12 +543,12 @@ static void save_capture(const char *path) {
 }
 
 // The rectangle {x, y, w, h} of a dw x dh swapchain image the cw x ch picture goes into: the whole image with
-// AOC_ASPECT=stretch, else (fit, the default) the largest one of the picture's own aspect ratio, centred (a 16:9 picture
+// ACR_ASPECT=stretch, else (fit, the default) the largest one of the picture's own aspect ratio, centred (a 16:9 picture
 // on the Steam Deck's 1280x800 screen gets bars of 40 rows above and below; a 16:9 picture in a 21:9 window, bars at the
 // sides).
 void gfx_fit_rect(int cw, int ch, int dw, int dh, int out[4]) {
     out[0] = out[1] = 0, out[2] = dw, out[3] = dh;
-    if (cw <= 0 || ch <= 0 || !strcmp(cfg_value("AOC_ASPECT"), "stretch")) return;
+    if (cw <= 0 || ch <= 0 || !strcmp(cfg_value("ACR_ASPECT"), "stretch")) return;
     if ((int64_t)dw * ch > (int64_t)dh * cw) out[2] = (int)(((int64_t)dh * cw + ch / 2) / ch);   // window wider: pillarbox
     else out[3] = (int)(((int64_t)dw * ch + cw / 2) / cw);                                        // taller: letterbox
     // A side of the window's parity keeps the two bars equal; a picture one pixel short of the window fills it
@@ -611,13 +611,13 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                      g_sc_ext.height, cw, ch, g_scaler};
     int overlay = g_sc_view[idx] &&
                   menu_overlay_frame(__atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED), &mt, &menu_shot);
-    // AOC_PRESENT_SHOT=<frame>[:<path>]: the swapchain image of that present as a PNG (what the window shows: colour
+    // ACR_PRESENT_SHOT=<frame>[:<path>]: the swapchain image of that present as a PNG (what the window shows: colour
     // adjustment, upscale and the menu overlay included), default present_shot.png beside the executable's cwd.
     static int ps_state = -1;
     static uint64_t ps_frame;
     static char ps_path[512] = "present_shot.png";
     if (ps_state < 0) {
-        const char *e = cfg_get("AOC_PRESENT_SHOT");
+        const char *e = cfg_get("ACR_PRESENT_SHOT");
         ps_state = e && *e;
         if (ps_state) {
             ps_frame = strtoull(e, NULL, 10);
@@ -653,7 +653,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     // colour space shows them so. Reading it as sRGB (a blit, a view of its own format) decoded it to linear values,
     // which the swapchain then showed as if encoded: grass at 163, 203, 155 in the game's image came out 92, 162, 81.
     VkFormat vfmt = unorm_view_format(fmt);
-    // Colour adjustment (AOC_COLOR_*, vk_color.c), or on an HDR10 swapchain the PQ encode (vk_hdr.c; the adjustment is
+    // Colour adjustment (ACR_COLOR_*, vk_color.c), or on an HDR10 swapchain the PQ encode (vk_hdr.c; the adjustment is
     // for SDR; the encode wants light, so it reads the picture in its own format): a copy of the crop takes the game
     // image's place below
     VkImage graded = !general ? VK_NULL_HANDLE : g_sc_hdr ? vk_hdr_encode(cb, slot, src, fmt, rect)
@@ -662,7 +662,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
     VkFormat pfmt = graded ? VK_FORMAT_R16G16B16A16_SFLOAT : vfmt;
     int pw = graded ? cw : w, ph = graded ? ch : h;
     int prect[4] = {graded ? 0 : cx, graded ? 0 : cy, cw, ch};
-    // FSR (AOC_UPSCALER) when the picture's rectangle is larger than the crop: its output, of the rectangle's size,
+    // FSR (ACR_UPSCALER) when the picture's rectangle is larger than the crop: its output, of the rectangle's size,
     // takes the picture's place
     VkImage up = general ? vk_fsr_record(cb, slot, psrc, pfmt, pw, ph, prect, (uint32_t)to[2], (uint32_t)to[3])
                          : VK_NULL_HANDLE;

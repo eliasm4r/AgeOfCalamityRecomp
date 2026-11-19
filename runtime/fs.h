@@ -49,7 +49,7 @@ const char *romfs_prompts(void);
 int romfs_prompts_ready(const char *folder);
 int romfs_prompts_off(const char *folder);
 const char *romfs_overlay(size_t k, const char **file, uint64_t *size, int *is_added);   // RomFS path of overlay k
-void fs_trace(const char *what, const char *path);         // AOC_TRACE=fs: one line per open
+void fs_trace(const char *what, const char *path);         // ACR_TRACE=fs: one line per open
 
 // ---- dlc.c: add-on content. Each DLC is <romfs>/dlc-<title id>.bin (tools/extract_dlc.py); file handles
 // 0x4_0000_0000 + j.

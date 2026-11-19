@@ -203,10 +203,10 @@ static void cmd_reserve(cmd_t *o, size_t need) {
 // start that it had not submitted yet.
 _Thread_local void *nvn_cmd_oom;
 
-static int cmd_oom_on(void) {   // AOC_CMD_OOM=0: no callback (the old behaviour: copies pile up), for comparisons
+static int cmd_oom_on(void) {   // ACR_CMD_OOM=0: no callback (the old behaviour: copies pile up), for comparisons
     static int on = -1;
     if (on < 0) {
-        const char *e = cfg_get("AOC_CMD_OOM");
+        const char *e = cfg_get("ACR_CMD_OOM");
         on = !(e && *e == '0');
     }
     return on;
@@ -298,7 +298,7 @@ static const tex_t *tex_pin(const NVNtexture *nt) {
 // overwrite them there, so the handle is dead. (AddCommandMemory itself only moves the write position: the game still
 // submits a handle recorded just before it re-adds the same memory, and the hardware still has those commands.) Age of Calamity gives its main command buffer 3 MiB of control memory once; at 64 bytes a recording
 // that recycles only after ~49 000 recordings, and every copy (tens of KiB) lived until then: ~400-500 MiB a minute of
-// battle, 24 GB of commit after 36 min on Windows (measured 2026-11-12, AOC_CTL_TRACE). ctl_lo / cmd_lo: the copy's
+// battle, 24 GB of commit after 36 min on Windows (measured 2026-11-12, ACR_CTL_TRACE). ctl_lo / cmd_lo: the copy's
 // entries in the two indexes (cmd_lo 0: none), so whichever releases it first also takes it out of the other.
 typedef struct { uint64_t magic, bytes, made_at, used_at, deferred, ctl_lo, cmd_lo, cmd_hi; } copy_prefix;   // deferred: 0 unknown, 1 none, 2 some
 _Static_assert(sizeof(copy_prefix) % 8 == 0, "records stay 8-byte aligned");
@@ -442,7 +442,7 @@ static void copy_add(uintptr_t lo, uintptr_t hi, uintptr_t clo, uintptr_t chi, u
     plat_mutex_unlock(&copy_lock);
 }
 
-// AOC_CTL_TRACE=1 (diagnosis): control memory given and used up per command buffer, and the live recording copies.
+// ACR_CTL_TRACE=1 (diagnosis): control memory given and used up per command buffer, and the live recording copies.
 static uint64_t ctl_adds, ctl_ends;
 // The first 6 AddCommandMemory calls of each of up to 16 command buffers.
 static int trace_first(const void *o) {
@@ -456,7 +456,7 @@ static int trace_first(const void *o) {
 }
 static int ctl_trace(void) {
     static int on = -1;
-    if (on < 0) on = cfg_get("AOC_CTL_TRACE") != NULL;
+    if (on < 0) on = cfg_get("ACR_CTL_TRACE") != NULL;
     return on;
 }
 
@@ -896,7 +896,7 @@ static void bind_buffers(const Cpu *c, uint32_t op) {   // (cmd, stage, first, n
         hw_fix(o, 20);
     }
 }
-// AOC_UBO_TRACE=<size>:<float>[:<float index>] (diagnosis): the guest call stack of the first uniform buffer binds of
+// ACR_UBO_TRACE=<size>:<float>[:<float index>] (diagnosis): the guest call stack of the first uniform buffer binds of
 // that size (hex) whose 32-bit float at that index (default 24) has that value: who binds a block with known contents
 // (a UI matrix palette, say), to find in the game's code where the contents come from.
 static void ubo_trace(const Cpu *c) {
@@ -905,7 +905,7 @@ static void ubo_trace(const Cpu *c) {
     static float want;
     if (state < 0) return;
     if (!state) {
-        const char *e = cfg_get("AOC_UBO_TRACE");
+        const char *e = cfg_get("ACR_UBO_TRACE");
         double v = 0;
         unsigned long long sz = 0;
         state = e && sscanf(e, "%llx:%lf:%d", &sz, &v, &index) >= 2 ? 1 : -1;
@@ -1101,7 +1101,7 @@ NVN_API(nvnCommandBufferCopyTextureToBuffer) {
     p_copy_b2t *o = REC(cmd_of(c), OP_COPY_T2B, p_copy_b2t);
     o->src = arg_x(c, 4);
     o->tex = tex_pin(arg_p(c, 1));
-    {   // AOC_TRACE=gfx: the first small texture-to-buffer copies (a value the CPU reads back)
+    {   // ACR_TRACE=gfx: the first small texture-to-buffer copies (a value the CPU reads back)
         static int said;
         const tex_t *t = arg_p(c, 1);
         if ((rt_trace & RT_TRACE_GFX) && said < 16 && t && t->d.width <= 4 && t->d.height <= 4) {

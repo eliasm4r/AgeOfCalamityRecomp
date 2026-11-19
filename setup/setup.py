@@ -5,11 +5,11 @@ reading its protocol ("@@PLAN <id> <title>", "@@STEP <id> <run|ok|fail|skip> <te
 every other line goes to the details log). It shows while the game for this PC is not built, after an update (VERSION
 differs from build/forge-state.json) or on "Rebuild...".
 
-Game view: once dist/aoc-windows (Windows) or dist/aoc-deck (Linux) holds the game, the main settings of its aoc.ini
+Game view: once dist/windows (Windows) or dist/steamdeck (Linux) holds the game, the main settings of its settings.ini
 (the keys runtime/cfg.c reads, edited in place the way cfg_save does), Play, Report a problem, the game folder and
 Rebuild.
 
-Started by AgeOfCalamityRecomp.exe in the Windows package (python/pythonw.exe renamed, see sitecustomize.py), by
+Started by "AgeOfCalamityRecomp Setup.exe" in the Windows package (python/pythonw.exe renamed, see sitecustomize.py), by
 setup.sh on Linux, or with "python setup/setup.py". Its own settings live in setup.ini at the top of the folder.
 """
 import ctypes
@@ -62,11 +62,11 @@ def built_version():
 
 
 def game_dir():
-    return ROOT / "dist" / ("aoc-windows" if WIN else "aoc-deck")
+    return ROOT / "dist" / ("windows" if WIN else "steamdeck")
 
 
 def game_ready():
-    return (game_dir() / ("aoc.exe" if WIN else "aoc")).is_file()
+    return (game_dir() / ("AgeOfCalamityRecomp.exe" if WIN else "AgeOfCalamityRecomp")).is_file()
 
 
 def python_exe():
@@ -88,16 +88,61 @@ def open_path(path):
         subprocess.Popen(["xdg-open", str(path)], start_new_session=True)
 
 
-# ---- the setup's own settings (setup.ini; launcher.ini of older versions is read once)
+# ---- Windows shortcuts (IShellLinkW through COM, as WondersBeyondRecomp's installer/steps.py makes them)
+SHORTCUT_NAME = "AgeOfCalamityRecomp"
+
+
+def create_shortcut(link, target, folder):
+    class Guid(ctypes.Structure):
+        _fields_ = [("a", ctypes.c_ulong), ("b", ctypes.c_ushort), ("c", ctypes.c_ushort), ("d", ctypes.c_ubyte * 8)]
+
+    ole32 = ctypes.OleDLL("ole32")
+
+    def guid(text):
+        value = Guid()
+        ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(value))
+        return value
+
+    def method(pointer, index, *types):
+        table = ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0]
+        address = ctypes.cast(table, ctypes.POINTER(ctypes.c_void_p))[index]
+        return ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, *types)(address)
+
+    ole32.CoInitialize(None)
+    shell_link = ctypes.c_void_p()
+    ole32.CoCreateInstance(ctypes.byref(guid("{00021401-0000-0000-C000-000000000046}")), None, 1,
+                           ctypes.byref(guid("{000214F9-0000-0000-C000-000000000046}")), ctypes.byref(shell_link))
+    try:
+        method(shell_link, 20, ctypes.c_wchar_p)(shell_link, str(target))                       # SetPath
+        method(shell_link, 9, ctypes.c_wchar_p)(shell_link, str(folder))                        # SetWorkingDirectory
+        method(shell_link, 17, ctypes.c_wchar_p, ctypes.c_int)(shell_link, str(target), 0)      # SetIconLocation
+        file = ctypes.c_void_p()
+        method(shell_link, 0, ctypes.c_void_p, ctypes.c_void_p)(
+            shell_link, ctypes.byref(guid("{0000010B-0000-0000-C000-000000000046}")), ctypes.byref(file))
+        try:
+            method(file, 6, ctypes.c_wchar_p, ctypes.c_int)(file, str(link), 1)                  # IPersistFile::Save
+        finally:
+            method(file, 2)(file)
+    finally:
+        method(shell_link, 2)(shell_link)
+
+
+def shell_folder(identifier):
+    buffer = ctypes.create_unicode_buffer(260)
+    ctypes.windll.shell32.SHGetFolderPathW(None, identifier, None, 0, buffer)
+    return Path(buffer.value)
+
+
+# ---- the setup's own settings (setup.ini)
 class Settings:
-    KEYS = ("game_dir", "deck_host", "win_work", "wsl_distro", "deck", "windows", "send", "with_romfs")
+    KEYS = ("game_dir", "deck_host", "win_work", "wsl_distro", "deck", "windows", "send", "with_romfs", "shortcut")
 
     def __init__(self):
         self.path = ROOT / "setup.ini"
         self.values = {"game_dir": "", "deck_host": "deck@steamdeck", "win_work": "", "wsl_distro": "",
-                       "deck": "0" if WIN else "1", "windows": "1" if WIN else "0", "send": "0", "with_romfs": "0"}
-        source = self.path if self.path.is_file() else ROOT / "launcher.ini"
-        for line in read_text(source).splitlines():
+                       "deck": "0" if WIN else "1", "windows": "1" if WIN else "0", "send": "0", "with_romfs": "1",
+                       "shortcut": "1"}
+        for line in read_text(self.path).splitlines():
             key, sep, value = line.partition("=")
             if sep and key.strip() in self.KEYS:
                 self.values[key.strip()] = value.strip()
@@ -138,7 +183,7 @@ def scan_dump(folder):
     return found
 
 
-# ---- aoc.ini, edited in place (the rules of runtime/cfg.c cfg_load and cfg_save)
+# ---- settings.ini, edited in place (the rules of runtime/cfg.c cfg_load and cfg_save)
 class GameIni:
     def __init__(self, path):
         self.path = path
@@ -156,7 +201,7 @@ class GameIni:
         if not t or t[0] in "#;[" or "=" not in t:
             return ""
         k = t.split("=", 1)[0].strip().upper()
-        return k[4:] if k.startswith("AOC_") else k
+        return k[4:] if k.startswith("ACR_") else k
 
     def find(self, key):
         at = -1
@@ -334,14 +379,7 @@ class App:
         self.root = tkinter.Tk()
         self.root.title(T["window"])
         self.root.resizable(False, False)
-        try:
-            if WIN:
-                self.root.iconbitmap(str(ROOT / "assets" / "icon.ico"))
-            else:
-                self.icon = tkinter.PhotoImage(file=str(ROOT / "assets" / "icon.png"))
-                self.root.iconphoto(True, self.icon)
-        except tkinter.TclError:
-            pass
+        self.set_icon()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.settings = Settings()
         self.events = queue.Queue()
@@ -354,6 +392,31 @@ class App:
         else:
             self.show_build()
         self.root.after(100, self.poll)
+
+    def set_icon(self):
+        """The game icon on the window and the taskbar. On Windows the sizes the screen's scaling asks for are loaded
+        from the .ico and given to the window (Tk would stretch its 16 or 32 pixel one, which looks blurred)."""
+        ico, png = ROOT / "assets" / "icon.ico", ROOT / "assets" / "icon.png"
+        try:
+            if not WIN:
+                self.icon = tkinter.PhotoImage(file=str(png))
+                self.root.iconphoto(True, self.icon)
+                return
+            self.root.iconbitmap(str(ico))
+            self.root.update_idletasks()
+            user32 = ctypes.windll.user32
+            user32.LoadImageW.restype = ctypes.c_void_p
+            user32.LoadImageW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_int, ctypes.c_int,
+                                          ctypes.c_uint]
+            user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+            hwnd = int(self.root.wm_frame(), 16)
+            for which, metric in ((1, 11), (0, 49)):   # ICON_BIG: SM_CXICON, ICON_SMALL: SM_CXSMICON
+                size = max(user32.GetSystemMetrics(metric), 16) * (2 if which else 1)
+                icon = user32.LoadImageW(None, str(ico), 1, size, size, 0x10)   # IMAGE_ICON, LR_LOADFROMFILE
+                if icon:
+                    user32.SendMessageW(hwnd, 0x80, ctypes.c_void_p(which), ctypes.c_void_p(icon))   # WM_SETICON
+        except (tkinter.TclError, AttributeError, OSError, ValueError):
+            pass
 
     def new_frame(self):
         if self.frame:
@@ -390,34 +453,51 @@ class App:
 
         box = ttk.LabelFrame(f, text=T["targets"], padding=(10, 6))
         box.grid(row=5, column=0, columnspan=3, sticky="we")
+        box.columnconfigure(0, weight=1)
         self.windows = tkinter.BooleanVar(value=s["windows"] == "1")
         self.deck = tkinter.BooleanVar(value=s["deck"] == "1")
         self.with_romfs = tkinter.BooleanVar(value=s["with_romfs"] == "1")
-        self.send = tkinter.BooleanVar(value=s["send"] == "1")
+        self.send = tkinter.StringVar(value="ssh" if s["send"] == "1" else "copy")
         self.host = tkinter.StringVar(value=s["deck_host"])
         self.inputs = [self.folder_entry, self.folder_button]
+        note = {"foreground": "#666", "wraplength": WIDTH - 40, "justify": "left"}
         row = 0
         if WIN:
             w = ttk.Checkbutton(box, text=T["windows"], variable=self.windows, command=self.refresh)
-            w.grid(row=row, column=0, columnspan=3, sticky="w")
-            self.inputs.append(w)
-            row += 1
+            w.grid(row=row, column=0, sticky="w")
+            ttk.Label(box, text=T["windows_note"], **note).grid(row=row + 1, column=0, sticky="w", padx=(22, 0))
+            self.shortcut = tkinter.BooleanVar(value=s["shortcut"] == "1")
+            self.shortcut_box = ttk.Checkbutton(box, text=T["shortcut"], variable=self.shortcut)
+            self.shortcut_box.grid(row=row + 2, column=0, sticky="w", padx=(22, 0), pady=(2, 8))
+            self.inputs += [w, self.shortcut_box]
+            row += 3
         d = ttk.Checkbutton(box, text=T["deck"] if WIN else T["deck_linux"], variable=self.deck, command=self.refresh)
-        d.grid(row=row, column=0, columnspan=3, sticky="w", pady=(4 if WIN else 0, 0))
+        d.grid(row=row, column=0, sticky="w")
+        ttk.Label(box, text=T["deck_note"] if WIN else T["deck_note_linux"], **note).grid(
+            row=row + 1, column=0, sticky="w", padx=(22, 0))
         self.inputs.append(d)
-        row += 1
-        if WIN:
-            ttk.Label(box, text=T["deck_note"], foreground="#666").grid(row=row, column=0, columnspan=3, sticky="w", padx=(22, 0))
-            row += 1
-        self.deck_widgets = [ttk.Checkbutton(box, text=T["with_romfs"], variable=self.with_romfs),
-                             ttk.Checkbutton(box, text=T["send"], variable=self.send, command=self.refresh)]
-        for w in self.deck_widgets:
-            w.grid(row=row, column=0, columnspan=3, sticky="w", padx=(22, 0))
-            row += 1
-        ttk.Label(box, text=T["host"]).grid(row=row, column=0, sticky="w", padx=(44, 6))
-        self.host_entry = ttk.Entry(box, textvariable=self.host, width=26)
-        self.host_entry.grid(row=row, column=1, sticky="w")
-        self.inputs += self.deck_widgets + [self.host_entry]
+        row += 2
+
+        # Only while the Deck is ticked: how the folder reaches it, and whether it is the first copy
+        self.deck_panel = ttk.Frame(box)
+        self.deck_panel.grid(row=row, column=0, sticky="we", padx=(22, 0), pady=(8, 0))
+        p = self.deck_panel
+        ttk.Label(p, text=T["deck_how"]).grid(row=0, column=0, columnspan=3, sticky="w")
+        copy = ttk.Radiobutton(p, text=T["deck_copy"], value="copy", variable=self.send, command=self.refresh)
+        copy.grid(row=1, column=0, columnspan=3, sticky="w", padx=(12, 0))
+        ssh = ttk.Radiobutton(p, text=T["deck_ssh"], value="ssh", variable=self.send, command=self.refresh)
+        ssh.grid(row=2, column=0, columnspan=3, sticky="w", padx=(12, 0))
+        self.host_label = ttk.Label(p, text=T["host"])
+        self.host_label.grid(row=3, column=0, sticky="w", padx=(34, 6))
+        self.host_entry = ttk.Entry(p, textvariable=self.host, width=24)
+        self.host_entry.grid(row=3, column=1, sticky="w")
+        self.ssh_note = ttk.Label(p, text=T["ssh_note"], **note)
+        self.ssh_note.grid(row=4, column=0, columnspan=3, sticky="w", padx=(34, 0))
+        first = ttk.Checkbutton(p, text=T["with_romfs"], variable=self.with_romfs)
+        first.grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(p, text=T["with_romfs_note"], **note).grid(row=6, column=0, columnspan=3, sticky="w", padx=(22, 0))
+        self.ssh_widgets = [self.host_label, self.host_entry, self.ssh_note]
+        self.inputs += [copy, ssh, first, self.host_entry]
 
         self.bar = ttk.Progressbar(f, maximum=1000)
         self.bar.grid(row=6, column=0, columnspan=3, sticky="we", pady=(16, 4))
@@ -470,11 +550,15 @@ class App:
                            foreground="#1a7f37" if ok else ("#666" if optional else "#c62828"))
             text.configure(text=f"{T[name]}: {detail}")
         self.files_ok = ((found["base"] and found["update"]) or found["nsp"] >= 2) and found["keys"]
-        running = self.build is not None
-        deck = self.deck.get()
-        for w in self.deck_widgets:
-            w.configure(state="normal" if deck and not running else "disabled")
-        self.host_entry.configure(state="normal" if deck and self.send.get() and not running else "disabled")
+        if self.deck.get():
+            self.deck_panel.grid()
+        else:
+            self.deck_panel.grid_remove()
+        for w in self.ssh_widgets:
+            if self.send.get() == "ssh":
+                w.grid()
+            else:
+                w.grid_remove()
 
     def choose_folder(self):
         path = filedialog.askdirectory(parent=self.root, title=T["folder_title"], initialdir=self.folder.get() or None)
@@ -504,8 +588,10 @@ class App:
         s["windows"] = "1" if self.windows.get() else "0"
         s["deck"] = "1" if self.deck.get() else "0"
         s["with_romfs"] = "1" if self.with_romfs.get() else "0"
-        s["send"] = "1" if self.send.get() else "0"
+        s["send"] = "1" if self.send.get() == "ssh" else "0"
         s["deck_host"] = self.host.get().strip()
+        if WIN:
+            s["shortcut"] = "1" if self.shortcut.get() else "0"
         self.settings.save()
 
     def start(self, check_only):
@@ -515,7 +601,7 @@ class App:
         deck = self.deck.get()
         if not (windows or deck):
             return messagebox.showwarning(T["window"], T["need_target"], parent=self.root)
-        if deck and self.send.get() and not self.host.get().strip():
+        if deck and self.send.get() == "ssh" and not self.host.get().strip():
             return messagebox.showwarning(T["window"], T["need_host"], parent=self.root)
         self.save_choices()
         s = self.settings.values
@@ -524,7 +610,7 @@ class App:
             args.append("--deck")
             if self.with_romfs.get():
                 args.append("--with-romfs")
-            if self.send.get():
+            if self.send.get() == "ssh":
                 args += ["--send", "--deck-host", s["deck_host"]]
         if windows:
             args.append("--windows")
@@ -593,9 +679,11 @@ class App:
             if self.check_only:
                 return self.status.set(T["checked"])
             if game_ready():
+                if WIN and self.targets[0]:
+                    self.make_shortcuts()
                 return self.show_game()
             self.status.set(T["done_deck"])
-            self.main_button.configure(text=T["open_deck"], command=lambda: open_path(ROOT / "dist" / "aoc-deck"))
+            self.main_button.configure(text=T["open_deck"], command=lambda: open_path(ROOT / "dist" / "steamdeck"))
             return
         if result == "cancel":
             self.bar.configure(value=0)
@@ -609,6 +697,17 @@ class App:
         messagebox.showerror(T["window"], T["failed_box"].format(step=title, note=(failed or {}).get("note", ""),
                                                                  path=ROOT / "build" / "logs" / "setup.log"), parent=self.root)
 
+    def make_shortcuts(self):
+        """The game in the Start Menu, and on the desktop when the box is ticked: shortcuts to the game's own exe, which
+        carries the icon (the setup exe is Python's signed pythonw.exe and keeps Python's icon)."""
+        exe = game_dir() / "AgeOfCalamityRecomp.exe"
+        folders = [shell_folder(0x02)] + ([shell_folder(0x10)] if self.shortcut.get() else [])   # Programs, Desktop
+        for folder in folders:
+            try:
+                create_shortcut(folder / (SHORTCUT_NAME + ".lnk"), exe, game_dir())
+            except OSError as error:
+                self.add_log(f"shortcut in {folder}: {error}")
+
     def offer_wsl(self):
         if not messagebox.askyesno(T["window"], T["need_wsl"], parent=self.root):
             return
@@ -620,7 +719,7 @@ class App:
         f = self.new_frame()
         ttk.Label(f, text=T["version"].format(v=package_version()), foreground="#666").grid(row=1, column=0, columnspan=3,
                                                                                              sticky="w", pady=(2, 12))
-        self.ini = GameIni(game_dir() / "aoc.ini")
+        self.ini = GameIni(game_dir() / "settings.ini")
         self.option_vars = []
         self.hint = tkinter.StringVar(value=T["hint"])
         panels = ttk.Frame(f)
@@ -703,7 +802,7 @@ class App:
 
     def save_ini(self):
         try:
-            self.ini = GameIni(game_dir() / "aoc.ini")
+            self.ini = GameIni(game_dir() / "settings.ini")
             for o in self.option_vars:
                 value = o["read"]()
                 if value != o["saved"]:
@@ -726,9 +825,9 @@ class App:
         folder = game_dir()
         try:
             if WIN:
-                self.game = subprocess.Popen([str(folder / "aoc.exe")], cwd=str(folder), creationflags=0x08000000)
+                self.game = subprocess.Popen([str(folder / "AgeOfCalamityRecomp.exe")], cwd=str(folder), creationflags=0x08000000)
             else:
-                self.game = subprocess.Popen(["sh", str(folder / "aoc.sh")], cwd=str(folder), start_new_session=True)
+                self.game = subprocess.Popen(["sh", str(folder / "AgeOfCalamityRecomp.sh")], cwd=str(folder), start_new_session=True)
         except OSError as error:
             self.status.set(T["play_failed"].format(error=error))
             return

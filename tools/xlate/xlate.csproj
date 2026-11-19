@@ -1,5 +1,5 @@
 <!-- AgeOfCalamityRecomp runtime shader translator: Switch Maxwell code -> SPIR-V (Vulkan) via the Ryujinx 1.3.2 shader translator.
-     Adapted from MacNativeGames games/totk/tools/aoc_xlate/aoc_xlate.csproj (MIT). -->
+     Adapted from MacNativeGames games/totk/tools/xlate/xlate.csproj (MIT). -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>

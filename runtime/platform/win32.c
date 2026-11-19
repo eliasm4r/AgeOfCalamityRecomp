@@ -1542,10 +1542,10 @@ long plat_child_read(PlatChild *c, void *buf, size_t cap) {
 }
 
 // ---- restart
-// AOC_RESTART_WAIT names the process that called plat_restart, as its id and creation time: a process that has only
+// ACR_RESTART_WAIT names the process that called plat_restart, as its id and creation time: a process that has only
 // reused the id is not waited for. Waiting keeps the new process off the old one's files (the log it moves at start,
 // the saves) until the old one is gone; no handle is inherited, so none of them stays open in the new one either.
-#define RESTART_WAIT "AOC_RESTART_WAIT"
+#define RESTART_WAIT "ACR_RESTART_WAIT"
 
 static uint64_t process_created(HANDLE h) {
     FILETIME c, e, k, u;

@@ -232,14 +232,14 @@ int opt_text_row(const char *id, const char *label, const char *value, const cha
     return row_text(id, label, desc, v, movable);
 }
 
-// ---- writing a setting: at once in memory (live settings follow), to aoc.ini a moment later (opt_save_tick)
+// ---- writing a setting: at once in memory (live settings follow), to settings.ini a moment later (opt_save_tick)
 static uint64_t g_save_at;   // plat_now_ns deadline of the pending write; 0 none
 static bool g_save_logged;
 
 static void apply(const char *key, const char *value) {
     if (*value) {
         cfg_set(key, value);
-    } else {   // the automatic choice: the key unset, its line removed from aoc.ini
+    } else {   // the automatic choice: the key unset, its line removed from settings.ini
         const char *k = key;
         cfg_reset(&k, 1);
     }
@@ -253,7 +253,7 @@ int opt_save_tick(int force) {
     g_save_at = 0;
     if (!cfg_save() && !g_save_logged) {
         g_save_logged = true;
-        rt_log("menu: could not write aoc.ini; the changed settings hold for this session");
+        rt_log("menu: could not write settings.ini; the changed settings hold for this session");
     }
     return 0;
 }
@@ -456,7 +456,7 @@ int opt_bind_row(const char *key, const char *label, UiTextId desc, const char *
         ImGui::PopID();
     }
     char k[64];
-    snprintf(k, sizeof k, "AOC_%s", key);
+    snprintf(k, sizeof k, "ACR_%s", key);
     if (row_foc) desc_set(g_focus, menu_text(desc), k, NULL, NULL);
     if (row_hov) desc_set(g_hover, menu_text(desc), k, NULL, NULL);
     if (!g_first.text[0]) desc_set(g_first, menu_text(desc), k, NULL, NULL);

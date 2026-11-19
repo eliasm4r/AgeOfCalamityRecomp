@@ -5,13 +5,13 @@
 // host. Stub rule: queries and initialisation succeed with neutral values, data paths stop with a named fatal.
 //
 // Environment:
-//   AOC_LANG=<Switch language code>   the game's language as given ("ja", "en-GB", "zh-Hant", ...)
-//   AOC_LOCALE=<BCP 47 tag>           else the language for this locale ("pt-BR"), else the Windows user locale;
+//   ACR_LANG=<Switch language code>   the game's language as given ("ja", "en-GB", "zh-Hant", ...)
+//   ACR_LOCALE=<BCP 47 tag>           else the language for this locale ("pt-BR"), else the Windows user locale;
 //                                      a language the game does not ship becomes en-US
-//   AOC_OPERATION_MODE=docked|handheld   operation and performance mode reported to the game (default docked)
-//   AOC_ASSUME_FOCUS=1|0              1 (default, the Game tab's row): GetCurrentFocusState always reports in focus,
+//   ACR_OPERATION_MODE=docked|handheld   operation and performance mode reported to the game (default docked)
+//   ACR_ASSUME_FOCUS=1|0              1 (default, the Game tab's row): GetCurrentFocusState always reports in focus,
 //                                      whatever the window says; 0: out of focus while the window is, as on a Switch
-//   AOC_SHARED_FONTS=<dir>            nn::pl shared fonts (tools/extract_fonts.py output), default
+//   ACR_SHARED_FONTS=<dir>            nn::pl shared fonts (tools/extract_fonts.py output), default
 //                                      <romfs>/../../firmware/shared-fonts
 #include <ctype.h>
 #include <math.h>
@@ -40,16 +40,16 @@ static void need(int ok, const char *what) {
 static const char *caller(Cpu *c, char *buf, int n) { return ldr_describe(c->x[30] - 4, buf, n); }
 
 // ==== nn::oe (services.c)
-// AOC_OPERATION_MODE: 1 handheld (OperationMode 0, PerformanceMode Normal 0), 0 docked (1, Boost 1). Read at the first
+// ACR_OPERATION_MODE: 1 handheld (OperationMode 0, PerformanceMode Normal 0), 0 docked (1, Boost 1). Read at the first
 // query; ov_operation_mode_changed takes a new value while the game runs.
 static volatile int32_t handheld_v = -1;
 int ov_handheld(void) {
     int32_t h = handheld_v;
     if (h < 0) {
-        const char *e = cfg_value("AOC_OPERATION_MODE");
+        const char *e = cfg_value("ACR_OPERATION_MODE");
         if (!strcmp(e, "docked")) h = 0;
         else if (!strcmp(e, "handheld")) h = 1;
-        else rt_fatal("AOC_OPERATION_MODE must be docked or handheld, not '%s'", e);
+        else rt_fatal("ACR_OPERATION_MODE must be docked or handheld, not '%s'", e);
         if (plat_cas32(&handheld_v, h, -1) == -1)
             rt_log("oe: operation mode reported to the game: %s", h ? "handheld (performance normal)"
                                                                   : "docked (performance boost)");
@@ -91,21 +91,21 @@ static const char *switch_language(const char *tag) {
     return "en-US";
 }
 
-// The game's language as a Switch language code (AOC_LANG, else AOC_LOCALE, else the Windows user locale). Astral Chain
+// The game's language as a Switch language code (ACR_LANG, else ACR_LOCALE, else the Windows user locale). Astral Chain
 // accepts "zh-Hans" and "zh-Hant" for Chinese and falls back to Japanese for "zh-CN" and "zh-TW", so those two
-// spellings, which older aoc.ini files and menus wrote, are mapped to them.
+// spellings, which older settings.ini files and menus wrote, are mapped to them.
 const char *ov_language(void) {
     static const char *const codes[] = {"ja", "en-US", "fr", "de", "it", "es", "ko", "nl", "pt", "ru",
                                         "en-GB", "fr-CA", "es-419", "zh-Hans", "zh-Hant", "pt-BR"};
-    const char *code = cfg_get("AOC_LANG");   // no fixed default: AOC_LOCALE or the Windows user locale decides when unset
+    const char *code = cfg_get("ACR_LANG");   // no fixed default: ACR_LOCALE or the Windows user locale decides when unset
     if (code && *code) {
         if (!strcmp(code, "zh-CN")) return "zh-Hans";
         if (!strcmp(code, "zh-TW")) return "zh-Hant";
         for (size_t i = 0; i < sizeof codes / sizeof *codes; i++)
             if (!strcmp(code, codes[i])) return codes[i];
-        rt_fatal("AOC_LANG '%s' is not a Switch language code", code);
+        rt_fatal("ACR_LANG '%s' is not a Switch language code", code);
     }
-    const char *tag = cfg_get("AOC_LOCALE");
+    const char *tag = cfg_get("ACR_LOCALE");
     char sys[85] = "en-US";
     if (!tag || !*tag) {
         if (*plat_user_locale()) snprintf(sys, sizeof sys, "%s", plat_user_locale());
@@ -177,7 +177,7 @@ static void ov_focus_mode(Cpu *c) {
 // mode 2: on a Switch the system then suspends the whole process while it is out of focus and sends Resume when it
 // returns. Here only the game's main thread stops (it waits in PopNotificationMessage for the next message) while its
 // loader threads, audio and clocks run on, and a load interrupted that way was seen to never finish (Linux, 1.4.3).
-// So AOC_ASSUME_FOCUS=1, the default, keeps it at 1, as MacNativeGames does; with 0 it follows the window through
+// So ACR_ASSUME_FOCUS=1, the default, keeps it at 1, as MacNativeGames does; with 0 it follows the window through
 // oe_set_focus. The caller of oe_set_focus also pushes OE_MSG_FOCUS_STATE_CHANGED.
 //
 // The setting is read on every focus change rather than once at start: a focus change is rare, the lookup is a short
@@ -185,7 +185,7 @@ static void ov_focus_mode(Cpu *c) {
 // a restart.
 static volatile int32_t focus_state = 1;
 void oe_set_focus(int in_focus) {
-    plat_xchg32(&focus_state, in_focus || atoi(cfg_value("AOC_ASSUME_FOCUS")) ? 1 : 2);
+    plat_xchg32(&focus_state, in_focus || atoi(cfg_value("ACR_ASSUME_FOCUS")) ? 1 : 2);
 }
 static void ov_focus_state(Cpu *c) { ret_x(c, (uint64_t)focus_state); }
 
@@ -194,12 +194,12 @@ static void ov_resume_enabled(Cpu *c) { plat_xchg32(&notify_resume, (int32_t)(ar
 static void ov_operation_enabled(Cpu *c) { plat_xchg32(&notify_operation, (int32_t)(arg_x(c, 0) & 0xff)); }
 static void ov_performance_enabled(Cpu *c) { plat_xchg32(&notify_performance, (int32_t)(arg_x(c, 0) & 0xff)); }
 
-// AOC_OPERATION_MODE changed in a menu while the game runs: the new mode is reported from now on and, as a Switch
+// ACR_OPERATION_MODE changed in a menu while the game runs: the new mode is reported from now on and, as a Switch
 // does when it is docked or taken out, the game gets OperationModeChanged and PerformanceModeChanged (oe messages 30
 // and 31) where it enabled them (Age of Calamity enables both). The game then picks its render resolution for the
-// mode: handheld is its lighter one. A game that only reads the mode at start sees it at the next start (aoc.ini).
+// mode: handheld is its lighter one. A game that only reads the mode at start sees it at the next start (settings.ini).
 void ov_operation_mode_changed(void) {
-    const char *e = cfg_value("AOC_OPERATION_MODE");
+    const char *e = cfg_value("ACR_OPERATION_MODE");
     int32_t h = !strcmp(e, "handheld") ? 1 : !strcmp(e, "docked") ? 0 : -1;
     if (h < 0 || plat_xchg32(&handheld_v, h) == h) return;
     rt_log("oe: operation mode changed to %s (notifications: operation %d, performance %d)",
@@ -209,14 +209,14 @@ void ov_operation_mode_changed(void) {
     plat_xchg32(&mode_read_after_change, 1);
 }
 
-// Diagnosis, at every present: AOC_PEEK=<addr>:<words>[,<addr>:<words>...] logs that many 32-bit words of guest memory
+// Diagnosis, at every present: ACR_PEEK=<addr>:<words>[,<addr>:<words>...] logs that many 32-bit words of guest memory
 // at each address every 60 presents (GPU-written lists as the CPU sees them after write-back).
 void ov_peek_tick(void) {
     static int state = -1;
     static uint64_t frames;
     static char spec[256];
     if (state < 0) {
-        const char *e = cfg_get("AOC_PEEK");
+        const char *e = cfg_get("ACR_PEEK");
         state = e && *e && strlen(e) < sizeof spec;
         if (state) strcpy(spec, e);
     }
@@ -235,9 +235,9 @@ void ov_peek_tick(void) {
     }
 }
 
-// Diagnosis, at every present: AOC_SCAN_F32=<value>[,<value>...] with AOC_SCAN_FRAME=<n> (default 4400) walks the
+// Diagnosis, at every present: ACR_SCAN_F32=<value>[,<value>...] with ACR_SCAN_FRAME=<n> (default 4400) walks the
 // guest's readable regions once at that present and logs where each float lies (within 1e-4 relative), with the 16
-// words around it: the CPU-side struct a GPU constant was copied from. AOC_SCAN_SEQ=1: the values (up to 16) are one
+// words around it: the CPU-side struct a GPU constant was copied from. ACR_SCAN_SEQ=1: the values (up to 16) are one
 // sequence of consecutive floats instead, matched exactly.
 static float scan_want[16];
 static int scan_nwant;
@@ -249,7 +249,7 @@ void ov_scan_tick(void) {
     float *want = scan_want;
     int nwant = scan_nwant;
     if (state < 0) {
-        const char *e = cfg_get("AOC_SCAN_F32"), *f = cfg_get("AOC_SCAN_FRAME");
+        const char *e = cfg_get("ACR_SCAN_F32"), *f = cfg_get("ACR_SCAN_FRAME");
         state = e && *e;
         at = f && *f ? strtoull(f, NULL, 10) : 4400;
         for (const char *p = e; state && p && *p && nwant < 16; p = strchr(p, ','), p = p ? p + 1 : NULL)
@@ -258,7 +258,7 @@ void ov_scan_tick(void) {
     }
     if (state != 1 || ++frames != at) return;
     state = 2;
-    plat_thread_spawn(scan_main, (void *)(uintptr_t)frames, "aoc scan", 0);   // off the presenting thread
+    plat_thread_spawn(scan_main, (void *)(uintptr_t)frames, "acr scan", 0);   // off the presenting thread
 }
 
 static void scan_main(void *arg) {
@@ -275,9 +275,9 @@ static void scan_main(void *arg) {
                 if (!plat_mem_readable(pg, 0x1000)) continue;
                 scanned += 0x1000;
                 const float *w = (const float *)(uintptr_t)pg;
-                static int seq = -1;   // AOC_SCAN_SEQ=1: the values as one run of consecutive floats (a matrix, say);
+                static int seq = -1;   // ACR_SCAN_SEQ=1: the values as one run of consecutive floats (a matrix, say);
                 static uint64_t last, run;   // repeats one after the other are logged once, with their count
-                if (seq < 0) seq = cfg_get("AOC_SCAN_SEQ") != NULL;
+                if (seq < 0) seq = cfg_get("ACR_SCAN_SEQ") != NULL;
                 for (int i = 0; seq && i + scan_nwant <= 1024; i++) {
                     int k = 0;
                     while (k < scan_nwant && w[i + k] == scan_want[k]) k++;
@@ -317,12 +317,12 @@ static void scan_main(void *arg) {
            (unsigned long long)(scanned >> 20), hits);
 }
 
-// Test hook, at every present (nvn_api_obj.c): AOC_TEST_OPMODE=<seconds>:<docked|handheld> makes the change the quick
-// menu makes, once, that many seconds after the first present, without a window or a pad (AOC_GPU=null runs).
+// Test hook, at every present (nvn_api_obj.c): ACR_TEST_OPMODE=<seconds>:<docked|handheld> makes the change the quick
+// menu makes, once, that many seconds after the first present, without a window or a pad (ACR_GPU=null runs).
 void ov_operation_mode_test_tick(void) {
     static int done;
     if (done) return;
-    const char *e = cfg_get("AOC_TEST_OPMODE");
+    const char *e = cfg_get("ACR_TEST_OPMODE");
     char mode[16];
     double at;
     if (!e || sscanf(e, "%lf:%15s", &at, mode) != 2) {
@@ -335,7 +335,7 @@ void ov_operation_mode_test_tick(void) {
     if (now - first < (uint64_t)(at * 1e9)) return;
     done = 1;
     rt_log("oe: test hook: operation mode -> %s", mode);
-    cfg_set("AOC_OPERATION_MODE", mode);
+    cfg_set("ACR_OPERATION_MODE", mode);
     ov_operation_mode_changed();
 }
 
@@ -966,7 +966,7 @@ static void ov_user_difference(Cpu *c) {
 // them from the user's firmware. Each type is read on first use into guest-visible memory as the BFTTF file the pl
 // shared memory holds; Address is 8 bytes past the file start (after the BFTTF header) and Size the decoded font size,
 // as in MNG. The load state is always Loaded: the game spins until it is, so missing files stop with a named fatal at
-// Address/Size instead of a hang. AOC_SHARED_FONTS=<dir> overrides <romfs>/../../firmware/shared-fonts.
+// Address/Size instead of a hang. ACR_SHARED_FONTS=<dir> overrides <romfs>/../../firmware/shared-fonts.
 #define SHARED_FONT_TYPES 6
 #define BFTTF_MAGIC 0x7f9a0218u
 static const char *const font_files[SHARED_FONT_TYPES] = {
@@ -975,10 +975,10 @@ static const char *const font_files[SHARED_FONT_TYPES] = {
 static struct { PlatMutex lock; const uint8_t *file[SHARED_FONT_TYPES]; uint64_t size[SHARED_FONT_TYPES]; } fonts;
 
 const char *ov_shared_font_dir(char *buf, size_t n) {
-    const char *e = cfg_get("AOC_SHARED_FONTS");
+    const char *e = cfg_get("ACR_SHARED_FONTS");
     if (e && *e) snprintf(buf, n, "%s", e);
     else {
-        char exe[PLAT_PATH_MAX], probe[PLAT_PATH_MAX + 40];   // shared-fonts next to aoc (tools/package_build.py), else the repo's
+        char exe[PLAT_PATH_MAX], probe[PLAT_PATH_MAX + 40];   // shared-fonts next to AgeOfCalamityRecomp (tools/package_build.py), else the repo's
         int len = plat_exe_path(exe, sizeof exe);
         char *cut = len && len < sizeof exe ? plat_last_sep(exe) : NULL;
         if (cut) *cut = 0;
@@ -1017,7 +1017,7 @@ static const uint8_t *font_data(Cpu *c, const char *fn, int64_t t) {
         FILE *f = fopen(path, "rb");
         if (!f)
             rt_fatal("nn::pl::%s(%lld) from %s: no shared font %s (needed for Chinese and Korean text); run "
-                     "tools/extract_fonts.py --firmware <firmware NCA dir> or set AOC_SHARED_FONTS", fn, (long long)t,
+                     "tools/extract_fonts.py --firmware <firmware NCA dir> or set ACR_SHARED_FONTS", fn, (long long)t,
                      caller(c, lr, sizeof lr), path);
         plat_fseek64(f, 0, SEEK_END);
         int64_t len = plat_ftell64(f);

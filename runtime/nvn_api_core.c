@@ -27,7 +27,7 @@
 // The call count goes to the shared counter 1024 at a time: the main thread and the job workers all record command
 // buffers, and one locked add per call kept the counter's cache line moving between their cores (0.8k samples a
 // fight). The count lags by at most 1023 calls per thread.
-_Thread_local int nvn_in_oom;   // AOC_CTL_TRACE: inside the game's command-memory callback (nvn_api_cmd.c)
+_Thread_local int nvn_in_oom;   // ACR_CTL_TRACE: inside the game's command-memory callback (nvn_api_cmd.c)
 void nvn_called(uint8_t *seen, const char *name) {
     static _Thread_local uint32_t calls;
     static uint32_t oom_logged;
@@ -275,7 +275,7 @@ NVN_API(nvnMemoryPoolBuilderSetStorage) {
 NVN_API(nvnMemoryPoolBuilderSetFlags) { ((pool_builder_t *)arg_p(c, 0))->flags = (uint32_t)arg_x(c, 1); }
 // NVNboolean nvnMemoryPoolInitialize(NVNmemoryPool *p, const NVNmemoryPoolBuilder *b)
 // Pool setup imports, mirrors and maps memory in the back end (the driver, VirtualAlloc): up to 20 ms on the game's
-// loader threads, which held a virtual core through it while job workers waited (AOC_CORE_DIAG). The thread gives
+// loader threads, which held a virtual core through it while job workers waited (ACR_CORE_DIAG). The thread gives
 // the core up, as for any blocking host call.
 NVN_API(nvnMemoryPoolInitialize) {
     NVN_BLOCKING();
@@ -602,12 +602,12 @@ NVN_API(nvnQueueFinish) {
 // the replay, and that frame draws other objects' matrices (phantom rocks, flat far field).
 // The guard makes the producer wait, at its commit point, until the newest submit has been replayed and completed.
 // lod_entered / lod_issued count submits that entered QueueSubmitCommands / reached the back end; lod_fence holds
-// the fence of the last LOD_RING. AOC_LOD_GUARD=0 turns the wait off.
+// the fence of the last LOD_RING. ACR_LOD_GUARD=0 turns the wait off.
 #define LOD_RING 64
 static uint64_t lod_entered, lod_issued, lod_fence[LOD_RING];
 
 // void nvnQueueSubmitCommands(NVNqueue *q, int n, const NVNcommandHandle *handles): replayed on this thread with its
-// core given up (section 2.2), or queued for the replay thread (AOC_REPLAY_ASYNC, vk_backend.c); the newest fence
+// core given up (section 2.2), or queued for the replay thread (ACR_REPLAY_ASYNC, vk_backend.c); the newest fence
 // value is what QueueFenceSync records. With the queue the fence covers replay and GPU, so the LOD guard below waits
 // for both.
 NVN_API(nvnQueueSubmitCommands) {
@@ -633,14 +633,14 @@ NVN_API(nvnQueueSubmitCommands) {
         nvn_submit_prepare(h, n);
         f = gfx_backend()->submit(h, n);
     }
-    // AOC_SUBMIT_WAIT=1 (diagnosis only): the submit returns once the GPU finished it, as if the GPU had read everything
+    // ACR_SUBMIT_WAIT=1 (diagnosis only): the submit returns once the GPU finished it, as if the GPU had read everything
     // the moment the game submitted. Tells a race between the game's CPU writes and a submission in flight from other
     // causes; costs the whole overlap of CPU and GPU.
     static int submit_wait = -1;
     if (submit_wait < 0) {
-        const char *e = cfg_get("AOC_SUBMIT_WAIT");
+        const char *e = cfg_get("ACR_SUBMIT_WAIT");
         submit_wait = e && *e == '1';
-        if (submit_wait) rt_log("nvn: AOC_SUBMIT_WAIT=1: every submit waits for the GPU (diagnosis)");
+        if (submit_wait) rt_log("nvn: ACR_SUBMIT_WAIT=1: every submit waits for the GPU (diagnosis)");
     }
     if (submit_wait) gfx_backend()->fence_wait(f, UINT64_MAX);
     uint64_t prev = __atomic_load_n(&last_fence, __ATOMIC_RELAXED);
@@ -657,7 +657,7 @@ static void obs_release_read(Cpu *c) {
     if (lr != 0x70008c70c8ull) return;
     static int on = -1;
     if (on < 0) {
-        on = cfg_bool("AOC_LOD_GUARD");
+        on = cfg_bool("ACR_LOD_GUARD");
     }
     if (!on || *(volatile uint8_t *)(uintptr_t)(obj + 0x528) != *(volatile uint8_t *)(uintptr_t)(obj + 0x529)) return;
     uint64_t e = __atomic_load_n(&lod_entered, __ATOMIC_SEQ_CST);

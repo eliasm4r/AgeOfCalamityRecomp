@@ -1,13 +1,13 @@
-// ASTC textures on the GPU: the AOC_ASTC knob, a compute decoder that turns raw blocks into the RGBA8 image the CPU
+// ASTC textures on the GPU: the ACR_ASTC knob, a compute decoder that turns raw blocks into the RGBA8 image the CPU
 // decoder (tex_astc.c) would have written, and the native ASTC formats where the device samples them itself.
 //
-// AOC_ASTC_BC = 1 (gpu mode only, default 1): a second pass (runtime/shaders/bc3_encode.comp) encodes the decoded
+// ACR_ASTC_BC = 1 (gpu mode only, default 1): a second pass (runtime/shaders/bc3_encode.comp) encodes the decoded
 // texels to BC3 and the image is BC3, 8 bits per texel instead of 32, a quarter of the video memory the RGBA8 decode
 // takes. Devices that sample ASTC themselves never decode, so the default leaves them on native ASTC. 0 keeps the
 // decoded images as RGBA8, at BC3's cost being visible: slightly blockier gradients, and data textures (normal maps)
 // losing some precision. --probe-astc holds the encoder to PSNR bounds.
 //
-// AOC_ASTC = auto (default): native when the device reports textureCompressionASTC_LDR and the format's features,
+// ACR_ASTC = auto (default): native when the device reports textureCompressionASTC_LDR and the format's features,
 // else gpu. gpu: compute decode into RGBA8 (runtime/shaders/astc_decode.comp). native: like auto, but logs when the
 // device cannot. cpu: astc_decode_ldr_mt on the uploading thread, as before. check: gpu, and every upload is also
 // decoded on the CPU and compared (waits for the GPU; for testing only).
@@ -106,7 +106,7 @@ static struct {
     VkDescriptorSetLayout dsl;
     VkPipelineLayout layout;
     VkPipeline pipe;
-    VkPipeline bc_pipe;           // the BC3 encoder (AOC_ASTC_BC): the decoder's layout, bindings 0 and 1
+    VkPipeline bc_pipe;           // the BC3 encoder (ACR_ASTC_BC): the decoder's layout, bindings 0 and 1
     int bc;                       // 1: ASTC images are BC3 (vk_astc_bc)
     PFN_vkCmdPushDescriptorSetKHR push;
     VkBuffer tab;                 // device-local copy of the tables
@@ -115,7 +115,7 @@ static struct {
 } G = {.mode = -1};
 static uint64_t n_dispatch, n_texels, n_chunks;   // n_chunks: the breadcrumb number of the next scratch chunk
 
-// AOC_ASTC_TIME=1 (or vk_astc_time_enable): timestamps around the dispatches of each scratch chunk (the decode
+// ACR_ASTC_TIME=1 (or vk_astc_time_enable): timestamps around the dispatches of each scratch chunk (the decode
 // alone) and around a whole vk_astc_record call (one texture upload or WriteTexels: copies and barriers included),
 // read back by later calls. Per footprint: texels and dispatch time; a new largest call is logged with both times.
 // Needs hostQueryReset (a slot is reset on the host after its read).
@@ -139,7 +139,7 @@ static uint8_t t_max_fp;
 
 static void time_init(VkCtx *c) {   // t_lock held
     if (t_on < 0) {
-        const char *e = cfg_get("AOC_ASTC_TIME");
+        const char *e = cfg_get("ACR_ASTC_TIME");
         t_on = e && *e && *e != '0';
     }
     if (t_on <= 0 || (t_pool && t_dev == c->device)) return;
@@ -157,7 +157,7 @@ static void time_init(VkCtx *c) {   // t_lock held
     VkQueryPoolCreateInfo qi = {.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_TIMESTAMP,
                                 .queryCount = 2 * TQ};
     if (!f12.hostQueryReset || !bits || vkCreateQueryPool(c->device, &qi, NULL, &t_pool) != VK_SUCCESS) {
-        rt_log("vk: AOC_ASTC_TIME: no hostQueryReset or no timestamps on the queue; ASTC decodes not timed");
+        rt_log("vk: ACR_ASTC_TIME: no hostQueryReset or no timestamps on the queue; ASTC decodes not timed");
         t_pool = VK_NULL_HANDLE;
         t_on = 0;
         return;
@@ -299,14 +299,14 @@ static int create_pipeline(VkCtx *c) {
     return 1;
 }
 
-// AOC_ASTC_BC=1: the BC3 encoder, when the device samples BC3 (every desktop GPU does); 0 leaves ASTC as RGBA8.
+// ACR_ASTC_BC=1: the BC3 encoder, when the device samples BC3 (every desktop GPU does); 0 leaves ASTC as RGBA8.
 static int create_bc_pipeline(VkCtx *c) {
-    if (!cfg_bool("AOC_ASTC_BC")) return 0;
+    if (!cfg_bool("ACR_ASTC_BC")) return 0;
     VkFormatProperties p;
     vkGetPhysicalDeviceFormatProperties(c->phys, VK_FORMAT_BC3_SRGB_BLOCK, &p);
     VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     if ((p.optimalTilingFeatures & need) != need) {
-        rt_log("vk: AOC_ASTC_BC: the device does not sample BC3; ASTC stays RGBA8");
+        rt_log("vk: ACR_ASTC_BC: the device does not sample BC3; ASTC stays RGBA8");
         return 0;
     }
     VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof bc3_encode_spv,
@@ -321,10 +321,10 @@ static int create_bc_pipeline(VkCtx *c) {
     vkDestroyShaderModule(c->device, m, NULL);
     if (r != VK_SUCCESS) {
         G.bc_pipe = VK_NULL_HANDLE;
-        rt_log("vk: AOC_ASTC_BC: the BC3 encoder pipeline failed (%d); ASTC stays RGBA8", (int)r);
+        rt_log("vk: ACR_ASTC_BC: the BC3 encoder pipeline failed (%d); ASTC stays RGBA8", (int)r);
         return 0;
     }
-    rt_log("vk: ASTC textures are encoded to BC3 after the decode (AOC_ASTC_BC)");
+    rt_log("vk: ASTC textures are encoded to BC3 after the decode (ACR_ASTC_BC)");
     return 1;
 }
 
@@ -344,13 +344,13 @@ int vk_astc_mode(void) {
     plat_mutex_lock(&g_lock);
     reset_for(c);
     if (G.mode < 0) {
-        const char *e = cfg_value("AOC_ASTC");
+        const char *e = cfg_value("ACR_ASTC");
         int want = !strcmp(e, "auto") ? -1 : !strcmp(e, "cpu") ? VK_ASTC_CPU : !strcmp(e, "gpu") ? VK_ASTC_GPU
                  : !strcmp(e, "native") ? VK_ASTC_NATIVE : !strcmp(e, "check") ? VK_ASTC_CHECK : -2;
-        if (want == -2) rt_log("vk: AOC_ASTC=%s is not cpu, gpu, native, check or auto: auto", e), want = -1;
+        if (want == -2) rt_log("vk: ACR_ASTC=%s is not cpu, gpu, native, check or auto: auto", e), want = -1;
         if ((want == -1 || want == VK_ASTC_NATIVE) && native_device(c)) m = VK_ASTC_NATIVE;
         else {
-            if (want == VK_ASTC_NATIVE) rt_log("vk: AOC_ASTC=native: the device lacks textureCompressionASTC_LDR; gpu");
+            if (want == VK_ASTC_NATIVE) rt_log("vk: ACR_ASTC=native: the device lacks textureCompressionASTC_LDR; gpu");
             m = want == VK_ASTC_CPU ? VK_ASTC_CPU : want == VK_ASTC_CHECK ? VK_ASTC_CHECK : VK_ASTC_GPU;
         }
         if ((m == VK_ASTC_GPU || m == VK_ASTC_CHECK || m == VK_ASTC_NATIVE) && !G.pipe && !G.failed &&

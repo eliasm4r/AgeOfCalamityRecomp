@@ -9,9 +9,9 @@
 #include "ipc.h"
 
 // ---- ov_system.c
-int ov_handheld(void);                     // AOC_OPERATION_MODE=handheld (default docked); fatal on another value
+int ov_handheld(void);                     // ACR_OPERATION_MODE=handheld (default docked); fatal on another value
 void ov_operation_mode_changed(void);      // the setting changed while the game runs: report it, notify the game
-void ov_operation_mode_test_tick(void);    // AOC_TEST_OPMODE test hook, at every present
+void ov_operation_mode_test_tick(void);    // ACR_TEST_OPMODE test hook, at every present
 const char *ov_language(void);             // the game's language, a Switch language code ("en-US", "zh-Hans", ...)
 
 // ---- ov_settings.c
@@ -33,5 +33,5 @@ void prepo_manager_handler(IpcSession *s, const IpcRequest *rq, IpcResponse *rs)
 void fsp_srv_handler(IpcSession *s, const IpcRequest *rq, IpcResponse *rs);          // "fsp-srv"
 // ---- ov_hid.c
 void hid_server_handler(IpcSession *s, const IpcRequest *rq, IpcResponse *rs);   // "hid" (IHidServer)
-const char *ov_shared_font_dir(char *buf, size_t n);   // AOC_SHARED_FONTS, else <romfs>/../../firmware/shared-fonts
+const char *ov_shared_font_dir(char *buf, size_t n);   // ACR_SHARED_FONTS, else <romfs>/../../firmware/shared-fonts
 uint64_t ov_bfttf_size(const uint8_t *p, uint64_t len); // decoded font size of a BFTTF image, 0 if it is not one

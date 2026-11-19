@@ -1,6 +1,6 @@
 // AMD FidelityFX Super Resolution 1 on the present path (gfx_present.c present_image): when the window is larger than
 // the game's output, EASU scales the game's crop rectangle to the swapchain size and RCAS sharpens it, in place of the
-// bilinear draw (vk_blit.c). AOC_UPSCALER=fsr|bilinear picks it, AOC_SHARPNESS (0..100, 0 = no RCAS pass) sets RCAS;
+// bilinear draw (vk_blit.c). ACR_UPSCALER=fsr|bilinear picks it, ACR_SHARPNESS (0..100, 0 = no RCAS pass) sets RCAS;
 // both apply at the next frame.
 //
 // Per frame: EASU reads the source through a view of the format the present passes (an sRGB window texture through its
@@ -160,7 +160,7 @@ static void bind_pass(VkCommandBuffer cb, VkPipeline p, VkImageView in, VkImageV
 VkImage vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat fmt, int sw, int sh, const int crop[4],
                       uint32_t dw, uint32_t dh) {
     int cw = crop[2], ch = crop[3];
-    if (strcmp(cfg_value("AOC_UPSCALER"), "fsr") || (dw <= (uint32_t)cw && dh <= (uint32_t)ch) || !fmt)
+    if (strcmp(cfg_value("ACR_UPSCALER"), "fsr") || (dw <= (uint32_t)cw && dh <= (uint32_t)ch) || !fmt)
         return VK_NULL_HANDLE;
     VkCtx *c = vk_ctx();
     if (!F.tried) init(c);
@@ -176,7 +176,7 @@ VkImage vk_fsr_record(VkCommandBuffer cb, unsigned slot, VkImage src, VkFormat f
         F.src_view[slot] = VK_NULL_HANDLE;
         return VK_NULL_HANDLE;
     }
-    int sharp = cfg_int("AOC_SHARPNESS");
+    int sharp = cfg_int("ACR_SHARPNESS");
     if (sharp < 0) sharp = 0;
     if (sharp > 100) sharp = 100;
     if (!F.logged) {

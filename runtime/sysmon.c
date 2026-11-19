@@ -1,7 +1,7 @@
 // Machine telemetry in the log (Linux handhelds, made for the Steam Deck): every 10 s of play one "sys:" line with the
 // frame rate of those 10 s, the APU's power, the battery's power and charge, the temperatures, the fan, how busy the
 // GPU is, the CPU load of the machine and of the game, and the CPU and GPU clocks. It is always on, so a session the
-// owner played from Gaming Mode can be read afterwards in logs/aoc.log next to the frame-time summary: what the game
+// owner played from Gaming Mode can be read afterwards in logs/game.log next to the frame-time summary: what the game
 // cost in watts and degrees at each point, without a second tool running on the device.
 //
 // Sources (sysfs and procfs, read once a second by a thread of its own; a missing file leaves its number out):

@@ -310,7 +310,7 @@ static void read_texels(Cpu *c, int strided) {
     texel_strides(o, r, &row, &img, "ReadTexels");
     NVN_BLOCKING();
     gfx_backend()->read_texels(o, arg_p(c, 1), r, arg_p(c, 3), row, img);
-    static int said;   // AOC_TRACE=gfx: the first small readbacks (exposure-like values the CPU may use)
+    static int said;   // ACR_TRACE=gfx: the first small readbacks (exposure-like values the CPU may use)
     if ((rt_trace & RT_TRACE_GFX) && said < 16 && o->d.width <= 4 && o->d.height <= 4) {
         said++;
         const float *f = arg_p(c, 3);
@@ -647,7 +647,7 @@ NVN_API(nvnWindowSetCrop) {
 // ---------- Present pacing
 // The vsync thread ticks at a fixed 60 Hz whatever the monitor does, so one game frame lasts `interval` ticks. With
 // the real-time frame step (frame_rate.c) game speed does not depend on the interval, so a frame is shown when it is
-// ready, at most at the frame limit (AOC_FPS_LIMIT: 30 to 240 per second or the monitor's rate): holding it to the
+// ready, at most at the frame limit (ACR_FPS_LIMIT: 30 to 240 per second or the monitor's rate): holding it to the
 // 2nd or 3rd tick would only add latency and 50 ms frames.
 #define VSYNC_HZ 60ull
 static uint64_t present_period(const win_t *o) {
@@ -727,9 +727,9 @@ NVN_API(nvnQueuePresentTexture) {
     win_t *o = arg_p(c, 1);
     int idx = (int)arg_x(c, 2);
     movie_tick(c);   // ov_movie.c: hand over decoded movie frames that are due; needs the core, so before the wait
-    ov_operation_mode_test_tick();   // ov_system.c: AOC_TEST_OPMODE (test hook; one load when unset)
-    ov_peek_tick();                  // ov_system.c: AOC_PEEK (diagnosis; one load when unset)
-    ov_scan_tick();                  // ov_system.c: AOC_SCAN_F32 (diagnosis; one load when unset)
+    ov_operation_mode_test_tick();   // ov_system.c: ACR_TEST_OPMODE (test hook; one load when unset)
+    ov_peek_tick();                  // ov_system.c: ACR_PEEK (diagnosis; one load when unset)
+    ov_scan_tick();                  // ov_system.c: ACR_SCAN_F32 (diagnosis; one load when unset)
     kern_watch_present();            // kernel.c: the hang watchdog sees the game is still presenting
     NVN_BLOCKING();
     if (o->magic != NVN_WIN_MAGIC || idx < 0 || idx >= o->ntex || idx >= 4 || !o->tex[idx])

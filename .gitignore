@@ -55,13 +55,13 @@ Thumbs.db
 # Pieces only the release packages carry (tools/make_release.py)
 /prebuilt/
 /python/
-/aoc-report.zip
+/AgeOfCalamityRecomp-report.zip
 
 # The setup's own files (setup/setup.py) and the pieces the Windows package puts beside AgeOfCalamityRecomp.exe
 /setup.ini
 /launcher.ini
 /setup-error.txt
-/AgeOfCalamityRecomp.exe
-/AgeOfCalamityRecomp._pth
+/AgeOfCalamityRecomp Setup.exe
+/AgeOfCalamityRecomp Setup._pth
 /python3*.dll
 /vcruntime140*.dll

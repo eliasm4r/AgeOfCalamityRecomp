@@ -8,29 +8,29 @@
 // held. A report holds the last DG_ROWS samples, the movie decoders, every guest thread with its wait and guest call
 // chain (kernel.c kern_threads_report) and the last DG_THUMBS picture copies as PNG files under <log dir>/diag/.
 // Reports come from:
-//   - no present for AOC_HANG_SECS (10; 0 off), once per stall, and once more at three times that if it goes on
+//   - no present for ACR_HANG_SECS (10; 0 off), once per stall, and once more at three times that if it goes on
 //     (two thread tables tell a thread that is stuck from one that is working);
-//   - a black picture (under 2 in 1000 pixels above luma 16) for AOC_BLACK_SECS (15; 0 off) while the game presents,
+//   - a black picture (under 2 in 1000 pixels above luma 16) for ACR_BLACK_SECS (15; 0 off) while the game presents,
 //     once per black stretch (a load shows 5-6 s of black, hence 15);
 //   - a dark picture (mean luma under 25, not black) with the scene being drawn (over 150 draws a frame) for
-//     AOC_DARK_SECS (15; 0 off), once per dark stretch;
+//     ACR_DARK_SECS (15; 0 off), once per dark stretch;
 //   - F8 with the game window in front: a mark. Also saves that present full size under <log dir>/diag/marks/.
 // Hit watch: the start of a controller vibration is the game's own sign of a hit given or taken (ov_input.c). Each
-// one is counted in the timeline; with AOC_HIT_SHOTS=<n> the next 8 presents after a hit are saved full size under
+// one is counted in the timeline; with ACR_HIT_SHOTS=<n> the next 8 presents after a hit are saved full size under
 // <log dir>/diag/hits/ for the first n hits at least 3 s apart, to see whether the hit effect is drawn.
-// Attack watch: AOC_ATTACK_SHOTS=<n> saves presents 3 to 14 after a press of the regular attack button (Y) under
+// Attack watch: ACR_ATTACK_SHOTS=<n> saves presents 3 to 14 after a press of the regular attack button (Y) under
 // <log dir>/diag/hits/a<nn>-*.png, for the first n presses at least 20 s apart: the frames where the blow lands,
-// whatever the vibration does. AOC_ATTACK_DUMP=<k> dumps the frame 6 presents after the k-th of them.
-// Frame dumps (vk_dump.c, AOC_DUMP=arm): AOC_HIT_DUMP=<k> dumps the frame after the k-th watched hit; AOC_MARK_DUMP=1
+// whatever the vibration does. ACR_ATTACK_DUMP=<k> dumps the frame 6 presents after the k-th of them.
+// Frame dumps (vk_dump.c, ACR_DUMP=arm): ACR_HIT_DUMP=<k> dumps the frame after the k-th watched hit; ACR_MARK_DUMP=1
 // dumps on F8; a dark or black report dumps too.
 // Performance log: one CSV row a second for the whole session in <log dir>/performance/<start time>.csv (the newest
-// 40 kept; AOC_PERF_LOG=0 off): frames and the slowest one with what held it (shader translation, pipeline build,
+// 40 kept; ACR_PERF_LOG=0 off): frames and the slowest one with what held it (shader translation, pipeline build,
 // texture upload, replay, GPU fence, pacing), draws, skipped draws, translations, pipelines and uploads, picture
 // brightness, file reads, the main thread's state, and on Linux the APU and battery watts, temperatures, GPU load,
 // clocks and the game's CPU cores (sysmon.c). Written so the owner can play a whole session and hand it over;
 // tools/perf_view.py reads it. A mark (F8, or "Mark this moment" in the quick menu, L3+R3) fills the mark column.
 // Input: a game run that writes a log also records the input to <log dir>/sessions/input-<time>.txt (an
-// AOC_INPUT_SCRIPT), unless AOC_INPUT_RECORD or AOC_INPUT_SCRIPT is set.
+// ACR_INPUT_SCRIPT), unless ACR_INPUT_RECORD or ACR_INPUT_SCRIPT is set.
 // Cost while nothing happens: per present one time read; per second one 320x180 blit and its read-back, and this
 // thread's sample. Every 60 s a "diag: image:" line when draws were skipped or bindings read the zero view.
 #include <stdio.h>
@@ -81,7 +81,7 @@ static uint64_t n_thumbs;
 static uint8_t *thumb_tmp;
 
 void diag_setup(void) {
-    const char *e = cfg_get("AOC_DIAG");
+    const char *e = cfg_get("ACR_DIAG");
     if (e && !strcmp(e, "0")) return;
     g_thumbs_on = 1;
     vk_thumbs_enable(64);   // a no-op when the flight recorder already asked for its own ring
@@ -104,7 +104,7 @@ static void log_dir(char *dir, size_t cap) {
 // input.c: where this run records its input when nothing else says, NULL for no recording.
 const char *diag_record_path(void) {
     static char path[PLAT_PATH_MAX * 3 + 96];
-    const char *e = cfg_get("AOC_DIAG"), *sc = cfg_get("AOC_INPUT_SCRIPT");
+    const char *e = cfg_get("ACR_DIAG"), *sc = cfg_get("ACR_INPUT_SCRIPT");
     if ((e && !strcmp(e, "0")) || (sc && *sc) || !rt_log_path()) return NULL;
     log_dir(path, PLAT_PATH_MAX * 3);
     size_t n = strlen(path);
@@ -133,7 +133,7 @@ void diag_attack_button(int y) {
     atk_was = y;
     if (!edge) return;
     if (atk_shots < 0) {
-        const char *e = cfg_get("AOC_ATTACK_SHOTS"), *d = cfg_get("AOC_ATTACK_DUMP");
+        const char *e = cfg_get("ACR_ATTACK_SHOTS"), *d = cfg_get("ACR_ATTACK_DUMP");
         atk_dump = d && *d ? atoi(d) : 0;
         atk_shots = e && *e ? atoi(e) : 0;
     }
@@ -156,7 +156,7 @@ void diag_attack_button(int y) {
 void diag_rumble(float amp) {
     __atomic_add_fetch(&g_rumbles, 1, __ATOMIC_RELAXED);
     if (hit_shots < 0) {
-        const char *e = cfg_get("AOC_HIT_SHOTS"), *d = cfg_get("AOC_HIT_DUMP");
+        const char *e = cfg_get("ACR_HIT_SHOTS"), *d = cfg_get("ACR_HIT_DUMP");
         hit_dump = d && *d ? atoi(d) : 0;
         hit_shots = e && *e ? atoi(e) : 0;
     }
@@ -203,7 +203,7 @@ int diag_shot_wanted(uint64_t present, char *path, size_t cap) {
     return 1;
 }
 
-// A full-size picture of the next present under diag/marks/, and a frame dump when asked (AOC_DUMP=arm).
+// A full-size picture of the next present under diag/marks/, and a frame dump when asked (ACR_DUMP=arm).
 static void mark(const char *why, int dump) {
     int id = __atomic_add_fetch(&g_mark_id, 1, __ATOMIC_RELAXED);
     perf_mark = id;   // diag thread only: the next performance log row carries it
@@ -233,7 +233,7 @@ static int csv_add(const char *name, void *ctx) {
 // Opens <log dir>/performance/<time>.csv and drops all but the newest 40 files there.
 static void perf_open(void) {
     perf_state = -1;
-    const char *e = cfg_get("AOC_PERF_LOG");
+    const char *e = cfg_get("ACR_PERF_LOG");
     if (e && !strcmp(e, "0")) return;
     char dir[PLAT_PATH_MAX * 3 + 64], path[PLAT_PATH_MAX * 3 + 128];
     log_dir(dir, PLAT_PATH_MAX * 3);
@@ -262,8 +262,8 @@ static void perf_open(void) {
     }
     fprintf(perf_f, "# AgeOfCalamityRecomp %s performance log, one row a second (tools/perf_view.py)\n", rt_port_version);
     // the settings in effect, so sessions played with different ones can be told apart (tools/perf_view.py shows them)
-    static const char *const keys[] = {"AOC_DEVICE_PROFILE", "AOC_OUTPUT_RES", "AOC_RENDER_SCALE", "AOC_OPERATION_MODE",
-                                       "AOC_FPS_LIMIT", "AOC_REPLAY_ASYNC", "AOC_SHADOW_RES", "AOC_VK_PRESENT"};
+    static const char *const keys[] = {"ACR_DEVICE_PROFILE", "ACR_OUTPUT_RES", "ACR_RENDER_SCALE", "ACR_OPERATION_MODE",
+                                       "ACR_FPS_LIMIT", "ACR_REPLAY_ASYNC", "ACR_SHADOW_RES", "ACR_VK_PRESENT"};
     fprintf(perf_f, "# settings:");
     for (size_t i = 0; i < sizeof keys / sizeof *keys; i++) {
         const char *v = cfg_value(keys[i]);
@@ -430,18 +430,18 @@ static void report(const char *why, const char *slug, const char *thread_tag) {
 static void diag_main(void *arg) {
     (void)arg;
     sysmon_start();   // the performance log's machine columns; idempotent (perf.c starts it at the first frame too)
-    const char *v = cfg_get("AOC_HANG_SECS");
+    const char *v = cfg_get("ACR_HANG_SECS");
     double hang_s = v && *v ? atof(v) : 10.0;
-    v = cfg_get("AOC_BLACK_SECS");
+    v = cfg_get("ACR_BLACK_SECS");
     double black_s = v && *v ? atof(v) : 15.0;
-    v = cfg_get("AOC_DARK_SECS");
+    v = cfg_get("ACR_DARK_SECS");
     double dark_s = v && *v ? atof(v) : 15.0;
     uint64_t hang_ns = hang_s > 0 ? (uint64_t)(hang_s * 1e9) : 0, black_ns = black_s > 0 ? (uint64_t)(black_s * 1e9) : 0;
     uint64_t dark_ns = dark_s > 0 ? (uint64_t)(dark_s * 1e9) : 0, dark_since = 0;
-    const char *md = cfg_get("AOC_MARK_DUMP");
+    const char *md = cfg_get("ACR_MARK_DUMP");
     int dark_reported = 0, mark_dump = md && *md && strcmp(md, "0");
-    rt_log("diag: state recorder on: report after %.0f s without a present (AOC_HANG_SECS), %.0f s of black picture "
-           "(AOC_BLACK_SECS) or F8; picture copies %s", hang_s, black_s, g_thumbs_on ? "one a second" : "off (AOC_DIAG=0)");
+    rt_log("diag: state recorder on: report after %.0f s without a present (ACR_HANG_SECS), %.0f s of black picture "
+           "(ACR_BLACK_SECS) or F8; picture copies %s", hang_s, black_s, g_thumbs_on ? "one a second" : "off (ACR_DIAG=0)");
     uint64_t next = kern_now_ns() + 1000000000ull, hang_reported = 0, hang_again = 0, black_since = 0, minute = 0;
     uint64_t p_frame = __atomic_load_n(&g_frame, __ATOMIC_RELAXED), p_draws = vk_exec_frame.draws;
     uint64_t p_pipe = 0, p_shader = 0, p_zero = 0, m_pipe = 0, m_shader = 0, m_zero = 0;
@@ -470,7 +470,7 @@ static void diag_main(void *arg) {
         s->presents = (uint32_t)(s->frame - p_frame);
         p_frame = s->frame;
         uint64_t d = vk_exec_frame.draws;   // the replay thread's counter, read without a lock: a diagnosis figure
-        s->draws = (uint32_t)(d >= p_draws ? d - p_draws : d);   // AOC_TRACE=gfx resets it every frame
+        s->draws = (uint32_t)(d >= p_draws ? d - p_draws : d);   // ACR_TRACE=gfx resets it every frame
         p_draws = d;
         s->audio = (float)__atomic_exchange_n(&g_audio_peak_u, 0, __ATOMIC_RELAXED) / 1e6f;
         s->read_kib = (uint32_t)((uint64_t)__atomic_exchange_n(&g_read_bytes, 0, __ATOMIC_RELAXED) >> 10);
@@ -559,10 +559,10 @@ void diag_exit(void) {
 void diag_start(void) {
     static int32_t started;
     if (plat_xchg32(&started, 1)) return;
-    const char *e = cfg_get("AOC_DIAG");
+    const char *e = cfg_get("ACR_DIAG");
     if (e && !strcmp(e, "0")) {
-        const char *h = cfg_get("AOC_HANG_SECS");
+        const char *h = cfg_get("ACR_HANG_SECS");
         if (h && *h && atof(h) <= 0) return;
     }
-    plat_thread_spawn(diag_main, NULL, "aoc diag", 0);
+    plat_thread_spawn(diag_main, NULL, "acr diag", 0);
 }

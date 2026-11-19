@@ -5,12 +5,12 @@
 // patch page.
 //
 // What remains:
-//   - the frame limit (AOC_FPS_LIMIT): with no patches the pacer (frame_step_cap_ns) alone cannot speed the game
+//   - the frame limit (ACR_FPS_LIMIT): with no patches the pacer (frame_step_cap_ns) alone cannot speed the game
 //     up; the game paces itself. The limit defaults to 30 (Age of Calamity's own rate).
 //   - the world clock (frame_step_world_us): wall time from the first present. Recorded and scripted input
 //     (input.c) runs on it, so a replay presses at the same game time at any frame rate.
 //
-// AOC_TRACE=perf adds a line per 120 presents: fps and the game seconds stepped against wall seconds.
+// ACR_TRACE=perf adds a line per 120 presents: fps and the game seconds stepped against wall seconds.
 #include <math.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -38,7 +38,7 @@ void frame_step_init(void) {
 
 int frame_step_realtime(void) { return 0; }
 
-// The frame limit (menu, AOC_FPS_LIMIT): 30..240 or display. Without a patch set the game's own interval decides
+// The frame limit (menu, ACR_FPS_LIMIT): 30..240 or display. Without a patch set the game's own interval decides
 // the actual rate; the pacer (nvn_api_obj.c) holds frames to the limit where the game presents faster than it.
 // Unset, the limit is 30.
 #define LIMIT_MIN_HZ 30
@@ -48,17 +48,17 @@ static unsigned limit_seen;
 static int limit_read;
 
 static int limit_parse(void) {
-    const char *e = cfg_get("AOC_FPS_LIMIT");
+    const char *e = cfg_get("ACR_FPS_LIMIT");
     if (!e || !*e) return 30;   // Age of Calamity: the game's own 30 fps (cfg.c default)
     if (!strcmp(e, "display")) return 0;
     char *end;
     long n = strtol(e, &end, 10);
     if (!*end && n > LIMIT_MAX_HZ) {
-        rt_log("frame rate: AOC_FPS_LIMIT=%s is above %d; %d", e, LIMIT_MAX_HZ, LIMIT_MAX_HZ);
+        rt_log("frame rate: ACR_FPS_LIMIT=%s is above %d; %d", e, LIMIT_MAX_HZ, LIMIT_MAX_HZ);
         return LIMIT_MAX_HZ;
     }
     if (!*end && n >= LIMIT_MIN_HZ) return (int)n;
-    rt_log("frame rate: AOC_FPS_LIMIT=%s is not %d..%d or display; 30", e, LIMIT_MIN_HZ, LIMIT_MAX_HZ);
+    rt_log("frame rate: ACR_FPS_LIMIT=%s is not %d..%d or display; 30", e, LIMIT_MIN_HZ, LIMIT_MAX_HZ);
     return 30;
 }
 
@@ -93,7 +93,7 @@ double frame_step_limit_hz(void) {
     return r > LIMIT_MAX_HZ ? LIMIT_MAX_HZ : r;
 }
 
-// ---- AOC_TRACE=perf speed lines
+// ---- ACR_TRACE=perf speed lines
 static uint64_t win_t0, win_frames, win_hist[4];   // win_hist: frames by present interval 1, 2, 3+ ([0] unused)
 static double win_game;
 

@@ -87,7 +87,7 @@ static void session_unref(AudoutOut *o) {
     free(o);
 }
 
-// AOC_VOLUME: the player's volume in percent (0..100) on top of the game's own. Re-read when the configuration changes,
+// ACR_VOLUME: the player's volume in percent (0..100) on top of the game's own. Re-read when the configuration changes,
 // so the menu's slider applies while the game runs. Guest threads only.
 static float host_volume(void) {
     static float v = 1.0f;
@@ -95,7 +95,7 @@ static float host_volume(void) {
     unsigned ver = cfg_version();
     if (ver == seen) return v;
     seen = ver;
-    double pct = cfg_double("AOC_VOLUME");
+    double pct = cfg_double("ACR_VOLUME");
     v = (float)((pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100);
     return v;
 }
@@ -158,9 +158,9 @@ static void SDLCALL audout_pull(void *user, SDL_AudioStream *stream, int additio
 static void out_open(void) {
     if (out.opened) return;
     out.opened = 1;
-    const char *mode = cfg_get("AOC_AUDIO");
-    if ((mode && !strcmp(mode, "none")) || cfg_get("AOC_AUDIO_OFF")) {
-        rt_log("audout: AOC_AUDIO=none: buffers are recycled without a device");
+    const char *mode = cfg_get("ACR_AUDIO");
+    if ((mode && !strcmp(mode, "none")) || cfg_get("ACR_AUDIO_OFF")) {
+        rt_log("audout: ACR_AUDIO=none: buffers are recycled without a device");
         return;
     }
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {

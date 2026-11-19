@@ -8,8 +8,8 @@
 # scene) to [x20+0x368]. Both pairs are now read from the patch page: +32 the output and +40 the scene, width in the low
 # 32 bits and height in the high ones, like the game's constants. Original bytes checked in our dump (build IDs in
 # tools/data/known-builds.json).
-set  output AOC_PATCH_OUTPUT 0
-set  scene  AOC_PATCH_SCENE  0
+set  output ACR_PATCH_OUTPUT 0
+set  scene  ACR_PATCH_SCENE  0
 site output main 8d9490 d280f008 @page:x8 f9401108   # mov x8,#0x780 -> adrp x8,page ; ldr x8,[x8,#32]
 site output main 8d9498 f2c08708 d503201f            # movk x8,#0x438,lsl #32 -> nop
 site scene  main 8d94d0 d280b408 @page:x8 f9401508   # mov x8,#0x5a0 -> adrp x8,page ; ldr x8,[x8,#40]

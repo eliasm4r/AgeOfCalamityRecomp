@@ -46,7 +46,7 @@ typedef struct PoolRec {
     VPage *pt;                         // POOL_VIRT: size / 64 KiB entries
     uint64_t npages;
     volatile int32_t used;                // resolved at least once: the GPU may still read it at finalize
-    // AOC_TRACE=perf dirty census (vk_mem_dirty_submit), replay thread under the submit lock only:
+    // ACR_TRACE=perf dirty census (vk_mem_dirty_submit), replay thread under the submit lock only:
     uint32_t bound_sub;                // last submit that bound it as a buffer (dirty_sub), 0 never
     uint32_t synced_gen;               // page generation its lazy-mirror count covers; DIRTY_UNSYNCED until scanned
     uint8_t bufbound;                  // ever bound as a vertex, index, uniform, storage or indirect buffer
@@ -212,7 +212,7 @@ static int alloc_physical(VkCtx *c, PoolRec *r) {
 int vk_fix_zero(void) {
     static int on = -1;
     if (on < 0) {
-        on = cfg_bool("AOC_FIX_ZERO");
+        on = cfg_bool("ACR_FIX_ZERO");
     }
     return on;
 }
@@ -359,7 +359,7 @@ int vk_pool_map_virtual(pool_t *v, int n, const void *requests) {
 // Per-thread copies of resolved import and physical pools that overlap no other index entry (so pidx_find picks them for
 // any range inside), valid while pool_gen is unchanged: the replay resolves a few dozen pools thousands of times per
 // frame (16 vertex streams and every buffer binding of each draw). Direct-mapped by the 4 KiB page of the address, so
-// a hit is one compare however many pools a frame touches. AOC_RESOLVE_CHECK=1 compares every hit with the locked
+// a hit is one compare however many pools a frame touches. ACR_RESOLVE_CHECK=1 compares every hit with the locked
 // lookup and stops on a difference.
 static int rec_class(const PoolRec *r) {
     if (r->kind != POOL_IMPORT) return VK_MCLS_DEVICE;
@@ -376,7 +376,7 @@ static ResolveHit *rhit_slot(uint64_t addr) { return &rhit[(addr >> 12 ^ addr >>
 static int resolve_check_on(void) {
     static int on = -1;
     if (on < 0) {
-        const char *e = cfg_get("AOC_RESOLVE_CHECK");
+        const char *e = cfg_get("ACR_RESOLVE_CHECK");
         on = e && *e && strcmp(e, "0");
     }
     return on;
@@ -492,7 +492,7 @@ static void flag_names(uint32_t f, char *buf, size_t n) {
 
 // One line per (kind, flags) group of the live pools, then the bytes the replay bound or copied per frame by pool
 // class since the previous census (the first one: since frame 1200). Logged at frame 1800 (in the world from the
-// run-game saves), at frame 600, and with AOC_TRACE=perf every 1800 frames.
+// run-game saves), at frame 600, and with ACR_TRACE=perf every 1800 frames.
 static void dirty_frame(uint64_t frame);
 
 static void mirror_log(uint64_t frame);
@@ -615,7 +615,7 @@ static uint64_t ww_query(uint64_t addr, uint64_t size) {
 // reads, which thaw their buffer first (fs_host.c, romfs.c), and every user-mode write faults and thaws.
 #define FREEZE_PER_SUB 32
 static int freeze_idle;                       // 0: off
-static int freeze_shadow = 1;                 // AOC_FREEZE_SHADOW=0: shadow_sync_pool nominates no regions
+static int freeze_shadow = 1;                 // ACR_FREEZE_SHADOW=0: shadow_sync_pool nominates no regions
 static uint32_t ww_ep = 1;                    // gen_lock: the submission being recorded (vk_mem_mirror_begin)
 static uint32_t reg_last[RT_ADDRESS_LIMIT >> REG_SHIFT];    // gen_lock: ww_ep of the region's last stamp
 static uint32_t reg_tried[RT_ADDRESS_LIMIT >> REG_SHIFT];   // gen_lock: ww_ep of its last freeze candidacy
@@ -767,7 +767,7 @@ void vk_mem_snap_stats(uint64_t *checks, uint64_t *calls, uint64_t *untracked) {
     *untracked = __atomic_exchange_n(&n_snap_untracked, 0, __ATOMIC_RELAXED);
 }
 
-// ---------------------------------------------------------------- dirty census (AOC_TRACE=perf + AOC_DIRTY_CENSUS=1)
+// ---------------------------------------------------------------- dirty census (ACR_TRACE=perf + ACR_DIRTY_CENSUS=1)
 // What a device-local mirror of the buffer-bound pools would upload; import mode only, and only on request: it queries
 // the write watch over every buffer-bound pool at every submit, which in Age of Calamity's first battle on the Steam
 // Deck was 516 queries over 41 GB a frame, 63 ms, and turned a perf measurement into a measurement of the census
@@ -834,7 +834,7 @@ static int query_stamp(uint64_t lo, uint64_t hi, uint32_t g) {
 // - GPU -> guest: the replay notes each GPU write into CPU-visible memory at record time (vk_mem_gpu_pending) and
 //   reports it at the fence (vk_gpu_written), which copies those bytes back into guest memory. Until then the CPU
 //   copies skip them: a page the CPU and the GPU both write keeps the GPU's bytes.
-// AOC_SHADOW=1/0 forces the mode on or off; the default is on for Linux and Wine.
+// ACR_SHADOW=1/0 forces the mode on or off; the default is on for Linux and Wine.
 typedef struct { uint64_t lo, hi; } SRange;
 static PlatMutex shadow_lock = PLAT_MUTEX_INIT;   // after pool_lock; before gen_lock
 static PoolRec **stouch;                          // shadow_lock: pools resolved since the last sync
@@ -1014,11 +1014,11 @@ static void shadow_log(uint64_t frame) {
     plat_mutex_unlock(&shadow_lock);
 }
 
-int vk_mem_census_on = -1;   // AOC_DIRTY_CENSUS=1 with AOC_TRACE=perf; -1 until read
+int vk_mem_census_on = -1;   // ACR_DIRTY_CENSUS=1 with ACR_TRACE=perf; -1 until read
 
 static int census_on(void) {
     if (vk_mem_census_on < 0) {
-        const char *e = cfg_get("AOC_DIRTY_CENSUS");
+        const char *e = cfg_get("ACR_DIRTY_CENSUS");
         vk_mem_census_on = (rt_trace & RT_TRACE_PERF) && e && !strcmp(e, "1");
     }
     return vk_mem_census_on;
@@ -1149,7 +1149,7 @@ static void dirty_frame(uint64_t frame) {
 // ---------------------------------------------------------------- VRAM mirror of buffer-bound pools
 // An imported pool keeps vertices, indices, constants
 // and storage buffers in system memory, so a discrete GPU reads them over PCIe on every draw (GTX 1050 Ti and RTX
-// 3090 Ti: about 110 ms of GPU time per frame in the field). In mirror mode (device class discrete, AOC_MEMORY) an
+// 3090 Ti: about 110 ms of GPU time per frame in the field). In mirror mode (device class discrete, ACR_MEMORY) an
 // imported pool gets a device-local buffer over its imported range the first time the replay uses it as a vertex,
 // index, uniform, storage or indirect buffer (vk_mem_use). From then on those bindings, and the buffer copies, fills
 // and uniform updates that touch the pool (vk_mem_pick), use the mirror at the same offsets. Guest memory stays what
@@ -1163,7 +1163,7 @@ static void dirty_frame(uint64_t frame) {
 // - GPU -> guest: what the replay writes into a mirror (storage buffers its shaders write, buffer copies, fills,
 //   uniform updates, texture-to-buffer copies: vk_mem_gpu_wrote) goes back into the imported buffer at the end of the
 //   submission, exact byte ranges, before the fence signals (vk_mem_mirror_end).
-// - AOC_MEMORY=verify: every submission also copies up to VERIFY_BYTES of mirror pages, round robin, into host memory;
+// - ACR_MEMORY=verify: every submission also copies up to VERIFY_BYTES of mirror pages, round robin, into host memory;
 //   at its fence the pages the CPU has not written since their sync are compared with guest memory.
 // A pool stays imported when its mirror would not fit the VRAM budget, its range is not write-watched, it overlaps
 // another pool or the allocation fails.
@@ -1198,35 +1198,35 @@ static volatile int64_t m_live_n, m_live_bytes, m_refused_n[MR_N], m_refused_byt
 static volatile int64_t m_flush_calls, m_flush_bytes, v_pages, v_skipped, v_mismatch;
 
 static void mirror_mode(int discrete) {
-    const char *e = cfg_value("AOC_MEMORY");
+    const char *e = cfg_value("ACR_MEMORY");
     int mode = discrete ? 1 : 0;   // 0 import, 1 mirror, 2 verify
     const char *why = discrete ? "auto, discrete gpu" : "auto, uma";
     if (strcmp(e, "auto")) {
-        if (!strcmp(e, "import")) mode = 0, why = "AOC_MEMORY=import";
-        else if (!strcmp(e, "mirror")) mode = 1, why = "AOC_MEMORY=mirror";
-        else if (!strcmp(e, "verify")) mode = 2, why = "AOC_MEMORY=verify";
-        else rt_log("mem: AOC_MEMORY=%s is not import, mirror, verify or auto: auto", e);
+        if (!strcmp(e, "import")) mode = 0, why = "ACR_MEMORY=import";
+        else if (!strcmp(e, "mirror")) mode = 1, why = "ACR_MEMORY=mirror";
+        else if (!strcmp(e, "verify")) mode = 2, why = "ACR_MEMORY=verify";
+        else rt_log("mem: ACR_MEMORY=%s is not import, mirror, verify or auto: auto", e);
     }
     vk_mirror_on = mode > 0;
     mirror_verify = mode == 2;
-    const char *g = cfg_get("AOC_MIRROR_GAP");
+    const char *g = cfg_get("ACR_MIRROR_GAP");
     mirror_gap = g && *g ? atoi(g) : 2;
     if (mirror_gap < 0) mirror_gap = 0;
     // Submissions a region stays unwritten before it is frozen. 60 rather than 300: in a fight 100 of the 257 MiB
     // queried a frame lay in regions idle for 30-299 submissions, and a thaw by a write costs about 60 us.
-    const char *fi = cfg_get("AOC_FREEZE_IDLE");
+    const char *fi = cfg_get("ACR_FREEZE_IDLE");
     freeze_idle = fi && *fi ? atoi(fi) : 60;
     if (freeze_idle < 0) freeze_idle = 0;
-    const char *fs = cfg_get("AOC_FREEZE_SHADOW");
+    const char *fs = cfg_get("ACR_FREEZE_SHADOW");
     freeze_shadow = !(fs && *fs == '0');
-    const char *sh = cfg_get("AOC_SHADOW");
+    const char *sh = cfg_get("ACR_SHADOW");
 #ifdef _WIN32
     shadow_on = sh && *sh ? strcmp(sh, "0") != 0 : plat_is_wine();
 #else
     shadow_on = !sh || !*sh || strcmp(sh, "0");
 #endif
     if (shadow_on) rt_log("mem: shadow storage: CPU-visible pools are host-visible copies of guest memory, not imports%s",
-                          sh && *sh ? " (AOC_SHADOW)" : "");
+                          sh && *sh ? " (ACR_SHADOW)" : "");
     rt_log("mem: mode %s (%s): %s", mode == 2 ? "verify" : mode ? "mirror" : "import", why,
            mode ? "pools used as buffers get a device-local mirror" : "every CPU-visible pool is imported host memory");
 }
@@ -1497,12 +1497,12 @@ static void freeze_pass(void) {
 // stores into, and the game's CPU writes into such buffers while a submission that binds them is in flight (legal on
 // the Switch, whose GPU stores only the bytes it writes): the whole-range copy put the mirror's older bytes over the
 // CPU's new ones, and the next sync carried them back into the mirror. In the first battle that was one-frame streaks
-// from the GPU-driven effects (indirect quads with a vertex thrown far; none with AOC_MEMORY=import, no mirror).
+// from the GPU-driven effects (indirect quads with a vertex thrown far; none with ACR_MEMORY=import, no mirror).
 // Now a written range gets a pre-image: a copy of its mirror bytes, taken in the prologue of the part that first writes
 // it (after that part's sync copies, so before any write of the submission into it), into a ring of device memory. At
 // the end of the submission shaders/wb_merge.comp stores into guest memory only the words that differ from the
 // pre-image. Ranges are widened to 16 bytes; a word the GPU changed is stored whole. A range the ring has no room for
-// or a binding cannot hold is copied whole as before; AOC_MIRROR_WB=whole copies every range whole.
+// or a binding cannot hold is copied whole as before; ACR_MIRROR_WB=whole copies every range whole.
 #define PRE_RING (64ull << 20)
 #define PRE_FIFO 512
 typedef struct { PoolRec *r; uint64_t off, size, pre; } PreRange;   // pre: offset in the ring, UINT64_MAX: none
@@ -1526,9 +1526,9 @@ static struct {
 
 static int wb_init(VkCtx *c) {
     W.tried = 1;
-    const char *e = cfg_get("AOC_MIRROR_WB");
+    const char *e = cfg_get("ACR_MIRROR_WB");
     if (e && !strcmp(e, "whole")) {
-        rt_log("mem: mirror write-back copies whole ranges (AOC_MIRROR_WB=whole)");
+        rt_log("mem: mirror write-back copies whole ranges (ACR_MIRROR_WB=whole)");
         return 0;
     }
     W.align = c->props.limits.minStorageBufferOffsetAlignment ? c->props.limits.minStorageBufferOffsetAlignment : 16;
@@ -1875,7 +1875,7 @@ int vk_mem_mirror_end(VkCommandBuffer cb, uint64_t fence) {
     return rec;
 }
 
-// One summary line: with AOC_TRACE=perf every 60 frames, else at frames 600 and 1800.
+// One summary line: with ACR_TRACE=perf every 60 frames, else at frames 600 and 1800.
 static void mirror_log(uint64_t frame) {
     static uint64_t last, ww_last;
     plat_mutex_lock(&gen_lock);
@@ -1921,7 +1921,7 @@ static void mirror_log(uint64_t frame) {
            qpc_ms(a.presnap_t) / f, qpc_ms(a.sync_t) / f, ver);
 }
 
-// With AOC_TRACE=perf every 600 frames: what holds device-local memory, to see what grows over a long session.
+// With ACR_TRACE=perf every 600 frames: what holds device-local memory, to see what grows over a long session.
 // VMA's blocks and allocations on the device-local heaps, texture entries with their own memory, the VRAM mirrors and
 // the objects waiting for their last submission to retire.
 static void vram_log(uint64_t frame) {

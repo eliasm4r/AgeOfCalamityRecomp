@@ -6,8 +6,8 @@
 // game itself renders at the size asked for: on the Steam Deck 1280x720, shown texel for texel on the 1280x800 screen
 // in place of a 1.5x reduction of a 1080p frame, at less than half the pixels.
 //
-// Settings, read at start: AOC_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
-// texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), AOC_RENDER_SCALE = the
+// Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
+// texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), ACR_RENDER_SCALE = the
 // scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 100.
 // The game's own final passes scale the scene to the output; the present scales the output to the window.
 //
@@ -30,7 +30,7 @@
 #define SCENE_W 1440
 #define SCENE_H 810
 #define DTA_KIB 113664u      // DynamicTextureAllocatorMem, shipped
-#define SCENE_MAX 4096       // per side, as MacNativeGames' AOC_RENDER_RES
+#define SCENE_MAX 4096       // per side, as MacNativeGames' ACR_RENDER_RES
 #define SHADOW_BASE 960      // the sun shadow map's base size (its cascades: a D16 array of 4 layers)
 
 static struct {
@@ -38,8 +38,8 @@ static struct {
     unsigned ow, oh, sw, sh;   // output and scene
     int scene_set;             // the scene differs from the game's 5/6 of the output
     int on;                    // res_init switched the patch sets on
-    unsigned shadow;           // fixed sun shadow map size (AOC_SHADOW_RES), 0: the game's own
-    double dlss_k;             // AOC_DLSS quality/balanced/performance: the scene's share of the output, else 0
+    unsigned shadow;           // fixed sun shadow map size (ACR_SHADOW_RES), 0: the game's own
+    double dlss_k;             // ACR_DLSS quality/balanced/performance: the scene's share of the output, else 0
 } R;
 
 static void decide(void) {
@@ -47,18 +47,18 @@ static void decide(void) {
     R.decided = 1;
     R.ow = BASE_W;
     R.oh = BASE_H;
-    const char *o = cfg_value("AOC_OUTPUT_RES");
+    const char *o = cfg_value("ACR_OUTPUT_RES");
     unsigned w = 0, h = 0;
     char tail;
     if (sscanf(o, "%ux%u%c", &w, &h, &tail) == 2 && w >= 960 && h >= 540 && w <= BASE_W && h <= BASE_H) {
         R.ow = w & ~1u;
         R.oh = h & ~1u;
     } else {
-        rt_log("resolution: AOC_OUTPUT_RES=%s is not <width>x<height> in 960x540..1920x1080; 1920x1080", o);
+        rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..1920x1080; 1920x1080", o);
     }
-    const char *s = cfg_value("AOC_RENDER_SCALE");
+    const char *s = cfg_value("ACR_RENDER_SCALE");
     double k = (double)SCENE_W / BASE_W;
-    const char *m = cfg_value("AOC_DLSS");   // a DLSS mode other than dlaa sets the scene size
+    const char *m = cfg_value("ACR_DLSS");   // a DLSS mode other than dlaa sets the scene size
     static const struct { const char *name; double k; } dlss[] = {
         {"quality", 2.0 / 3.0}, {"balanced", 0.58}, {"performance", 0.5}};
     for (int i = 0; i < 3; i++)
@@ -74,7 +74,7 @@ static void decide(void) {
             k = pct / 100.0;
             R.scene_set = 1;
         } else {
-            rt_log("resolution: AOC_RENDER_SCALE=%s is not game or a percentage 25..100; game", s);
+            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..100; game", s);
         }
     }
     double sw = R.ow * k, sh = R.oh * k;
@@ -90,11 +90,11 @@ static void decide(void) {
         R.sh = ((unsigned)(R.oh * 0.85 + 0.5) + 1) & ~1u;
         rt_log("resolution: a scene as large as an output below 1920x1080 is not supported; %ux%u (85 %%)", R.sw, R.sh);
     }
-    const char *sr = cfg_value("AOC_SHADOW_RES");
+    const char *sr = cfg_value("ACR_SHADOW_RES");
     if (strcmp(sr, "game")) {
         unsigned n = (unsigned)atoi(sr);
         if (n >= 256 && n <= 4096 && !(n & 7)) R.shadow = n;
-        else rt_log("resolution: AOC_SHADOW_RES=%s is not game or a size 256..4096 (a multiple of 8); game", sr);
+        else rt_log("resolution: ACR_SHADOW_RES=%s is not game or a size 256..4096 (a multiple of 8); game", sr);
     }
 }
 
@@ -124,7 +124,7 @@ uint64_t res_heap_extra_bytes(void) { return ((res_heap_extra_kib() << 10) + 0x1
 // A fixed size (the shadow set, recomp/patches-v121.txt) keeps them still and sharper. Page +92.
 static void shadow_init(uint8_t *page) {
     if (!R.shadow) {
-        rt_log("resolution: sun shadow map sized by the game (AOC_SHADOW_RES=game)");
+        rt_log("resolution: sun shadow map sized by the game (ACR_SHADOW_RES=game)");
         return;
     }
     int set = rt_patch_set("shadow");
@@ -135,18 +135,18 @@ static void shadow_init(uint8_t *page) {
     int32_t n = (int32_t)R.shadow;
     memcpy(page + 92, &n, 4);
     rt_patch_switch(set, 1);
-    rt_log("resolution: sun shadow map %ux%u (AOC_SHADOW_RES)", R.shadow, R.shadow);
+    rt_log("resolution: sun shadow map %ux%u (ACR_SHADOW_RES)", R.shadow, R.shadow);
 }
 
 // ---- start: the patch page and the sets
 static uint64_t pack(unsigned w, unsigned h) { return (uint64_t)h << 32 | w; }
 
-// AOC_SHADOW_RANGE (percent, 50 to 400; 100 = the game's): the sun's shadow cascades end at 20, 40, 80 and 160 m.
+// ACR_SHADOW_RANGE (percent, 50 to 400; 100 = the game's): the sun's shadow cascades end at 20, 40, 80 and 160 m.
 // Other values multiply those distances through the cascade patch set (recomp/patches-v143.txt), so the sharp first
 // cascade reaches further and the visible steps between cascades move away from the player, at the cost of shadow
-// texels per metre (AOC_SHADOW_SCALE pays that back).
+// texels per metre (ACR_SHADOW_SCALE pays that back).
 static void res_shadow_range(void) {
-    int pct = cfg_int("AOC_SHADOW_RANGE"), set = rt_patch_set("cascade");
+    int pct = cfg_int("ACR_SHADOW_RANGE"), set = rt_patch_set("cascade");
     if (pct == 100) return;
     if (set < 0) {
         rt_log("resolution: the generated C has no cascade patch set; shadow_range stays 100");
@@ -231,7 +231,7 @@ int res_wants_wide_overlay(const unsigned out[2]) {
     return !res_is_16x9(out[0], out[1]) && rt_patch_set("aspect") >= 0;
 }
 
-// Field of view (AOC_FOV, percent of the game's own, 70..140, live): the camera's vertical view angle times the
+// Field of view (ACR_FOV, percent of the game's own, 70..140, live): the camera's vertical view angle times the
 // factor on page +60 (recomp/patches-v143.txt, set fov). The horizontal angle follows through the aspect ratio. 100
 // switches the set off, so the camera code is the game's own. Runs on a settings change (gfx_present.c
 // window_settings_live), the first time at the first present.
@@ -240,12 +240,12 @@ int res_wants_wide_overlay(const unsigned out[2]) {
 void res_fov_live(void) {
     static int set = -2, shown = 100;
     if (set == -2) set = rt_patch_set("fov");
-    int pct = cfg_int("AOC_FOV");
+    int pct = cfg_int("ACR_FOV");
     pct = pct < FOV_MIN ? FOV_MIN : pct > FOV_MAX ? FOV_MAX : pct;
     if (pct == shown) return;
     shown = pct;
     if (set < 0) {
-        rt_log("resolution: this game version has no field-of-view patch; AOC_FOV=%d does nothing", pct);
+        rt_log("resolution: this game version has no field-of-view patch; ACR_FOV=%d does nothing", pct);
         return;
     }
     float k = pct / 100.0f;

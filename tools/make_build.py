@@ -1,7 +1,7 @@
 """Builds the game from the player's own dump, start to finish, for the setup (setup/setup.py) or by hand.
 
 Runs on Windows (the release's embedded Python, or MSYS2's) and on Linux (the system python3: this script needs only
-the standard library; the tools it calls run in ~/.venvs/aoc, which the tools step makes).
+the standard library; the tools it calls run in ~/.venvs/AgeOfCalamityRecomp, which the tools step makes).
 
 Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is log; the last line is "@@DONE ok|fail";
 "@@NEED wsl" asks the setup to offer installing WSL):
@@ -19,11 +19,11 @@ Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is 
   romfs     build/v130/romfs.bin, base + update merged (tools/merge_romfs.py with hactool), once
   dlc       build/v130/dlc-<title id>.bin, the RomFS of each DLC in the dump (tools/extract_dlc.py), once; the game
             folders get them next to romfs.bin, and a dump without DLCs builds a game without them
-  deck      dist/aoc-deck: generate the C, compile and assemble (tools/build.py gen guest dist), in WSL or natively
+  deck      dist/steamdeck: generate the C, compile and assemble (tools/build.py gen guest dist), in WSL or natively
   wingen    the generated C for Windows: copied from WSL when the Deck step made it, else generated here
-  winxlate  aoc_xlate.exe, the shader translator for Windows (prebuilt/xlate/win-x64 from the release package)
-  winbuild  aoc.exe in MSYS2 UCRT64 (tools/build.py guest host)
-  windist   dist/aoc-windows: aoc.exe, its DLLs, the translator, exefs/, romfs/ (a hard link), romfs-index.bin
+  winxlate  xlate.exe, the shader translator for Windows (prebuilt/xlate/win-x64 from the release package)
+  winbuild  AgeOfCalamityRecomp.exe in MSYS2 UCRT64 (tools/build.py guest host)
+  windist   dist/windows: AgeOfCalamityRecomp.exe, its DLLs, the translator, exefs/, romfs/ (a hard link), romfs-index.bin
   send      the Deck folder's changed files to the Steam Deck over SSH (tools/deck/deploy.sh --no-build)
 
 Nothing here reads or prints key values: the key file's path goes to the tools that need it.
@@ -46,7 +46,7 @@ VERSION = (ROOT / "VERSION").read_text().strip() if (ROOT / "VERSION").is_file()
 BASE_ID, UPDATE_ID = "01002B00111A2000", "01002B00111A2800"
 WIN = os.name == "nt"
 DISTRO = "AgeOfCalamityRecomp"   # the private WSL distro the tools step makes
-VENV_PY = Path.home() / ".venvs" / "aoc" / "bin" / "python"
+VENV_PY = Path.home() / ".venvs" / "AgeOfCalamityRecomp" / "bin" / "python"
 # MSYS2 base, pinned (https://github.com/msys2/msys2-installer/releases/tag/2026-09-27); unpacked only when the PC has
 # no MSYS2. The packages come from MSYS2's own mirrors.
 MSYS2_SFX = ("https://github.com/msys2/msys2-installer/releases/download/2026-09-27/msys2-base-x86_64-20260927.sfx.exe",
@@ -106,7 +106,7 @@ TEXT = {
     "romfs_size": "the merged RomFS has {0} bytes, the 1.3.0 one has {1}: check that the base game and the update are "
                    "the right ones (base v0 and update 1.3.0)",
     "steamos": "SteamOS does not let the build tools be installed (the system is read-only). Build on a Windows or "
-                "Linux PC and copy the dist/aoc-deck folder here (README, Steam Deck section)",
+                "Linux PC and copy the dist/steamdeck folder here (README, Steam Deck section)",
 }
 
 
@@ -176,7 +176,7 @@ def wsl(args, script: str, root: bool = False) -> None:
 
 
 def msys_root(args) -> Path:
-    return Path(args.msys2 or os.environ.get("AOC_MSYS2", "") or "C:/msys64")
+    return Path(args.msys2 or os.environ.get("ACR_MSYS2", "") or "C:/msys64")
 
 
 def msys(args, script: str) -> None:
@@ -426,10 +426,10 @@ def link_dlc(dist_romfs: Path) -> None:
 def s_deck(args) -> str:
     extra = " --with-romfs" if args.with_romfs else ""
     if WIN:
-        wsl(args, f"cd {sh_quote(wsl_path(ROOT))} && . ~/.venvs/aoc/bin/activate && "
-                  f"python3 -u tools/build.py --work ~/aoc-build gen guest dist{extra}", root=distro(args) == DISTRO)
+        wsl(args, f"cd {sh_quote(wsl_path(ROOT))} && . ~/.venvs/AgeOfCalamityRecomp/bin/activate && "
+                  f"python3 -u tools/build.py --work ~/AgeOfCalamityRecomp-build gen guest dist{extra}", root=distro(args) == DISTRO)
     else:
-        run([tool_python(), "-u", ROOT / "tools/build.py", "--work", Path.home() / "aoc-build", "gen", "guest", "dist"]
+        run([tool_python(), "-u", ROOT / "tools/build.py", "--work", Path.home() / "AgeOfCalamityRecomp-build", "gen", "guest", "dist"]
             + (["--with-romfs"] if args.with_romfs else []), cwd=str(ROOT))
     return "ok"
 
@@ -441,7 +441,7 @@ def s_wingen(args) -> str:
         return "ok"
     # the Deck step generated it in WSL: copy only the files that changed
     w = wsl_path(gen)
-    wsl(args, "cd ~/aoc-build/generated && n=0 && while IFS= read -r -d '' f; do d=" + sh_quote(w) + "\"/$f\"; "
+    wsl(args, "cd ~/AgeOfCalamityRecomp-build/generated && n=0 && while IFS= read -r -d '' f; do d=" + sh_quote(w) + "\"/$f\"; "
               "if ! cmp -s \"$f\" \"$d\"; then mkdir -p \"$(dirname \"$d\")\"; cp \"$f\" \"$d\"; n=$((n+1)); fi; "
               "done < <(find . -type f -print0) && echo \"$n generated files copied\"", root=distro(args) == DISTRO)
     return "ok"
@@ -451,8 +451,8 @@ def s_winxlate(args) -> str:
     host = args.win_work / "host"
     host.mkdir(parents=True, exist_ok=True)
     pre = ROOT / "prebuilt/xlate/win-x64"
-    if (pre / "aoc_xlate.exe").is_file():
-        for f in ("aoc_xlate.exe", "aoc_xlate.id"):
+    if (pre / "xlate.exe").is_file():
+        for f in ("xlate.exe", "xlate.id"):
             if not (host / f).is_file() or (host / f).read_bytes() != (pre / f).read_bytes():
                 shutil.copy2(pre / f, host / f)
         return "ok"
@@ -460,14 +460,14 @@ def s_winxlate(args) -> str:
     if not args.deck and not wsl_ready():
         raise StepFailed(tr("no_xlate"))
     w = wsl_path(host)
-    wsl(args, f"cd {sh_quote(wsl_path(ROOT))} && . ~/.venvs/aoc/bin/activate && "
-              f"( [ -x ~/aoc-build/xlate/aoc_xlate ] || python3 tools/build_xlate.py --out ~/aoc-build/xlate "
-              f"--sysroot ~/aoc-build/toolchain/sniper ) && "
-              f"if [ -f '{w}/aoc_xlate.exe' ] && cmp -s ~/aoc-build/xlate/aoc_xlate.id '{w}/aoc_xlate.id'; then "
-              f"echo 'Windows translator up to date'; else B=~/aoc-build/xlate && rm -rf /tmp/aoc-xlwin && "
-              f"dotnet publish \"$B/xlate/aoc_xlate.csproj\" -c Release -r win-x64 --self-contained -p:PublishAot=false "
-              f"-p:PublishSingleFile=true -p:InvariantGlobalization=true -p:RyuSrc=\"$B/ryujinx\" -o /tmp/aoc-xlwin "
-              f"| tail -2 && cp /tmp/aoc-xlwin/aoc_xlate.exe '{w}/' && cp \"$B/aoc_xlate.id\" '{w}/'; fi")
+    wsl(args, f"cd {sh_quote(wsl_path(ROOT))} && . ~/.venvs/AgeOfCalamityRecomp/bin/activate && "
+              f"( [ -x ~/AgeOfCalamityRecomp-build/xlate/xlate ] || python3 tools/build_xlate.py --out ~/AgeOfCalamityRecomp-build/xlate "
+              f"--sysroot ~/AgeOfCalamityRecomp-build/toolchain/sniper ) && "
+              f"if [ -f '{w}/xlate.exe' ] && cmp -s ~/AgeOfCalamityRecomp-build/xlate/xlate.id '{w}/xlate.id'; then "
+              f"echo 'Windows translator up to date'; else B=~/AgeOfCalamityRecomp-build/xlate && rm -rf /tmp/AgeOfCalamityRecomp-xlwin && "
+              f"dotnet publish \"$B/xlate/xlate.csproj\" -c Release -r win-x64 --self-contained -p:PublishAot=false "
+              f"-p:PublishSingleFile=true -p:InvariantGlobalization=true -p:RyuSrc=\"$B/ryujinx\" -o /tmp/AgeOfCalamityRecomp-xlwin "
+              f"| tail -2 && cp /tmp/AgeOfCalamityRecomp-xlwin/xlate.exe '{w}/' && cp \"$B/xlate.id\" '{w}/'; fi")
     return "ok"
 
 
@@ -477,7 +477,7 @@ def s_winbuild(args) -> str:
 
 
 def s_windist(args) -> str:
-    src, dist = args.win_work / "host", ROOT / "dist/aoc-windows"
+    src, dist = args.win_work / "host", ROOT / "dist/windows"
     (dist / "exefs").mkdir(parents=True, exist_ok=True)
     (dist / "romfs").mkdir(exist_ok=True)
 
@@ -488,12 +488,12 @@ def s_windist(args) -> str:
             return
         shutil.copy2(a, b)
 
-    for f in ("aoc.exe", "aoc_xlate.exe", "aoc_xlate.id", "romfs-index.bin"):
+    for f in ("AgeOfCalamityRecomp.exe", "xlate.exe", "xlate.id", "romfs-index.bin"):
         copy(src / f, dist / f)
-    # the DLLs aoc.exe imports from MSYS2 (SDL3, libopus and what they pull in)
+    # the DLLs AgeOfCalamityRecomp.exe imports from MSYS2 (SDL3, libopus and what they pull in)
     # from "/": ldd resolves like the loader, current folder included, and a shell that keeps the caller's folder
     # (CHERE_INVOKING) would find the launcher's own SDL3.dll there instead of MSYS2's and leave the game without one
-    p = capture([msys_root(args) / "usr/bin/bash.exe", "-lc", f"cd / && ldd {sh_quote(msys_path(dist / 'aoc.exe'))}"],
+    p = capture([msys_root(args) / "usr/bin/bash.exe", "-lc", f"cd / && ldd {sh_quote(msys_path(dist / 'AgeOfCalamityRecomp.exe'))}"],
                 env=dict(os.environ, MSYSTEM="UCRT64"))
     lines = p.stdout.decode("utf-8", "replace").splitlines()
     dlls = [l.split("=>")[1].split("(")[0].strip() for l in lines if "/ucrt64/" in l]
@@ -516,7 +516,7 @@ def s_windist(args) -> str:
     link_dlc(dist / "romfs")
     # monitor mode (captures of hits, F8 marks, frame dumps on a dark scene; runtime/diag.c), always the current one
     shutil.copy2(ROOT / "tools/windows/monitor.bat", dist / "monitor.bat")
-    ini = dist / "aoc.ini"
+    ini = dist / "settings.ini"
     if not ini.exists():
         ini.write_text("# Age of Calamity Recomp settings. The menu (F1) writes here.\n", encoding="utf-8")
     out(tr("folder_ok", dist))
@@ -529,7 +529,7 @@ def s_send(args) -> str:
         raise StepFailed(tr("no_bash"))
     env = dict(os.environ)
     if args.deck_host:
-        env["AOC_DECK"] = args.deck_host
+        env["ACR_DECK"] = args.deck_host
     run([bash, ROOT / "tools/deck/deploy.sh", "--no-build"], cwd=str(ROOT), env=env)
     return "ok"
 
@@ -539,13 +539,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files", help="folder with the NSPs and prod.keys")
     ap.add_argument("--keys", type=Path, help="key file (default: prod.keys in the game folder)")
-    ap.add_argument("--deck", action="store_true", help="Steam Deck / Linux folder (dist/aoc-deck)")
-    ap.add_argument("--windows", action="store_true", help="Windows version (dist/aoc-windows)")
+    ap.add_argument("--deck", action="store_true", help="Steam Deck / Linux folder (dist/steamdeck)")
+    ap.add_argument("--windows", action="store_true", help="Windows version (dist/windows)")
     ap.add_argument("--with-romfs", action="store_true", help="Deck: also put romfs.bin in the folder (first install)")
     ap.add_argument("--send", action="store_true", help="send to the Deck over SSH at the end")
     ap.add_argument("--deck-host", default="", help="user@address of the Deck (required for send)")
     ap.add_argument("--win-work", type=Path, default=None, help="work folder of the Windows build")
-    ap.add_argument("--wsl-distro", default=os.environ.get("AOC_WSL_DISTRO", ""),
+    ap.add_argument("--wsl-distro", default=os.environ.get("ACR_WSL_DISTRO", ""),
                     help=f"WSL distro (default: {DISTRO}, made by the tools step)")
     ap.add_argument("--msys2", default="", help="MSYS2 folder (default: C:/msys64, installed there if missing)")
     ap.add_argument("--lang", default="en", help=argparse.SUPPRESS)   # kept so older launchers still work; English only
@@ -556,7 +556,7 @@ def main() -> int:
     args.game_dir = args.game_dir.expanduser()
     args.keys = (args.keys or args.game_dir / "prod.keys").expanduser()
     if args.win_work is None:
-        args.win_work = Path("C:/aoc-win") if Path("C:/aoc-win/host").is_dir() else ROOT / "build/win"
+        args.win_work = Path("C:/AgeOfCalamityRecomp-win") if Path("C:/AgeOfCalamityRecomp-win/host").is_dir() else ROOT / "build/win"
     if args.prepare:   # the build for this PC: Windows folder on Windows, Deck/Linux folder on Linux
         args.windows, args.deck = WIN, not WIN
     if not (args.deck or args.windows):

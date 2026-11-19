@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nx  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-AOC_BASE = 0x01002B00111A3000   # application id + 0x1000: the DLC of index n has the title id AOC_BASE + n
+ACR_BASE = 0x01002B00111A3000   # application id + 0x1000: the DLC of index n has the title id ACR_BASE + n
 CHUNK = 8 << 20
 
 
@@ -117,7 +117,7 @@ def main(argv=None) -> int:
             tickets = nx.common_tickets(f, entries)
             for nca in nx.nca_inventory(f, entries, keys):
                 tid = int(nca.title_id, 16)
-                if nca.content_type != 5 or not 0 < tid - AOC_BASE < 0x1000:
+                if nca.content_type != 5 or not 0 < tid - ACR_BASE < 0x1000:
                     continue
                 key = nx.nca_ctr_key(nca, keys, tickets)
                 for i in nca.sections():
@@ -128,7 +128,7 @@ def main(argv=None) -> int:
                     prev = old.get(nca.title_id)
                     if (not args.force and prev and dst.is_file() and dst.stat().st_size == prev["size"]
                             and dst.stat().st_mtime_ns == prev["mtime_ns"]):
-                        print(f"DLC {tid - AOC_BASE} ({nca.title_id}): already extracted, {prev['size'] / 2**20:.1f} MiB")
+                        print(f"DLC {tid - ACR_BASE} ({nca.title_id}): already extracted, {prev['size'] / 2**20:.1f} MiB")
                         found.append(prev)
                         continue
                     t0 = time.monotonic()
@@ -136,10 +136,10 @@ def main(argv=None) -> int:
                     with dst.open("rb") as image:
                         files = nx.romfs_image_files(image)
                     nx.require(all(o + s <= size for _p, o, s in files), "RomFS file outside the image")
-                    found.append({"title_id": nca.title_id, "index": tid - AOC_BASE, "file": dst.name, "size": size,
+                    found.append({"title_id": nca.title_id, "index": tid - ACR_BASE, "file": dst.name, "size": size,
                                   "mtime_ns": dst.stat().st_mtime_ns, "sha256": sha, "files": len(files),
                                   "source": path.name})
-                    print(f"DLC {tid - AOC_BASE} ({nca.title_id}): {len(files)} files, {size / 2**20:.1f} MiB, "
+                    print(f"DLC {tid - ACR_BASE} ({nca.title_id}): {len(files)} files, {size / 2**20:.1f} MiB, "
                           f"IVFC checked, {time.monotonic() - t0:.1f} s  → {dst.name}")
     found.sort(key=lambda e: e["index"])
     manifest_path.write_text(json.dumps({"dlc": found}, indent=1) + "\n", encoding="utf-8")

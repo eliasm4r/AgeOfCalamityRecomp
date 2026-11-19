@@ -1,7 +1,7 @@
 // Shader service client: turns an NVN program (control section, code, c1 constants and the
-// translator's answers) into SPIR-V plus reflection through `aoc_xlate.exe --serve` children, started lazily with
-// pipes and kept for the life of the process (a pool: AOC_XLATE_PROCS at run time, more for the boot prewarm).
-// Results are cached in memory and on disk (shader-cache/<key>.spv and <key>.res.json next to aoc), so a shader
+// translator's answers) into SPIR-V plus reflection through `xlate.exe --serve` children, started lazily with
+// pipes and kept for the life of the process (a pool: ACR_XLATE_PROCS at run time, more for the boot prewarm).
+// Results are cached in memory and on disk (shader-cache/<key>.spv and <key>.res.json next to AgeOfCalamityRecomp), so a shader
 // is translated once per machine and translator.
 //
 // Keys. The code hash is sha256 over stage (u32), the 0x880-byte control section, code_size (u64), the code, the c1
@@ -13,8 +13,8 @@
 // key is sha256 over "TKSK", KEY_VERSION, the translator identity and the input id. A code hash without a known mask is
 // translated under a provisional key ("TKSP", full answers); its files are renamed to the cache key and the mask stored.
 //
-// Translator identity: build/xlate/aoc_xlate.id, sha256 hex that tools/build_xlate.py writes over the sources it
-// builds from (Program.cs, the csproj, the patches, the vendor tree); without it the sha256 of the exe. AOC_XLATE_ID
+// Translator identity: build/xlate/xlate.id, sha256 hex that tools/build_xlate.py writes over the sources it
+// builds from (Program.cs, the csproj, the patches, the vendor tree); without it the sha256 of the exe. ACR_XLATE_ID
 // (64 hex digits) overrides it. A translator change therefore changes every cache key without a hand-made KEY_VERSION
 // bump; KEY_VERSION is for changes on this side (key layout, how the output is used).
 //
@@ -31,7 +31,7 @@
 // Reflection: every shader that enters the cache has its .res.json parsed into GfxShaderRes arrays and its SPIR-V
 // scanned for interface Locations and the workgroup size (gfx.h accessors at the end of the file).
 //
-// Provenance: the c2 handle ranges of handle_slot are those of MacNativeGames' aoc_xlate Service.cs (MIT).
+// Provenance: the c2 handle ranges of handle_slot are those of MacNativeGames' xlate Service.cs (MIT).
 // The code layout the translator sees (graphics: code[0x30..], compute: code[0..]; c1 = code[c1..length]
 // with c1 and length at control+0x700) follows tools/shader_census.py, itself MacNativeGames' totk shader tooling (MIT).
 #include <ctype.h>
@@ -254,12 +254,12 @@ static int hex32(const char *h, uint8_t out[32]) {        // 64 hex digits, then
     return 1;
 }
 
-// AOC_XLATE_ID (64 hex digits, or any other text, which is hashed), else <translator>.id next to the exe
+// ACR_XLATE_ID (64 hex digits, or any other text, which is hashed), else <translator>.id next to the exe
 // (tools/build_xlate.py), else the sha256 of the exe.
 static void xlate_identity(void) {
     char text[256] = "";
-    const char *how = "AOC_XLATE_ID";
-    const char *id_env = cfg_get("AOC_XLATE_ID");
+    const char *how = "ACR_XLATE_ID";
+    const char *id_env = cfg_get("ACR_XLATE_ID");
     if (id_env && *id_env && strlen(id_env) < sizeof text) {
         strcpy(text, id_env);
         if (!hex32(text, xlate_id)) rt_sha256(text, strlen(text), xlate_id);
@@ -271,10 +271,10 @@ static void xlate_identity(void) {
         strcat(p, ".id");
         uint64_t size = 0;
         char *f = (char *)read_file(p, &size);
-        how = "aoc_xlate.id";
+        how = "xlate.id";
         if (!f || !hex32(f, xlate_id)) {
             uint8_t *exe = read_file(xlate_exe, &size);
-            how = exe ? "sha256 of the exe; tools/build_xlate.py writes aoc_xlate.id" : "none: no translator";
+            how = exe ? "sha256 of the exe; tools/build_xlate.py writes xlate.id" : "none: no translator";
             if (exe) rt_sha256(exe, (size_t)size, xlate_id);
             free(exe);
         }
@@ -284,8 +284,8 @@ static void xlate_identity(void) {
            xlate_id[3], xlate_id[4], xlate_id[5], xlate_id[6], xlate_id[7], how);
 }
 
-// The repository root is the nearest parent of aoc that holds build/xlate/aoc_xlate.exe. The shader cache lives
-// next to aoc, so every build dir has its own (as the pipeline cache, vk_pipeline.c cache_path_init).
+// The repository root is the nearest parent of AgeOfCalamityRecomp that holds build/xlate/xlate.exe. The shader cache lives
+// next to AgeOfCalamityRecomp, so every build dir has its own (as the pipeline cache, vk_pipeline.c cache_path_init).
 static void use_preload_start(void);
 
 static void init_paths(void *param) {
@@ -297,19 +297,19 @@ static void init_paths(void *param) {
         for (char *cut = plat_last_sep(exe); cut; cut = plat_last_sep(exe)) {
             *cut = 0;
             char probe[PATH_CAP + 32];
-            snprintf(probe, sizeof probe, "%s/build/xlate/aoc_xlate" PLAT_EXE_SUFFIX, exe);
+            snprintf(probe, sizeof probe, "%s/build/xlate/xlate" PLAT_EXE_SUFFIX, exe);
             if (file_exists(probe)) {
                 strcpy(root, exe);
                 break;
             }
         }
     }
-    const char *xlate_cfg = cfg_get("AOC_XLATE"), *cache_cfg = cfg_get("AOC_SHADER_CACHE");
-    char beside[PATH_CAP + 32];   // a packaged folder (tools/package_build.py) keeps the translator next to aoc
-    if (exe_dir[0]) snprintf(beside, sizeof beside, "%s/aoc_xlate" PLAT_EXE_SUFFIX, exe_dir);
+    const char *xlate_cfg = cfg_get("ACR_XLATE"), *cache_cfg = cfg_get("ACR_SHADER_CACHE");
+    char beside[PATH_CAP + 32];   // a packaged folder (tools/package_build.py) keeps the translator next to AgeOfCalamityRecomp
+    if (exe_dir[0]) snprintf(beside, sizeof beside, "%s/xlate" PLAT_EXE_SUFFIX, exe_dir);
     if (xlate_cfg && *xlate_cfg && strlen(xlate_cfg) < sizeof xlate_exe) strcpy(xlate_exe, xlate_cfg);
     else if (exe_dir[0] && file_exists(beside)) strcpy(xlate_exe, beside);
-    else if (root[0]) snprintf(xlate_exe, sizeof xlate_exe, "%s/build/xlate/aoc_xlate" PLAT_EXE_SUFFIX, root);
+    else if (root[0]) snprintf(xlate_exe, sizeof xlate_exe, "%s/build/xlate/xlate" PLAT_EXE_SUFFIX, root);
     if (cache_cfg && *cache_cfg && strlen(cache_cfg) < sizeof cache_dir) strcpy(cache_dir, cache_cfg);
     else if (exe_dir[0]) snprintf(cache_dir, sizeof cache_dir, "%s/shader-cache", exe_dir);
     xlate_identity();
@@ -349,7 +349,7 @@ static void child_stop(Svc *v) {
 static int child_start(Svc *v) {
     paths();
     if (!xlate_exe[0] || !file_exists(xlate_exe)) {
-        rt_log("gfx_shader: translator not found (%s); set AOC_XLATE", xlate_exe[0] ? xlate_exe : "<none>");
+        rt_log("gfx_shader: translator not found (%s); set ACR_XLATE", xlate_exe[0] ? xlate_exe : "<none>");
         return 0;
     }
     uint32_t err = 0;
@@ -388,17 +388,17 @@ static int child_exchange_raw(Svc *v, const char *line, char *reply, size_t repl
 }
 
 static int child_exchange(Svc *v, const char *line, char *reply, size_t reply_size) {
-    uint64_t p0 = perf_begin();   // AOC_TRACE=perf: render-thread time spent translating
+    uint64_t p0 = perf_begin();   // ACR_TRACE=perf: render-thread time spent translating
     int ok = child_exchange_raw(v, line, reply, reply_size);
     perf_end(PERF_XLATE, p0);
     return ok;
 }
 
-// Children allowed at run time: AOC_XLATE_PROCS, default 2.
+// Children allowed at run time: ACR_XLATE_PROCS, default 2.
 static int svc_runtime_limit(void) {
     static volatile int32_t n;
     if (!n) {
-        const char *e = cfg_get("AOC_XLATE_PROCS");
+        const char *e = cfg_get("ACR_XLATE_PROCS");
         int v = e && *e ? atoi(e) : 2;
         plat_xchg32(&n, v < 1 ? 1 : v > MAX_SVC ? MAX_SVC : v);
     }
@@ -676,7 +676,7 @@ static int fmt_code(const char *name) {
     return 0;
 }
 
-// c2 slot of a texture or image handle (Service.cs of MNG's aoc_xlate: combined handles at 0x20, 32 slots; images at
+// c2 slot of a texture or image handle (Service.cs of MNG's xlate: combined handles at 0x20, 32 slots; images at
 // 0x120; separate textures at 0x168), -1 outside those ranges or for a handle in another constant buffer.
 static int handle_slot(int kind, int cbuf_slot, int handle, int separate) {
     if (cbuf_slot >= 0 && cbuf_slot != 2) return -1;
@@ -1441,7 +1441,7 @@ static const GfxShader *get_async_one(Req r, int stage, const uint8_t *control, 
             if (plat_thread_spawn(xlate_worker, NULL, "xlate", 0)) n++;
         }
         X.started = n ? 1 : -1;
-        if (n) rt_log("gfx_shader: graphics shaders are translated by %d background workers (AOC_XLATE_PROCS)", n);
+        if (n) rt_log("gfx_shader: graphics shaders are translated by %d background workers (ACR_XLATE_PROCS)", n);
         else rt_log("gfx_shader: cannot start the translation workers; translating synchronously");
     }
     XWait **slot = wait_slot(r.key);
@@ -1673,7 +1673,7 @@ void gfx_shader_local_size(const GfxShader *s, uint32_t local[3]) { memcpy(local
 // ---- answers met in play
 // The translated-shader key includes the answers a draw's state implies, so a translation made without play (the
 // census) does not match the keys play asks for. Every (program, answers) that a gfx_shader_get* call resolves is
-// recorded next to pipeline-keys.bin, so the first-start preparation (Task 2.6, here the AOC_TEST_PREPARE_SHADERS hook)
+// recorded next to pipeline-keys.bin, so the first-start preparation (Task 2.6, here the ACR_TEST_PREPARE_SHADERS hook)
 // translates exactly the variants play needs, from these files alone:
 //   shader-answers.bin  "ACSANS", version, record size; records: stage (u32), code hash, input id, pack_answers bytes
 //                       of the full answers, zero padding. One record per input id: answers outside the shader's use
@@ -1884,8 +1884,8 @@ void gfx_shader_record_flush(int force) {
     free(ans.p), free(prg.p);
 }
 
-// ---- preparation from record files: the answers met in play (AOC_TEST_PREPARE_SHADERS=1) or the seed that
-// tools/prepare_shaders.py writes from the MacNativeGames shader list (aoc --prepare-shaders). Both use the record
+// ---- preparation from record files: the answers met in play (ACR_TEST_PREPARE_SHADERS=1) or the seed that
+// tools/prepare_shaders.py writes from the MacNativeGames shader list (AgeOfCalamityRecomp --prepare-shaders). Both use the record
 // layouts above; a seed record has a zero input id (the use mask, hence the id, is the translator's to find) and its
 // pad byte holds the list priority (0 title, 1 warm-up, 2 rest).
 typedef struct { const uint8_t *rec; } PrgIdx;

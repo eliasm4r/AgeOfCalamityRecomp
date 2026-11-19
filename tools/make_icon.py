@@ -1,6 +1,6 @@
-"""Makes the game icon (assets/icon.ico for aoc.exe and the setup window, assets/icon.png for Linux) from the key art.
+"""Makes the game icon (assets/icon.ico for AgeOfCalamityRecomp.exe and the setup window, assets/icon.png for Linux) from the key art.
 
-  python tools/make_icon.py              # the crop in use (heroes)
+  python tools/make_icon.py              # the crop in use (link)
   python tools/make_icon.py --crop link  # another crop; --list shows them
 
 Needs Pillow (pip install pillow). The squares are in pixels of assets/key-art.jpg (1920x1080).
@@ -14,16 +14,16 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 ART = ROOT / "assets" / "key-art.jpg"
 CROPS = {
-    "heroes": ((0, 0, 1080, 1080), "all the heroes (in use)"),
+    "heroes": ((0, 0, 1080, 1080), "all the heroes"),
     "group": ((230, 170, 1050, 990), "Link, Zelda, Mipha and Daruk"),
-    "link": ((290, 360, 730, 800), "Link close up"),
+    "link": ((290, 360, 730, 800), "Link close up (in use)"),
 }
 SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--crop", default="heroes", choices=sorted(CROPS))
+    ap.add_argument("--crop", default="link", choices=sorted(CROPS))
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
     if args.list:

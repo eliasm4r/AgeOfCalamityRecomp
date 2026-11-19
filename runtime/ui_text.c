@@ -130,7 +130,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "away. Spreads the shadow map over more ground: raise Shadow resolution with it. "
                                   "Takes effect at the next start.",
     [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; nvngx_dlss.dll next to aoc): smoother edges "
+    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; nvngx_dlss.dll next to AgeOfCalamityRecomp): smoother edges "
                           "and less shimmer. The HUD is not touched. The mode below sets the resolution it works from. Takes effect "
                           "after a restart.",
     [UI_MENU_DLSS] = "DLSS mode",
@@ -224,7 +224,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PROMPTS_RESTART] = "prompts change after restart",
     [UI_MENU_PROMPTS_OFF_SHAPE] = "off at a game resolution not 16:9",
     [UI_MENU_PROMPTS_OFF_MODS] = "off: a RomFS mod replaces their files",
-    [UI_MENU_PROMPTS_OFF_PATCHES] = "off while AOC_ROMFS_PATCHES is set",
+    [UI_MENU_PROMPTS_OFF_PATCHES] = "off while ACR_ROMFS_PATCHES is set",
     [UI_MENU_RESTART] = "Restart now",
     [UI_MENU_RESTART_DESC] = "Closes the game and starts it again with the new prompts. Progress since your last save "
                              "is lost.",
@@ -382,7 +382,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_VK_VALIDATION] = "Validation layer",
     [UI_MENU_VK_VALIDATION_DESC] = "Checks every Vulkan call and slows the game down a lot.",
     [UI_MENU_VK_VALIDATION_MISSING] = "The validation layer is not installed.",
-    [UI_MENU_DLAA_MISSING] = "DLSS is not available: put nvngx_dlss.dll next to aoc.exe and restart.",
+    [UI_MENU_DLAA_MISSING] = "DLSS is not available: put nvngx_dlss.dll next to AgeOfCalamityRecomp.exe and restart.",
     [UI_MENU_STICK_SENS_MISSING] = "Not available in this game yet: use the camera sensitivity in the game's own options.",
     [UI_MENU_VK_DYN_VERTEX] = "Dynamic vertex state",
     [UI_MENU_VK_DYN_VERTEX_DESC] = "Forces dynamic vertex input on or off; the default depends on the GPU.",

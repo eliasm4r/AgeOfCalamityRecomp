@@ -4,22 +4,23 @@ Each package is the repository at HEAD (git archive: our code, the setup in setu
 PC cannot be asked to build before the setup runs:
 
   Windows  AgeOfCalamityRecomp-<v>-Windows.zip
-             AgeOfCalamityRecomp.exe           the setup: python/pythonw.exe under another name (its signature kept),
-                                               with AgeOfCalamityRecomp._pth and the Python DLLs beside it; the name
-                                               makes setup/sitecustomize.py open setup/setup.py
+             AgeOfCalamityRecomp Setup.exe     the setup: python/pythonw.exe under another name (its signature kept,
+                                               so Smart App Control lets it start; Explorer shows Python's icon), with
+                                               its ._pth and the Python DLLs beside it; the name makes
+                                               setup/sitecustomize.py open setup/setup.py
              python/                           Python 3.13 embeddable + Tcl/Tk (tcltk.msi) + cryptography, lz4, numpy
                                                (runs the setup, make_build.py, the dump extraction, the C generator)
              prebuilt/hactool/win-x64/         hactool 1.4.0 (ISC) for the RomFS merge
              prebuilt/xlate/{win,linux}-x64/   the shader translator (Ryujinx 1.3.2 + our patches, MIT), so nobody
-                                               needs .NET: win-x64 for aoc.exe, linux-x64 for the Deck build in WSL
+                                               needs .NET: win-x64 for AgeOfCalamityRecomp.exe, linux-x64 for the Deck build in WSL
   Linux    AgeOfCalamityRecomp-<v>-Linux.tar.gz
              prebuilt/hactool/linux-x64/, prebuilt/xlate/linux-x64/ (the setup is setup.sh, with the system python3)
 
-Run on Windows in MSYS2 UCRT64, from a clean commit, with the development WSL distro set up (its ~/aoc-build has the
+Run on Windows in MSYS2 UCRT64, from a clean commit, with the development WSL distro set up (its ~/AgeOfCalamityRecomp-build has the
 Linux translator, its venv has pip):
 
-  python3 tools/make_release.py [--wsl-distro archlinux] [--win-xlate C:/aoc-win/host] [--allow-dirty]
-  python tools/make_release.py --local    # only AgeOfCalamityRecomp.exe and python/ in this folder, to try the setup
+  python3 tools/make_release.py [--wsl-distro archlinux] [--win-xlate C:/AgeOfCalamityRecomp-win/host] [--allow-dirty]
+  python tools/make_release.py --local    # only AgeOfCalamityRecomp Setup.exe and python/ in this folder, to try the setup
 
 Output in build/release/; the sha256 of each package is printed and written next to it.
 """
@@ -50,8 +51,8 @@ GIT = next((g for g in ("C:/Program Files/Git/cmd/git.exe",) if Path(g).is_file(
 # Python's own search path for make_build.py and the tools it starts: with a ._pth file the embeddable Python ignores
 # the script's folder, so tools/ and recomp/ are listed (no module name is in both).
 PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\tools\n..\\recomp\nimport site\n"
-# The same for AgeOfCalamityRecomp.exe at the top of the folder, plus setup/ (its sitecustomize.py opens the setup).
-SETUP_EXE = "AgeOfCalamityRecomp"
+# The same for AgeOfCalamityRecomp Setup.exe at the top of the folder, plus setup/ (its sitecustomize.py opens the setup).
+SETUP_EXE = "AgeOfCalamityRecomp Setup"
 SETUP_PTH = "python\\python313.zip\npython\npython\\Lib\npython\\Lib\\site-packages\nsetup\ntools\nrecomp\nimport site\n"
 SETUP_DLLS = ("python313.dll", "python3.dll", "vcruntime140.dll", "vcruntime140_1.dll")
 
@@ -110,7 +111,7 @@ def tcltk(stage: Path) -> list:
 
 
 def setup_exe(python: list) -> list:
-    """AgeOfCalamityRecomp.exe and what it needs beside it: pythonw.exe renamed (Windows sees the same signature), its
+    """AgeOfCalamityRecomp Setup.exe and what it needs beside it: pythonw.exe renamed (Windows sees the same signature), its
     ._pth and the DLLs python313.dll loads."""
     by_name = {n: d for n, _, d in python}
     files = [(f"{SETUP_EXE}.exe", 0o755, by_name["python/pythonw.exe"]), (f"{SETUP_EXE}._pth", 0o644, SETUP_PTH.encode())]
@@ -162,7 +163,7 @@ def read(p: Path, mode: int = 0o644) -> tuple:
 
 
 def install_local() -> int:
-    """AgeOfCalamityRecomp.exe and python/ in this folder, as the Windows package has them, so a copy of the repository
+    """AgeOfCalamityRecomp Setup.exe and python/ in this folder, as the Windows package has them, so a copy of the repository
     starts the setup the same way (both are ignored by git)."""
     stage = OUT / "stage"
     wheels = stage / "wheels"
@@ -181,11 +182,11 @@ def install_local() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--wsl-distro", default="archlinux", help="the development WSL distro")
-    ap.add_argument("--win-xlate", type=Path, default=Path("C:/aoc-win/host"),
-                    help="folder with aoc_xlate.exe and aoc_xlate.id for Windows")
+    ap.add_argument("--win-xlate", type=Path, default=Path("C:/AgeOfCalamityRecomp-win/host"),
+                    help="folder with xlate.exe and xlate.id for Windows")
     ap.add_argument("--allow-dirty", action="store_true", help="package HEAD even with uncommitted changes")
     ap.add_argument("--local", action="store_true",
-                    help="only put AgeOfCalamityRecomp.exe and python/ into this folder (Windows, any Python with pip)")
+                    help="only put AgeOfCalamityRecomp Setup.exe and python/ into this folder (Windows, any Python with pip)")
     args = ap.parse_args()
     if args.local:
         return install_local()
@@ -211,11 +212,11 @@ def main() -> int:
     hsrc = wsl_path(ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0")
     wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && "
                          f"bash tools/build_hactool_linux.sh '{hsrc}' '{s}/hactool-linux' && "
-                         f"mkdir -p '{s}/xlate-linux' && cp ~/aoc-build/xlate/aoc_xlate ~/aoc-build/xlate/aoc_xlate.id "
-                         f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/aoc/bin/python -m pip download -q "
+                         f"mkdir -p '{s}/xlate-linux' && cp ~/AgeOfCalamityRecomp-build/xlate/xlate ~/AgeOfCalamityRecomp-build/xlate/xlate.id "
+                         f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/AgeOfCalamityRecomp/bin/python -m pip download -q "
                          f"--only-binary=:all: --platform win_amd64 --python-version 3.13 --implementation cp "
                          f"-d '{s}/wheels' {' '.join(WHEELS)}")
-    for idf in (stage / "xlate-linux/aoc_xlate.id", args.win_xlate / "aoc_xlate.id"):
+    for idf in (stage / "xlate-linux/xlate.id", args.win_xlate / "xlate.id"):
         got = idf.read_text().strip()
         if got != ident:
             sys.exit(f"ERROR: {idf} is {got[:16]}, the translator sources at HEAD give {ident[:16]}; rebuild the translator")
@@ -231,16 +232,16 @@ def main() -> int:
     win += python + setup_exe(python)
     win.append(("prebuilt/hactool/win-x64/hactool.exe", 0o755, (ROOT / "toolchain/hactool-1.4.0-win/hactool.exe").read_bytes()))
     win.append(("prebuilt/hactool/LICENSE", 0o644, lic))
-    for f in ("aoc_xlate.exe", "aoc_xlate.id"):
+    for f in ("xlate.exe", "xlate.id"):
         win.append((f"prebuilt/xlate/win-x64/{f}", 0o755, (args.win_xlate / f).read_bytes()))
-    for f in ("aoc_xlate", "aoc_xlate.id"):
+    for f in ("xlate", "xlate.id"):
         win.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
 
     # ---- Linux
     lin = list(tree)
     lin.append(("prebuilt/hactool/linux-x64/hactool", 0o755, (stage / "hactool-linux/hactool").read_bytes()))
     lin.append(("prebuilt/hactool/LICENSE", 0o644, lic))
-    for f in ("aoc_xlate", "aoc_xlate.id"):
+    for f in ("xlate", "xlate.id"):
         lin.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
 
     outs = [(OUT / f"AgeOfCalamityRecomp-{version}-Windows.zip", write_zip, win),

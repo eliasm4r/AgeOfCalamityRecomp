@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Reads aoc.log and explains the state recorder reports (runtime/diag.c).
+"""Reads game.log and explains the state recorder reports (runtime/diag.c).
 
 Usage:
-    python tools/diag_view.py                      # dist/aoc-windows/logs/aoc.log
-    python tools/diag_view.py <aoc.log> [--threads] [--rows N]
+    python tools/diag_view.py                      # dist/windows/logs/game.log
+    python tools/diag_view.py <game.log> [--threads] [--rows N]
 
-For each report (no present for AOC_HANG_SECS, a black picture for AOC_BLACK_SECS while the game presents, or F8) it
+For each report (no present for ACR_HANG_SECS, a black picture for ACR_BLACK_SECS while the game presents, or F8) it
 shows the timeline of the seconds before, the state of the main thread and of the threads holding or waiting for a
 virtual core, who owns the lock the main thread waits on, and a verdict. It also reads the "hang:" block of old logs
 (before the recorder) and, at the end, sums up what took content out of the picture (skipped draws, lists read as
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT = ROOT / "dist" / "aoc-windows" / "logs" / "aoc.log"
+DEFAULT = ROOT / "dist" / "windows" / "logs" / "game.log"
 
 RE_THREAD = re.compile(
     r"(?:hang|diag):  thread (0x[0-9a-f]+) prio (\d+)( main)?( render)? core (-?\d+)(?: mask (0x[0-9a-f]+|0))? host (\d+) "
@@ -135,7 +135,7 @@ def lock_owner(word, threads):
 
 def a64_hint(where):
     m = re.match(r"main\+0x([0-9a-f]+)", where or "")
-    return f"python C:\\aoc-win\\a64.py main 0x{max(int(m.group(1), 16) - 0x40, 0):x} 48" if m else None
+    return f"python C:\\AgeOfCalamityRecomp-win\\a64.py main 0x{max(int(m.group(1), 16) - 0x40, 0):x} 48" if m else None
 
 
 def verdict(rep):
@@ -283,7 +283,7 @@ def main():
     for t in events[:60]:
         print("  " + t)
     if not events:
-        print("  none (hits are only captured with AOC_HIT_SHOTS; see tools/windows/monitor.bat)")
+        print("  none (hits are only captured with ACR_HIT_SHOTS; see tools/windows/monitor.bat)")
     print("\n=== Picture: lost content ===")
     if image:
         for t in image[-12:]:

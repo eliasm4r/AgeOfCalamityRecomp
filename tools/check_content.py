@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # Every file the code generator emits must carry this marker; such a file can never be committed.
-GENERATED_MARKER = "AOCRECOMP-GENERATED-DO-NOT-COMMIT"
+GENERATED_MARKER = "AGEOFCALAMITYRECOMP-GENERATED-DO-NOT-COMMIT"
 
 MAX_BYTES = 2 * 1024 * 1024  # above this, only with an entry in ALLOW_LARGE
 

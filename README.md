@@ -62,15 +62,16 @@ works.
 1. Download **`AgeOfCalamityRecomp-<version>-Windows.zip`** (or **`-Linux.tar.gz`**) from the
    [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it to a folder with
    room, for example `C:\Games`.
-2. Start **`AgeOfCalamityRecomp.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
+2. Start **`AgeOfCalamityRecomp Setup.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
 3. In the setup window:
    - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
      update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
      identifies them by their contents;
    - tick **Windows (this PC)**, **Steam Deck / Linux**, or both;
    - press **Build** and let the PC work. The first time takes **1 to 2 hours**; **Show details** shows the full log.
-4. When it is done the same window shows the game's settings: pick yours and press **Play**. Start
-   `AgeOfCalamityRecomp.exe` again to play later.
+4. When it is done the same window shows the game's settings: pick yours and press **Play**. Later, start the game
+   from the **AgeOfCalamityRecomp** shortcut (Start Menu, and the desktop if you left the box ticked), or open
+   `AgeOfCalamityRecomp Setup.exe` again to change settings or rebuild.
 
 The setup downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
 the Steam Deck version), extracts the game code from your files, translates it and compiles it.
@@ -86,7 +87,7 @@ the Steam Deck version), extracts the game code from your files, translates it a
 <br>
 
 Extract the new package **over the old folder** and build again (the setup offers it by itself). Your `build` and `dist` folders stay, so only what
-changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/aoc.ini`) are never overwritten.
+changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/settings.ini`) are never overwritten.
 With **RecompLauncher**, the game is built again by itself after an update.
 </details>
 
@@ -99,10 +100,10 @@ With **RecompLauncher**, the game is built again by itself after an update.
 | The setup, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 25 GB |
 | Linux for Windows (Steam Deck version only) | WSL distro **AgeOfCalamityRecomp**, in `%LOCALAPPDATA%\AgeOfCalamityRecomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
-| Linux: build folder and Python packages | `~/aoc-build`, `~/.venvs/aoc` | about 6 GB |
+| Linux: build folder and Python packages | `~/AgeOfCalamityRecomp-build`, `~/.venvs/AgeOfCalamityRecomp` | about 6 GB |
 
 To remove everything, delete the install folder; on Windows also run `wsl --unregister AgeOfCalamityRecomp` and delete
-`C:\msys64` if the setup installed it; on Linux delete `~/aoc-build` and `~/.venvs/aoc`.
+`C:\msys64` if the setup installed it; on Linux delete `~/AgeOfCalamityRecomp-build` and `~/.venvs/AgeOfCalamityRecomp`.
 </details>
 
 ### Requirements
@@ -121,7 +122,7 @@ To remove everything, delete the install folder; on Windows also run `wsl --unre
 The Deck does not compile anything: it receives the folder built on your PC.
 
 1. The first time, tick **Include the game data** in the Platforms step so the game data (10.9 GiB) goes into the folder.
-2. Copy the whole `dist/aoc-deck` folder to the Deck (USB stick, SD card, network share or `scp`).
+2. Copy the whole `dist/steamdeck` folder to the Deck (USB stick, SD card, network share or `scp`).
 3. On the Deck, in **Desktop Mode**, open a terminal in that folder and run `sh install-shortcut.sh` once.
 4. In Steam: *Games*, *Add a Non-Steam Game*, tick **Hyrule Warriors: Age of Calamity** and add it. It is now in your
    library in **Game Mode**.
@@ -190,17 +191,17 @@ faster. The 60 fps mode needs three of the game's clocks patched together, and i
 <summary><b>DLSS / DLAA is greyed out.</b></summary>
 <br>
 
-It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `aoc.exe`. Put the file there and restart the game.
+It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `AgeOfCalamityRecomp.exe`. Put the file there and restart the game.
 </details>
 
 <details>
 <summary><b>The game crashed, froze or looks wrong. What do I send?</b></summary>
 <br>
 
-In the setup window, press **Report a problem...**: it makes `aoc-report.zip` (logs and your PC's details, nothing of the
+In the setup window, press **Report a problem...**: it makes `AgeOfCalamityRecomp-report.zip` (logs and your PC's details, nothing of the
 game, your user name replaced by `user`) and opens the [issue form](https://github.com/eliasm4r/AgeOfCalamityRecomp/issues).
 Press <kbd>F8</kbd> when you see a glitch so the logs mark the moment. On a Steam Deck without the setup,
-`./aoc-logs.sh bundle` makes the archive. Never attach game files, `prod.keys` or saves.
+`./logs.sh bundle` makes the archive. Never attach game files, `prod.keys` or saves.
 </details>
 
 <details>

@@ -1,11 +1,11 @@
 #version 450
 // The game's tonemap pass for HDR output (runtime/vk_hdr.c vk_hdr_shader_swap puts it in place of the translated
-// shader when AOC_HDR=1). Same inputs as the game's: fp_t_tcb_8 (bloom, clamped to 10000 as the game does) plus
+// shader when ACR_HDR=1). Same inputs as the game's: fp_t_tcb_8 (bloom, clamped to 10000 as the game does) plus
 // fp_t_tcb_A (the scene), weights in c1[0] and the saturation grade in c3[0]. The game maps luminance and each channel
 // with 1 - e^-x, blends the two by the luminance curve squared, clamps to 0..1 and grades saturation. Here the curve is
 // the game's up to PIVOT and a straight line with its slope above, so mid-greys look as in SDR and highlights keep
 // going; the grade works on the colour divided by its largest channel above 1; a roll-off on the largest channel stops
-// at the display's peak. The output is relative to the HUD's white (1.0), which the present maps to AOC_HDR_UI_NITS.
+// at the display's peak. The output is relative to the HUD's white (1.0), which the present maps to ACR_HDR_UI_NITS.
 // Approach after RenoDX's TotK mod by souperman9 and Musa (github.com/clshortfuse/renodx, src/games/totk, MIT): its
 // "extended vanilla" curve.
 // Bindings are those of the game's translated shader: vk_hdr.c rewrites them from the original's names.

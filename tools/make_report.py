@@ -1,12 +1,12 @@
-"""Makes aoc-report.zip for asking for help: the logs and this PC's details, nothing of the game.
+"""Makes AgeOfCalamityRecomp-report.zip for asking for help: the logs and this PC's details, nothing of the game.
 
 The setup's "Report a problem..." button runs it (Windows: the release's Python; Linux: python3). Only the standard library.
 
-  python tools/make_report.py   ->   <repository>/aoc-report.zip
+  python tools/make_report.py   ->   <repository>/AgeOfCalamityRecomp-report.zip
 
 Inside: system.txt (system, processor, memory, graphics cards and driver, free disk, version), the last forge
 logs (build/logs/), and each game folder's logs/ (texts, and the picture copies of the newest state-recorder reports)
-and aoc.ini (dist/aoc-windows, dist/aoc-deck). No game files, no
+and settings.ini (dist/windows, dist/steamdeck). No game files, no
 keys, no saves. The zip is attached to a public issue (the setup opens the form), so this PC's user name is taken
 out of every text in it: the logs carry paths, and a home folder's name is often a person's name (scrub).
 """
@@ -23,7 +23,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "aoc-report.zip"
+OUT = ROOT / "AgeOfCalamityRecomp-report.zip"
 MAX_FILE = 8 << 20   # a log above 8 MiB keeps only its last 8 MiB
 
 
@@ -63,7 +63,7 @@ def system_txt() -> str:
         lines.append("gpu:\n" + (cmd(["sh", "-c", "lspci 2>/dev/null | grep -Ei 'vga|3d|display'"]) or "?"))
     free = shutil.disk_usage(ROOT).free / 1e9
     lines.append(f"free disk where the package is: {free:.0f} GB")
-    for d in ("dist/aoc-windows", "dist/aoc-deck"):
+    for d in ("dist/windows", "dist/steamdeck"):
         p = ROOT / d
         lines.append(f"{d}: {'present' if p.is_dir() else 'missing'}")
     return "\n".join(lines) + "\n"
@@ -95,7 +95,7 @@ def scrub(data: bytes) -> bytes:
 
 def add_file(z: zipfile.ZipFile, path: Path, arc: str) -> None:
     data = path.read_bytes()
-    if path.suffix == ".gz":   # an older session's log (the Deck's aoc.sh compresses them)
+    if path.suffix == ".gz":   # an older session's log (the Deck's AgeOfCalamityRecomp.sh compresses them)
         try:
             data = gzip.compress(scrub(gzip.decompress(data)))
         except (OSError, EOFError):
@@ -114,10 +114,10 @@ def main() -> int:
         if logs.is_dir():
             for f in sorted(logs.glob("*.log"))[-5:]:
                 add_file(z, f, f"forge/{f.name}")
-        for d in ("aoc-windows", "aoc-deck"):
+        for d in ("windows", "steamdeck"):
             game = ROOT / "dist" / d
-            if (game / "aoc.ini").is_file():
-                add_file(z, game / "aoc.ini", f"{d}/aoc.ini")
+            if (game / "settings.ini").is_file():
+                add_file(z, game / "settings.ini", f"{d}/settings.ini")
             logs_dir = game / "logs"
             if logs_dir.is_dir():
                 # The logs and the recorded inputs, newest 6; logs/diag holds full-size captures and frame dumps (8 to

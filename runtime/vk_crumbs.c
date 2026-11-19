@@ -68,7 +68,7 @@ void vk_crumbs_report(void) {
     describe(words[0], reached, sizeof reached);
     describe(words[1], finished, sizeof finished);
     rt_log("vk: GPU breadcrumbs: the GPU last reached %s; everything before %s had finished", reached, finished);
-    if (words[1] >> 28 == VK_CRUMB_DRAW)   // AOC_CRUMB_DRAWS: the draws after the last finished one, in order
+    if (words[1] >> 28 == VK_CRUMB_DRAW)   // ACR_CRUMB_DRAWS: the draws after the last finished one, in order
         for (uint32_t i = 1; i <= 6; i++) {
             char name[96];
             vk_exec_crumb_name((words[1] & 0x0fffffff) + i, name, sizeof name);

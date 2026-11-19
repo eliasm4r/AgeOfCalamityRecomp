@@ -2,7 +2,7 @@
 # Prepares Linux (WSL2 or a Linux PC: Arch, Ubuntu/Debian or Fedora) to generate and compile Age of Calamity Recomp:
 #   bash "<repository>/tools/setup_wsl.sh"            everything, for development (runtime libraries, gdb, tests)
 #   bash "<repository>/tools/setup_wsl.sh" --minimal  only what the Deck forge needs (the launcher uses this)
-# Installs the packages through pacman, apt or dnf and creates a Python venv in ~/.venvs/aoc. As root (WSL's Arch) it
+# Installs the packages through pacman, apt or dnf and creates a Python venv in ~/.venvs/AgeOfCalamityRecomp. As root (WSL's Arch) it
 # asks no password; in a terminal it uses sudo; without a terminal (the launcher) it uses pkexec, which opens the
 # system's password window.
 set -euo pipefail
@@ -63,20 +63,20 @@ fi
 # Some Ubuntu versions install lld as ld.lld-NN; the dist step calls ld.lld through clang (-fuse-ld=lld).
 command -v ld.lld >/dev/null || { echo "ERROR: ld.lld not found after the install" >&2; exit 1; }
 
-if [ ! -x "$HOME/.venvs/aoc/bin/python" ]; then
-    python3 -m venv "$HOME/.venvs/aoc"
-    "$HOME/.venvs/aoc/bin/python" -m pip install -q --upgrade pip
+if [ ! -x "$HOME/.venvs/AgeOfCalamityRecomp/bin/python" ]; then
+    python3 -m venv "$HOME/.venvs/AgeOfCalamityRecomp"
+    "$HOME/.venvs/AgeOfCalamityRecomp/bin/python" -m pip install -q --upgrade pip
 fi
 if [ $MINIMAL = 1 ]; then
-    "$HOME/.venvs/aoc/bin/python" -m pip install -q -r "$REPO/tools/requirements-forge.txt"
+    "$HOME/.venvs/AgeOfCalamityRecomp/bin/python" -m pip install -q -r "$REPO/tools/requirements-forge.txt"
 else
-    "$HOME/.venvs/aoc/bin/python" -m pip install -q -r "$REPO/tools/requirements.txt"
+    "$HOME/.venvs/AgeOfCalamityRecomp/bin/python" -m pip install -q -r "$REPO/tools/requirements.txt"
 fi
 
 echo
 echo "Done. To use it:"
-echo "  source ~/.venvs/aoc/bin/activate"
+echo "  source ~/.venvs/AgeOfCalamityRecomp/bin/activate"
 echo "  cd \"$REPO\""
-echo "  python3 tools/build.py --work ~/aoc-build"
+echo "  python3 tools/build.py --work ~/AgeOfCalamityRecomp-build"
 clang --version | head -1
 echo "ninja $(ninja --version)"

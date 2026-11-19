@@ -1,6 +1,6 @@
-// DLAA: NVIDIA DLSS at the scene's own size (AOC_DLAA, aoc.ini dlaa). NGX is loaded at run time from the driver's
+// DLAA: NVIDIA DLSS at the scene's own size (ACR_DLAA, settings.ini dlaa). NGX is loaded at run time from the driver's
 // NGX core (_nvngx.dll, found through HKLM\SOFTWARE\NVIDIA Corporation\Global\NGXCore); the DLSS model
-// (nvngx_dlss.dll) is loaded by NGX from the folder of aoc. No NVIDIA SDK code or header is compiled in: the few
+// (nvngx_dlss.dll) is loaded by NGX from the folder of AgeOfCalamityRecomp. No NVIDIA SDK code or header is compiled in: the few
 // NGX types used are declared here from the SDK's documented ABI, the way the Metroid Dread recomp's dlss.c reaches
 // the core (read for behaviour only).
 //
@@ -92,7 +92,7 @@ static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((
 // dlaa applies after a restart; switched off, nothing else of DLAA runs.
 int vk_dlaa_wanted(void) {
     static int wanted = -1;
-    if (wanted < 0) wanted = cfg_bool("AOC_DLAA");
+    if (wanted < 0) wanted = cfg_bool("ACR_DLAA");
     return wanted;
 }
 
@@ -202,12 +202,12 @@ void vk_dlaa_init(void) {
         p_geti(caps, "SuperSampling.NeedsUpdatedDriver", &driver);
     }
     N.available = avail != 0;
-    rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is nvngx_dlss.dll next to aoc?)",
+    rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is nvngx_dlss.dll next to AgeOfCalamityRecomp?)",
            driver ? "; the driver needs an update" : "");
 }
 
 // ---------------------------------------------------------------- where DLAA runs in Astral Chain's frame
-// Measured (AOC_DUMP, frame 2100 at Lookout Landing, 2560x1440 scene): the G-buffer passes draw into five targets with
+// Measured (ACR_DUMP, frame 2100 at Lookout Landing, 2560x1440 scene): the G-buffer passes draw into five targets with
 // the scene depth (d32f at the scene size), one of them the R11G11B10F light target; lighting and the transparents
 // then draw into that light target alone, the last time with the scene depth attached; the first pass narrower than a
 // quarter of the scene starts the bloom chain, which reads it. After the bloom come the tonemap and post passes, then
@@ -216,7 +216,7 @@ void vk_dlaa_init(void) {
 // depth arms the frame with that pair; the next pass at most a quarter as wide ends the scene (no jitter after it) and,
 // when the scene is as wide as the output, runs DLAA on the armed target first. Bloom, tonemap, post and HUD then all
 // work on the anti-aliased picture.
-// Upscaling (a scene smaller than the output: AOC_DLSS quality/balanced/performance, or the game's own 5/6): measured
+// Upscaling (a scene smaller than the output: ACR_DLSS quality/balanced/performance, or the game's own 5/6): measured
 // at a 960x536 scene, 1920x1080 output, the bloom and its composite write back into the light target at the scene size,
 // then one full-screen draw (the FXAA shader below, which also scales) reads it into an output-sized R11G11B10F target
 // with no depth, and the HUD is drawn over that target at the output size. DLSS runs at the begin of that pass: it
@@ -473,7 +473,7 @@ void vk_dlaa_draw(VkExec *ex) {
 // switch, which shifted that order). Jitter needs a frame DLSS ran on; a frame without the DLAA point stops it.
 static void next_jitter(void) {
     static int nj = -1;
-    if (nj < 0) nj = !rt_knob("DLAA_JITTER", "1");   // AOC_DLAA_JITTER=0: no jitter (test)
+    if (nj < 0) nj = !rt_knob("DLAA_JITTER", "1");   // ACR_DLAA_JITTER=0: no jitter (test)
     uint32_t i = D.jframe++ % 16 + 1;
     D.jx = halton(i, 2) - 0.5f, D.jy = halton(i, 3) - 0.5f;
     D.jit_ok = !D.hold && !nj;
@@ -502,7 +502,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
                                          z->base_layer, 1, 0);
     float jx = D.jit_used ? D.ux : 0.0f, jy = D.jit_used ? D.uy : 0.0f;
     static int no_mv = -1;
-    if (no_mv < 0) no_mv = !rt_knob("DLAA_MV", "1");   // AOC_DLAA_MV=0: zero motion (test)
+    if (no_mv < 0) no_mv = !rt_knob("DLAA_MV", "1");   // ACR_DLAA_MV=0: zero motion (test)
     if (no_mv || !mv_pass(cb, e, zv, jx, jy)) {
         VkClearColorValue zero = {{0, 0, 0, 0}};
         VkImageSubresourceRange all = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
@@ -614,7 +614,7 @@ void vk_dlaa_pass(VkExec *ex) {
 }
 
 void vk_dlaa_frame(void) {
-    int on = N.available && cfg_bool("AOC_DLAA");
+    int on = N.available && cfg_bool("ACR_DLAA");
     if (on != D.on) {
         rt_log("dlaa: %s", on ? "on" : "off");
         D.on = on;
@@ -632,7 +632,7 @@ void vk_dlaa_frame(void) {
     D.cam_addr = 0;
 }
 
-// ---------------------------------------------------------------- the game's FXAA (AOC_FXAA, live)
+// ---------------------------------------------------------------- the game's FXAA (ACR_FXAA, live)
 // Astral Chain's FXAA is two full-screen passes after the bloom, just before the HUD: one copies the scene target into a
 // scratch target, the other draws the anti-aliased result back over the scene (found by diffing frame dumps with the
 // game's own switch, ModelSceneExtensionParam EnableFXAA, on and off). With fxaa = 0 the draws of that second pass's
@@ -665,7 +665,7 @@ int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
     static uint64_t frame_read = ~0ull;
     static int fxaa = 1;
     uint64_t f = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
-    if (f != frame_read) frame_read = f, fxaa = cfg_bool("AOC_FXAA");   // once a frame: the menu switches it live
+    if (f != frame_read) frame_read = f, fxaa = cfg_bool("ACR_FXAA");   // once a frame: the menu switches it live
     if (fxaa && !D.up) return 0;   // nothing to skip: no shader lookup per draw at the defaults
     if (!fs) return 0;
     uint64_t h = spirv_hash(fs);

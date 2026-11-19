@@ -24,8 +24,8 @@
     },
     "start": {
         "program": [
-            "dist/aoc-windows/aoc.exe",
-            "dist/aoc-deck/aoc.sh"
+            "dist/windows/AgeOfCalamityRecomp.exe",
+            "dist/steamdeck/AgeOfCalamityRecomp.sh"
         ]
     },
     "requires": [

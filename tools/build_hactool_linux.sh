@@ -3,7 +3,7 @@
 # tools/make_release.py puts it in prebuilt/hactool/linux-x64 of the Linux package (tools/merge_romfs.py uses it).
 #   bash tools/build_hactool_linux.sh <hactool 1.4.0 source> <output folder> [sysroot]
 set -euo pipefail
-SRC="$1"; OUT="$2"; SNIPER="${3:-$HOME/aoc-build/toolchain/sniper}"
+SRC="$1"; OUT="$2"; SNIPER="${3:-$HOME/AgeOfCalamityRecomp-build/toolchain/sniper}"
 [ -f "$SRC/main.c" ] || { echo "ERROR: $SRC is not the hactool source" >&2; exit 1; }
 B="$(mktemp -d)"
 cp -r "$SRC/." "$B/"

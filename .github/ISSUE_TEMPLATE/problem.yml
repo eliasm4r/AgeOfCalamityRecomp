@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the problem and attach `aoc-report.zip` (the setup's **Report a problem...** button; on a Steam Deck without the setup, `./aoc-logs.sh bundle`). The zip holds logs and PC details, nothing of the game.
+        Describe the problem and attach `AgeOfCalamityRecomp-report.zip` (the setup's **Report a problem...** button; on a Steam Deck without the setup, `./logs.sh bundle`). The zip holds logs and PC details, nothing of the game.
 
         Never attach game files, `prod.keys` or saves.
   - type: input
@@ -48,7 +48,7 @@ body:
   - type: textarea
     id: report
     attributes:
-      label: aoc-report.zip
+      label: AgeOfCalamityRecomp-report.zip
       description: Drag the zip here (and screenshots, if they help).
   - type: checkboxes
     id: own

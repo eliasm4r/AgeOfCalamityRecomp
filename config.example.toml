@@ -17,4 +17,4 @@ dir = 'build'
 
 [deck]
 # Finished folder that goes to the SD card
-dist = 'dist/aoc-deck'
+dist = 'dist/steamdeck'

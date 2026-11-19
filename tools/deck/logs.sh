@@ -2,34 +2,34 @@
 # Age of Calamity Recomp logs on the Steam Deck: lists and sums up the sessions played, follows the running session and
 # bundles everything to send. Lives in the game folder (tools/build.py dist); runs in Konsole or over SSH.
 #
-#   ./aoc-logs.sh                    summary of the last session (same as "summary 1")
-#   ./aoc-logs.sh list [N]           one line per session, the N newest (default 15): date, minutes, fps, APU watts
+#   ./logs.sh                    summary of the last session (same as "summary 1")
+#   ./logs.sh list [N]           one line per session, the N newest (default 15): date, minutes, fps, APU watts
 #                                    (mean and peak), battery, highest CPU and GPU temperature, errors
-#   ./aoc-logs.sh summary [K] [--rows]  summary of the K-th newest session (1 = the last); --rows lists its "sys:"
+#   ./logs.sh summary [K] [--rows]  summary of the K-th newest session (1 = the last); --rows lists its "sys:"
 #                                    lines, one every 10 s
-#   ./aoc-logs.sh live               follows the running session (sys:, fps:, frametime: lines, errors); Ctrl+C quits
-#   ./aoc-logs.sh system             the machine right now: TDP, watts, temperatures, fan, clocks, battery
-#   ./aoc-logs.sh detailed on|off    turns the performance trace (AOC_TRACE=perf) on or off for the next sessions: GPU
+#   ./logs.sh live               follows the running session (sys:, fps:, frametime: lines, errors); Ctrl+C quits
+#   ./logs.sh system             the machine right now: TDP, watts, temperatures, fan, clocks, battery
+#   ./logs.sh detailed on|off    turns the performance trace (ACR_TRACE=perf) on or off for the next sessions: GPU
 #                                    per frame, pool shadows, write watching; cheap, but the log grows
-#   ./aoc-logs.sh performance [K]    the performance log of the K-th newest session (logs/performance/, one row a
+#   ./logs.sh performance [K]    the performance log of the K-th newest session (logs/performance/, one row a
 #                                    second): fps, stutters and their cause, power, what happened around each "Mark
 #                                    this moment" of the quick menu (tools/perf_view.py)
-#   ./aoc-logs.sh diag [K]           state recorder reports (freeze, black or dark screen) of the K-th session, read by
+#   ./logs.sh diag [K]           state recorder reports (freeze, black or dark screen) of the K-th session, read by
 #                                    tools/diag_view.py
-#   ./aoc-logs.sh bundle             logs/bundle-<date>.tar.gz with the sessions, aoc.ini, the machine state and the
+#   ./logs.sh bundle             logs/bundle-<date>.tar.gz with the sessions, settings.ini, the machine state and the
 #                                    pictures of the two newest reports (logs/diag/)
 #
-# Sessions: logs/aoc.log is the last one; aoc.sh keeps each earlier session compressed in logs/sessions/ when the game
+# Sessions: logs/game.log is the last one; AgeOfCalamityRecomp.sh keeps each earlier session compressed in logs/sessions/ when the game
 # starts (the 60 newest). Summaries come from tools/logsum.py (tools/deck/logsum.py in the repository).
 here="$(cd "$(dirname "$0")" && pwd)"
 L="$here/logs"
 S="$L/sessions"
 PY="$here/tools/logsum.py"
-INI="$here/aoc.ini"
+INI="$here/settings.ini"
 
-# The sessions, newest first: logs/aoc.log, then logs/sessions/*.log.gz by name (the name is the start time).
+# The sessions, newest first: logs/game.log, then logs/sessions/*.log.gz by name (the name is the start time).
 sessions() {
-    [ -f "$L/aoc.log" ] && echo "$L/aoc.log"
+    [ -f "$L/game.log" ] && echo "$L/game.log"
     ls -1 "$S"/*.log.gz 2>/dev/null | sort -r
 }
 
@@ -65,7 +65,7 @@ machine() {
         echo "battery: $(cat "$b/capacity")% $(cat "$b/status"), ${p:--} W"
     done
     echo "memory: $(free -m | awk '/^Mem:/ { print $3 " of " $2 " MiB in use" }')"
-    pgrep -a aoc | grep -v aoc-logs | sed 's/^/process: /'
+    pgrep -af '/AgeOfCalamityRecomp( |$)' | sed 's/^/process: /'
 }
 
 cmd=${1:-summary}
@@ -84,13 +84,13 @@ summary)
     k=1
     case "$1" in [0-9]*) k=$1; shift ;; esac
     f=$(sessions | sed -n "${k}p")
-    [ -n "$f" ] || { echo "there is no session $k (./aoc-logs.sh list)"; exit 1; }
+    [ -n "$f" ] || { echo "there is no session $k (./logs.sh list)"; exit 1; }
     echo "== $f"
     python3 "$PY" "$f" "$@"
     ;;
 live)
-    [ -f "$L/aoc.log" ] || { echo "no logs/aoc.log"; exit 1; }
-    tail -n 20 -F "$L/aoc.log" | grep --line-buffered -E '^\[host\] (sys:|fps:|frametime:|resolution:)|FATAL|hang:|device lost'
+    [ -f "$L/game.log" ] || { echo "no logs/game.log"; exit 1; }
+    tail -n 20 -F "$L/game.log" | grep --line-buffered -E '^\[host\] (sys:|fps:|frametime:|resolution:)|FATAL|hang:|device lost'
     ;;
 system)
     machine
@@ -103,7 +103,7 @@ detailed)
         else
             printf '\n[diagnostics]\ntrace = perf\n' >> "$INI"
         fi
-        echo "performance trace on for the next sessions (aoc.ini: trace = perf)"
+        echo "performance trace on for the next sessions (settings.ini: trace = perf)"
         ;;
     off)
         sed -i -E '/^[[:space:]]*[Tt][Rr][Aa][Cc][Ee][[:space:]]*=/d' "$INI" 2>/dev/null

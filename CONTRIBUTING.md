@@ -8,7 +8,7 @@ in [`docs/NOTES.md`](docs/NOTES.md).
 - **Correct picture before speed.** Never hide missing work (skipped draws, zeroed textures, relaxed depth) and call
   it a fix.
 - **Real implementations.** No stubs that only return success for a service the game uses.
-- **Steam Deck performance.** The frame budget is a requirement. Measure with the overlay and `AOC_TRACE=perf` instead
+- **Steam Deck performance.** The frame budget is a requirement. Measure with the overlay and `ACR_TRACE=perf` instead
   of guessing; no per-frame allocation on hot paths.
 
 ## Game content stays out
@@ -44,8 +44,8 @@ This repository is public-ready: game data lives outside it and everything deriv
 
 ## Building from source
 
-Everything compiles on a PC: WSL2 or Linux builds the Steam Deck / Linux folder (`dist/aoc-deck/`), MSYS2 builds the
-Windows one (`dist/aoc-windows/`). The Deck compiles nothing.
+Everything compiles on a PC: WSL2 or Linux builds the Steam Deck / Linux folder (`dist/steamdeck/`), MSYS2 builds the
+Windows one (`dist/windows/`). The Deck compiles nothing.
 
 ### The build tool (what the setup runs)
 
@@ -62,51 +62,51 @@ Finished steps are skipped, so building again is incremental:
 | `extract` | `build/v130/exefs`, reused only when its build IDs are 1.3.0's |
 | `romfs` | `build/v130/romfs.bin` with `tools/merge_romfs.py` |
 | `dlc` | `build/v130/dlc-<title id>.bin`, the RomFS of each DLC (`tools/extract_dlc.py`) |
-| `deck` | `build.py gen guest dist` in WSL (or natively on Linux), giving `dist/aoc-deck` |
+| `deck` | `build.py gen guest dist` in WSL (or natively on Linux), giving `dist/steamdeck` |
 | `wingen` | the generated C for Windows |
-| `winxlate` | the shader translator `aoc_xlate.exe` (prebuilt in packages, published by `dotnet` from the repository) |
+| `winxlate` | the shader translator `xlate.exe` (prebuilt in packages, published by `dotnet` from the repository) |
 | `winbuild` | `build.py guest host` in MSYS2 |
-| `windist` | `dist/aoc-windows` (exe, DLLs, translator, ExeFS, RomFS by hard link, index, `aoc.ini`) |
+| `windist` | `dist/windows` (exe, DLLs, translator, ExeFS, RomFS by hard link, index, `settings.ini`) |
 | `send` | `tools/deck/deploy.sh --no-build` |
 
 The setup (`setup/setup.py`, tkinter) runs this script and reads its `@@PLAN`, `@@STEP`, `@@NEED` and `@@DONE`
-lines. In a copy of the repository, `python tools/make_release.py --local` puts `AgeOfCalamityRecomp.exe` and
+lines. In a copy of the repository, `python tools/make_release.py --local` puts `AgeOfCalamityRecomp Setup.exe` and
 `python/` in the folder as the Windows package has them; `setup.bat` (any Python 3 with tkinter) and `sh setup.sh`
 also open it. Release
 packages come from `tools/make_release.py`: the repository at HEAD plus an embeddable Python with Tcl/Tk,
-`AgeOfCalamityRecomp.exe` (its `pythonw.exe` renamed, which `setup/sitecustomize.py` turns into the setup), hactool and
+`AgeOfCalamityRecomp Setup.exe` (its `pythonw.exe` renamed, which `setup/sitecustomize.py` turns into the setup), hactool and
 the prebuilt translator, and nothing of the game.
 
-The icon (`assets/icon.ico` for `aoc.exe` and the setup, `assets/icon.png` on Linux) is cut from
+The icon (`assets/icon.ico` for the game's `AgeOfCalamityRecomp.exe`, its shortcuts and the setup window, `assets/icon.png` on Linux) is cut from
 `assets/key-art.jpg` by `tools/make_icon.py` (Pillow); `--list` shows the other crops kept aside.
 
 ### By hand in WSL or Linux
 
 ```sh
 bash tools/setup_wsl.sh                       # clang, lld, ninja, SDL3, Opus, libvpx, zstd, Vulkan, Python venv
-source ~/.venvs/aoc/bin/activate
+source ~/.venvs/AgeOfCalamityRecomp/bin/activate
 python3 tools/extract.py inventory            # checks base, update 1.3.0 and DLCs in "Game Files/"
 python3 tools/extract.py exefs                # build/v130/exefs/
 python3 tools/merge_romfs.py                  # build/v130/romfs.bin
 python3 tools/extract_dlc.py                  # build/v130/dlc-<title id>.bin (optional)
-python3 tools/build.py --work ~/aoc-build     # gen + guest + host
-python3 tools/build.py --work ~/aoc-build dist --with-romfs   # dist/aoc-deck/
+python3 tools/build.py --work ~/AgeOfCalamityRecomp-build     # gen + guest + host
+python3 tools/build.py --work ~/AgeOfCalamityRecomp-build dist --with-romfs   # dist/steamdeck/
 ```
 
 - `gen` writes about 600 MB of C (about 3 min) and runs again by itself when `recomp/` or the patch table changes.
-- `guest` compiles 377 files into `libaoc_guest.a`; 40 giant functions of `main` (1-7 MB of C, up to 1.6 GB of RAM
+- `guest` compiles 377 files into `libacr_guest.a`; 40 giant functions of `main` (1-7 MB of C, up to 1.6 GB of RAM
   each) dominate it, about 48 min on a 6-core laptop. Rebuilds are incremental.
-- Keep the work folder on the Linux disk (`~/aoc-build`), never under `/mnt/c` or `/mnt/d`.
+- Keep the work folder on the Linux disk (`~/AgeOfCalamityRecomp-build`), never under `/mnt/c` or `/mnt/d`.
 - `dist` links against the Steam Runtime 3 sniper sysroot (downloaded once, 1.2 GB), so the result needs GLIBC 2.29 at
   most and runs on the Deck.
-- The `host` executable uses the build machine's glibc and is for development: `aoc --selftest`,
-  `AOC_GPU=null aoc --boot`. WSL only has Dozen for Vulkan, so graphics tests run on the Deck, native Linux or Windows.
+- The `host` executable uses the build machine's glibc and is for development: `AgeOfCalamityRecomp --selftest`,
+  `ACR_GPU=null AgeOfCalamityRecomp --boot`. WSL only has Dozen for Vulkan, so graphics tests run on the Deck, native Linux or Windows.
 
 ### Native Windows (MSYS2 UCRT64)
 
 ```sh
 pacman -S mingw-w64-ucrt-x86_64-{clang,lld,llvm,ninja,sdl3,opus,libvpx,zstd,vulkan-headers,vulkan-loader,vulkan-memory-allocator,python,python-cryptography,python-lz4}
-python3 tools/build.py --work /c/aoc-win --big-jobs 2 guest host   # aoc.exe in C:\aoc-win\host
+python3 tools/build.py --work /c/AgeOfCalamityRecomp-win --big-jobs 2 guest host   # AgeOfCalamityRecomp.exe in C:\AgeOfCalamityRecomp-win\host
 ```
 
 ### Tests
@@ -124,6 +124,6 @@ Test dependencies: `pip install numpy lz4 capstone unicorn`.
 
 ## Reporting a problem
 
-In the setup window, **Report a problem...** builds `aoc-report.zip` (logs and PC details, nothing of the game, the user
+In the setup window, **Report a problem...** builds `AgeOfCalamityRecomp-report.zip` (logs and PC details, nothing of the game, the user
 name replaced by `user`) and opens the [issue form](https://github.com/eliasm4r/AgeOfCalamityRecomp/issues). On a
-Steam Deck without the setup, `./aoc-logs.sh bundle` makes the same archive.
+Steam Deck without the setup, `./logs.sh bundle` makes the same archive.

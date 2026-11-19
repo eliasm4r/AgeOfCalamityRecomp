@@ -1666,12 +1666,12 @@ long plat_child_read(PlatChild *c, void *buf, size_t cap) {
 }
 
 // ---- restart
-// AOC_RESTART_WAIT names the process that called plat_restart, as its id and start time (field 22 of /proc/<pid>/stat,
+// ACR_RESTART_WAIT names the process that called plat_restart, as its id and start time (field 22 of /proc/<pid>/stat,
 // clock ticks after boot): a process that has only reused the id is not waited for. Waiting keeps the new process off
 // the old one's files (the log it moves at start, the saves) until the old one is gone. The new process gets no
 // descriptor past stderr (glibc 2.34's closefrom file action), and the default signal mask and dispositions, whatever
 // the calling thread had.
-#define RESTART_WAIT "AOC_RESTART_WAIT"
+#define RESTART_WAIT "ACR_RESTART_WAIT"
 
 // The start time of process pid (field 22 of its /proc stat line), 0 when it is gone.
 static unsigned long long process_start(int pid) {

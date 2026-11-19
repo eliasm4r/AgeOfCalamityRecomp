@@ -1,12 +1,12 @@
-# Adapted from totk-pc-recomp tools/build_xlate.py @ c38e0ca13d2bceb0590b195f69a010315913850d (MIT): aoc_xlate executable.
-"""Build the shader translator: build/xlate/aoc_xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
+# Adapted from totk-pc-recomp tools/build_xlate.py @ c38e0ca13d2bceb0590b195f69a010315913850d (MIT): xlate executable.
+"""Build the shader translator: build/xlate/xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
 
 Copies tools/vendor/ryujinx to build/xlate/ryujinx, applies tools/xlate/patches/*.patch there (tools/vendor stays
 byte-identical; 0001-0004 are MNG's, 0005-0011 are TotK Recomp's, 0012-0014 are ours (AgeOfCalamityRecomp)), then runs `dotnet publish`. Needs the .NET 10 SDK, the MSVC build
-tools and vswhere.exe (CONTRIBUTING.md). Run with .venv. On Linux it builds build/xlate/aoc_xlate for linux-x64, which
+tools and vswhere.exe (CONTRIBUTING.md). Run with .venv. On Linux it builds build/xlate/xlate for linux-x64, which
 NativeAOT links with the system's clang (no MSVC); NativeAOT builds for the OS it runs on only.
 
-Next to the exe it writes aoc_xlate.id: the translator identity, a sha256 over everything the build reads (this script,
+Next to the exe it writes xlate.id: the translator identity, a sha256 over everything the build reads (this script,
 Program.cs, the csproj, the patches, the vendor tree). runtime/gfx_shader.c puts it into every shader cache key, so a
 translator change re-keys the cache without a hand-made KEY_VERSION bump. --id-only writes it for the exe already built
 (the caller vouches that the exe matches the sources).
@@ -31,7 +31,7 @@ MNG_VENDOR = ROOT / "refs" / "MacNativeGames" / "vendor" / "ryujinx"
 XLATE = ROOT / "tools" / "xlate"
 BUILD = ROOT / "build" / "xlate"
 WIN = os.name == "nt"
-EXE = "aoc_xlate.exe" if WIN else "aoc_xlate"
+EXE = "xlate.exe" if WIN else "xlate"
 VSWHERE_DIR = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft Visual Studio" / "Installer"
 
 
@@ -118,7 +118,7 @@ def prepare_sources() -> Path:
 def identity() -> str:
     """sha256 over the translator's inputs, in a fixed order: path and content hash of each file."""
     h = hashlib.sha256()
-    files = [Path(__file__).resolve(), XLATE / "Program.cs", XLATE / "aoc_xlate.csproj",
+    files = [Path(__file__).resolve(), XLATE / "Program.cs", XLATE / "xlate.csproj",
              *sorted((XLATE / "patches").glob("*.patch"))]
     for f in files:
         h.update(f"{f.name}\0{hashlib.sha256(f.read_bytes()).hexdigest()}\n".encode())
@@ -135,7 +135,7 @@ def write_identity(exe: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--id-only", action="store_true", help="write aoc_xlate.id for the exe already built")
+    parser.add_argument("--id-only", action="store_true", help="write xlate.id for the exe already built")
     parser.add_argument("--out", type=Path, help="build directory instead of build/xlate")
     parser.add_argument("--llvm", type=Path, help="Linux: an LLVM directory whose bin/clang and lld link the exe")
     parser.add_argument("--sysroot", type=Path, help="Linux: link against this sysroot's glibc instead of the host's "
@@ -162,12 +162,12 @@ def main() -> None:
     work = BUILD / "xlate"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    for name in ("Program.cs", "aoc_xlate.csproj"):
+    for name in ("Program.cs", "xlate.csproj"):
         shutil.copy2(XLATE / name, work / name)
     out = BUILD / "publish"
     shutil.rmtree(out, ignore_errors=True)
     cmd = [
-        dotnet, "publish", str(work / "aoc_xlate.csproj"), "-c", "Release", "-r", "win-x64" if WIN else "linux-x64",
+        dotnet, "publish", str(work / "xlate.csproj"), "-c", "Release", "-r", "win-x64" if WIN else "linux-x64",
         "-p:PublishAot=true", "-p:InvariantGlobalization=true", f"-p:RyuSrc={src}", "-o", str(out),
     ]
     if a.llvm:

@@ -21,7 +21,7 @@
 // decoded frames are handed over when their presentation time is due, counted from the first frame (movie_tick, at every
 // present on the presenting guest thread), at most one per present. When the game falls behind, a frame more than 1.5
 // periods late is dropped if the next one is due too, so the picture keeps time with the movie's sound.
-// AOC_MOVIE_PACE=0 hands every decoded frame over at the next present; AOC_MOVIE_HOST=0 leaves every decoder to the
+// ACR_MOVIE_PACE=0 hands every decoded frame over at the next present; ACR_MOVIE_HOST=0 leaves every decoder to the
 // library (which aborts at the first movie).
 // Sound: one movie of this game has a sound track (movie_logo/Movie070.webm, the second logo of a boot that finds a
 // save: Vorbis, stereo, 48 kHz), for which the game makes a second decoder, type 5 (Vorbis), output format 1 (interleaved
@@ -107,7 +107,7 @@ void movie_set_clock(uint64_t (*clock)(void)) { g_clock = clock ? clock : kern_n
 void movie_set_pace(int on) { g_pace = on; }
 static int pace_on(void) {
     if (g_pace < 0) {
-        const char *e = cfg_get("AOC_MOVIE_PACE");
+        const char *e = cfg_get("ACR_MOVIE_PACE");
         g_pace = !(e && !strcmp(e, "0"));
     }
     return g_pace;
@@ -115,7 +115,7 @@ static int pace_on(void) {
 static int host_off(void) {
     static int v = -1;
     if (v < 0) {
-        const char *e = cfg_get("AOC_MOVIE_HOST");
+        const char *e = cfg_get("ACR_MOVIE_HOST");
         v = e && !strcmp(e, "0");
     }
     return v;
@@ -516,7 +516,7 @@ static void ov_ctor(Cpu *c) {
     int sound = type == MOVIE_TYPE_VORBIS && format == MOVIE_FORMAT_PCM16;
     if ((type != MOVIE_TYPE_VP9 && !sound) || mode != MOVIE_MODE_BUFFER || host_off()) {
         rt_log("movie: decoder type %d mode %d format %d left to the library%s", type, mode, format,
-               host_off() ? " (AOC_MOVIE_HOST=0)" : " (the host runs VP9 and Vorbis to PCM16, in buffer mode)");
+               host_off() ? " (ACR_MOVIE_HOST=0)" : " (the host runs VP9 and Vorbis to PCM16, in buffer mode)");
         pass(c, MOVIE_CTOR);
         return;
     }

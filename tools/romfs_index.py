@@ -18,7 +18,7 @@ The SHA-256 of the 10.9 GiB image is computed once and kept in build/v130/romfs.
 modification time; it is only redone when the image changes. The two output files are only rewritten when their
 bytes change, so ninja does not recompile romfs.c for nothing.
 
-    python3 tools/romfs_index.py --image build/v130/romfs.bin --out ~/aoc-build/host
+    python3 tools/romfs_index.py --image build/v130/romfs.bin --out ~/AgeOfCalamityRecomp-build/host
 """
 from __future__ import annotations
 

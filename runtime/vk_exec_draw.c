@@ -134,7 +134,7 @@ static struct {
 #define DS_SIG_BYTES (MAX_DESC * sizeof(VkDescSlot))
 static struct { uint32_t n[2], pn[2]; uint8_t sig[2][DS_SIG_BYTES], psig[2][DS_SIG_BYTES]; } DS;
 
-// AOC_BIND_STATS counters (bind_stats).
+// ACR_BIND_STATS counters (bind_stats).
 static struct {
     int on;
     uint64_t draws, bind[2], desc[2], push, push_skip, set_new, set_reuse, ac_miss, same_prog, same_all, bind_skip;
@@ -146,7 +146,7 @@ static struct {
 #define RS_BYTES (MAX_BINDINGS * sizeof(((VkExec *)0)->ssbo[0]) + MAX_DESC * sizeof(p_bind_buf))
 typedef struct { int cls, use; uint64_t bytes; } RsCount;
 static struct {
-    int on;                              // AOC_BIND_SKIP: 1 skip (default), 2 check, 0 off
+    int on;                              // ACR_BIND_SKIP: 1 skip (default), 2 check, 0 off
     uint32_t hn;                         // words of h the last signature filled; 0: none
     uint64_t h[32];                      // generations, programs, feedback images, support inputs, base instance
     const VkPipeInfo *info;              // the pipeline whose RsList ranges body holds, as of bind op generation gen
@@ -775,7 +775,7 @@ static void answers_for(VkExec *ex, int st, const uint8_t *ctl, uint32_t mask, G
         if ((tmiss || imiss || check) && !locked) vk_texture_lock(), locked = 1, BS.ac_miss++;
         if (tmiss) c->tt[slot] = type_of_handle(h), c->tex[slot] = h, c->ttok[slot] = tt, c->tgen[slot] = gen;
         if (imiss) c->it[slot] = type_of_handle(hi), c->img[slot] = hi, c->itok[slot] = it, c->igen[slot] = gen;
-        if (check && (type_of_handle(h) != c->tt[slot] || type_of_handle(hi) != c->it[slot]))   // AOC_SHADER_MEMO=check
+        if (check && (type_of_handle(h) != c->tt[slot] || type_of_handle(hi) != c->it[slot]))   // ACR_SHADER_MEMO=check
             rt_fatal("vk_exec: kept texture types of stage %d slot %d differ from a lookup", st, slot);
         a->tex_type[slot] = c->tt[slot], a->img_type[slot] = c->it[slot];
     }
@@ -914,10 +914,10 @@ void vk_c0_fill(uint8_t bank[VK_C0_BYTES], int stage, const p_bind_buf ssbo[16],
     memcpy(bank + 0x644, &base_instance, 4);
 }
 
-static int c0_on(void) {   // AOC_FIX_C0=0: c0 reads zeros instead of the driver constants
+static int c0_on(void) {   // ACR_FIX_C0=0: c0 reads zeros instead of the driver constants
     static int on = -1;
     if (on < 0) {
-        on = cfg_bool("AOC_FIX_C0");
+        on = cfg_bool("ACR_FIX_C0");
     }
     return on;
 }
@@ -985,7 +985,7 @@ static VkDescriptorBufferInfo ubo_info(VkExec *ex, int st, int slot) {
 // (cbuf_slot 0, handle = word offset): 16-byte entries at byte 0x110 (vertex), 0x510 (fragment) and 0x310 (compute).
 // A compute address at c0 0x210..0x30f is uniform block (offset - 0x210) / 16 read as storage: *ubo is set. -1: the
 // address is not in c0 (the shader loads it from a user uniform block: ubo_ptr) or the stage has no known table.
-// Mapping: MacNativeGames games/totk/tools/aoc_xlate/Service.cs:206-222 @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou).
+// Mapping: MacNativeGames games/totk/tools/xlate/Service.cs:206-222 @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou).
 static int ssbo_slot(const GfxShaderRes *r, int st, int *ubo) {
     *ubo = 0;
     if (r->cbuf_slot != 0) return -1;
@@ -1112,11 +1112,11 @@ static uint32_t attached_as(const VkExec *ex, const SubRange *r) {
     return m;
 }
 
-// AOC_TEX_MEMO (tex_info, feedback_scan): 0 off, 1 on, 2 (=check) computes every hit again and stops on a difference.
+// ACR_TEX_MEMO (tex_info, feedback_scan): 0 off, 1 on, 2 (=check) computes every hit again and stops on a difference.
 static int td_mode(void) {
     static int on = -1;
     if (on < 0) {
-        const char *e = cfg_value("AOC_TEX_MEMO");
+        const char *e = cfg_value("ACR_TEX_MEMO");
         on = !strcmp(e, "check") ? 2 : strcmp(e, "0") != 0;
     }
     return on;
@@ -1226,7 +1226,7 @@ static void tex_info_full(VkExec *ex, const GfxShaderRes *r, uint64_t h, int sto
 // for its storage check; a re-upload writes the same image, so the descriptor stays. Draws bind the same textures
 // thousands of times a frame (15,000 lookups a frame in the monsters fight); a hit skips the slot lookup, the view key
 // with its hash probe and the sampler lookup. Storage images, which note their binding per submission, are
-// not kept. Direct-mapped; texture lock held. AOC_TEX_MEMO=0 turns it off; =check computes every hit again and stops
+// not kept. Direct-mapped; texture lock held. ACR_TEX_MEMO=0 turns it off; =check computes every hit again and stops
 // on a difference.
 #define TD_N 8192
 static struct {
@@ -1307,7 +1307,7 @@ static void tex_info_full(VkExec *ex, const GfxShaderRes *r, uint64_t h, int sto
 // size and bits (R32_SFLOAT -> D32_SFLOAT, R16_UNORM -> D16_UNORM), copied through a buffer right before each dispatch
 // that samples it (a dispatch is outside any render pass), and the dispatch samples the twin. Draws keep the colour
 // image: a copy cannot go inside their pass. Design: Savage Wind Recomp runtime/nvn/vulkan/exec.c depth_twin_update
-// (https://github.com/Revivedx/SavageWindRecomp, MIT); the code is ours. AOC_DEPTH_TWIN=0: off.
+// (https://github.com/Revivedx/SavageWindRecomp, MIT); the code is ours. ACR_DEPTH_TWIN=0: off.
 #define TWINS 8
 typedef struct { VkImage src, img; VmaAllocation mem; VkImageView view[2]; uint32_t w, h, layers; VkFormat fmt; } Twin;
 static Twin twins[TWINS];
@@ -1498,12 +1498,12 @@ static void tviews_sweep(uint64_t now) {
     logged++;
 }
 
-// AOC_TEXEL_ZERO=<slot>[,<slot>...] (diagnosis): those sampled buffer-texture slots of draws read the zero view, to
+// ACR_TEXEL_ZERO=<slot>[,<slot>...] (diagnosis): those sampled buffer-texture slots of draws read the zero view, to
 // tell which of a shader's lists changes the image.
-static char B_fs_key[9] = "-";    // the fragment key prepare_draw last saw (AOC_TEXEL_ZERO log)
-static int texel_zero_fs_ok = 1;   // AOC_TEXEL_ZERO_FS=<key prefix>: the draw's fragment shader matches (prepare_draw)
+static char B_fs_key[9] = "-";    // the fragment key prepare_draw last saw (ACR_TEXEL_ZERO log)
+static int texel_zero_fs_ok = 1;   // ACR_TEXEL_ZERO_FS=<key prefix>: the draw's fragment shader matches (prepare_draw)
 
-// AOC_TEXEL_LOG_FS=<key prefix> (diagnosis): for the first draws whose fragment shader key starts so, log each bound
+// ACR_TEXEL_LOG_FS=<key prefix> (diagnosis): for the first draws whose fragment shader key starts so, log each bound
 // buffer texture (slot, address, NVN format, elements) and its first 16 words as the guest wrote them.
 static int texel_log_on = -1, texel_log_match;
 static void texel_log(int slot, uint64_t h) {
@@ -1527,7 +1527,7 @@ static int texel_zero_slot(int slot, int storage) {
     static int init;
     if (!init) {
         init = 1;
-        const char *e = cfg_get("AOC_TEXEL_ZERO");
+        const char *e = cfg_get("ACR_TEXEL_ZERO");
         for (const char *p = e; p && *p;) {
             int k = atoi(p);
             if (k >= 0 && k < 128) mask[k >> 6] |= 1ull << (k & 63);
@@ -1541,12 +1541,12 @@ static int texel_zero_slot(int slot, int storage) {
 static VkBufferView texel_view(uint64_t h, int storage) {
     uint64_t addr, n;
     int format;
-    static int probes;   // AOC_TRACE=gfx: the first bindings, for diagnosing a list that stays zero
-    // AOC_TEXEL_VIEWS (diagnosis): 0 every texel buffer reads the zero view; gfx only draws get real views; cs only
+    static int probes;   // ACR_TRACE=gfx: the first bindings, for diagnosing a list that stays zero
+    // ACR_TEXEL_VIEWS (diagnosis): 0 every texel buffer reads the zero view; gfx only draws get real views; cs only
     // dispatches do; unset or 1 both.
     static int views_on = -1;   // bit 0 draws, bit 1 dispatches
     if (views_on < 0) {
-        const char *e = cfg_get("AOC_TEXEL_VIEWS");
+        const char *e = cfg_get("ACR_TEXEL_VIEWS");
         views_on = !e ? 3 : !strcmp(e, "0") ? 0 : !strcmp(e, "gfx") ? 1 : !strcmp(e, "cs") ? 2 : 3;
     }
     if (!(views_on & (twin_dispatch ? 2 : 1))) return Z.zview;
@@ -1570,9 +1570,9 @@ static VkBufferView texel_view(uint64_t h, int storage) {
     // float view of the same 32-bit layout gives exactly those bits back. An integer view under a float sampled type is
     // undefined in Vulkan: Age of Calamity's light index lists (R32UI) read as garbage counts there and its lighting
     // loops hung the GPU (ring timeout). 8- and 16-bit integer formats have no such twin: logged once, kept.
-    static int twin_on = -1;   // AOC_TEXEL_TWIN=0 (diagnosis): integer views as Ryujinx binds them, no float twin
+    static int twin_on = -1;   // ACR_TEXEL_TWIN=0 (diagnosis): integer views as Ryujinx binds them, no float twin
     if (twin_on < 0) {
-        const char *e = cfg_get("AOC_TEXEL_TWIN");
+        const char *e = cfg_get("ACR_TEXEL_TWIN");
         twin_on = !(e && !strcmp(e, "0"));
     }
     if (!storage && twin_on) {
@@ -1644,7 +1644,7 @@ static VkBufferView texel_view(uint64_t h, int storage) {
     return Z.zview;
 }
 
-// ---- AOC_CRUMB_DRAWS=1 (diagnosis; with AOC_VK_RECORDER=0, as the crumb goes straight into ex->cb): a GPU breadcrumb
+// ---- ACR_CRUMB_DRAWS=1 (diagnosis; with ACR_VK_RECORDER=0, as the crumb goes straight into ex->cb): a GPU breadcrumb
 // before every draw and dispatch, and a ring of the shaders each used (cache key prefixes, as the shader-cache file
 // names), so a lost device names the draw the GPU was in (vk_crumbs.c vk_crumbs_report).
 #define CRUMB_RING 16384
@@ -1661,14 +1661,14 @@ static void key8(const GfxShader *s, char *o) {
 
 static void crumb_mark(VkExec *ex, const GfxShader *a, const GfxShader *b) {
     if (crumb_on < 0) {
-        const char *e = cfg_get("AOC_CRUMB_DRAWS");
+        const char *e = cfg_get("ACR_CRUMB_DRAWS");
         crumb_on = e && *e && strcmp(e, "0");
-        if (crumb_on) rt_log("vk: a GPU breadcrumb before every draw and dispatch (AOC_CRUMB_DRAWS)");
+        if (crumb_on) rt_log("vk: a GPU breadcrumb before every draw and dispatch (ACR_CRUMB_DRAWS)");
     }
     if (!crumb_on) return;
     if (rec_records(ex->cb)) {   // vk_crumb writes straight into the command buffer: not with the recorder thread on it
         static int said;
-        if (!said++) rt_log("vk: AOC_CRUMB_DRAWS needs AOC_VK_RECORDER=0; no draw breadcrumbs");
+        if (!said++) rt_log("vk: ACR_CRUMB_DRAWS needs ACR_VK_RECORDER=0; no draw breadcrumbs");
         crumb_on = 0;
         return;
     }
@@ -1764,17 +1764,17 @@ static void support_in(const VkExec *ex, float in[3]) {   // what support_fill r
     in[2] = ex->point_size > 0 ? ex->point_size : 1.0f;
 }
 
-// AOC_PCSS (percent, 0 = off): the pcss field of the support buffer, which translator patch 0010 reads in every
+// ACR_PCSS (percent, 0 = off): the pcss field of the support buffer, which translator patch 0010 reads in every
 // explicit-LOD compare on a 2D array texture (the sun cascades). x: penumbra width in UV per unit of light-space depth
 // between receiver and blocker (0 keeps the game's single compare), y and z: the narrowest and widest disc radius,
-// w: the blocker search radius, all in UV of the cascade map. Radii are in UV, so they hold at any AOC_SHADOW_SCALE.
-// AOC_PCSS_K overrides the depth-to-penumbra factor at 100 percent, for tuning.
+// w: the blocker search radius, all in UV of the cascade map. Radii are in UV, so they hold at any ACR_SHADOW_SCALE.
+// ACR_PCSS_K overrides the depth-to-penumbra factor at 100 percent, for tuning.
 static const float *pcss_params(void) {
     static float p[4] = {-1, 0, 0, 0};
     if (p[0] < 0) {
-        int pct = cfg_int("AOC_PCSS");
+        int pct = cfg_int("ACR_PCSS");
         pct = pct < 0 ? 0 : pct > 200 ? 200 : pct;
-        const char *k = cfg_get("AOC_PCSS_K");
+        const char *k = cfg_get("ACR_PCSS_K");
         float k100 = k && *k ? (float)atof(k) : 0.5f;
         p[0] = k100 * (float)pct / 100.0f;
         p[1] = 0.35f / 960.0f, p[2] = 5.0f / 960.0f, p[3] = 4.0f / 960.0f;
@@ -1784,15 +1784,15 @@ static const float *pcss_params(void) {
 }
 
 // The shadow_spread field of the support buffer: the factor translator patch 0011 applies to the lighting shaders' sun
-// shadow filter offset (element 56 .xy of their lighting block), 1 / AOC_SHADOW_SCALE. The game spaces its four
-// compares for its own shadow map texels; with maps AOC_SHADOW_SCALE times larger, the same offset in UV spans that
+// shadow filter offset (element 56 .xy of their lighting block), 1 / ACR_SHADOW_SCALE. The game spaces its four
+// compares for its own shadow map texels; with maps ACR_SHADOW_SCALE times larger, the same offset in UV spans that
 // many more texels and the near cascade shows four separate copies of each edge. Dividing by the scale keeps the game's
 // spacing in texels. The offset is in UV of the shadow map, so the output resolution plays no part. The scale is read
 // once, as vk_texture.c shadow_scale reads it: the maps keep the size they were made with.
 static const float *shadow_spread_params(void) {
     static float p[4] = {0, 0, 0, 0};
     if (p[0] == 0) {
-        int scale = cfg_int("AOC_SHADOW_SCALE");
+        int scale = cfg_int("ACR_SHADOW_SCALE");
         scale = scale < 1 ? 1 : scale > 4 ? 4 : scale;
         p[0] = 1.0f / (float)scale;
     }
@@ -1816,14 +1816,14 @@ static void support_fill(uint8_t *b, float w, float h, float point_size) {
     }
 }
 
-// AOC_BIND_STATS=1: bindings and descriptors per draw of each stage (Task 2.2's choice of the pushed stage), and how
+// ACR_BIND_STATS=1: bindings and descriptors per draw of each stage (Task 2.2's choice of the pushed stage), and how
 // often a draw repeats the previous one, logged every 20000 draws: pushes recorded and skipped, allocated sets written
 // and reused, stage texture-type recomputations (answers_for), draws with the previous draw's program, bound state
 // and textures (shaders and pipeline would be the same) and those that also have its buffers and viewport (all
 // descriptors would be the same). BS is declared beside DS.
 static int bind_stats_on(void) {
     if (BS.on < 0) {
-        const char *e = cfg_get("AOC_BIND_STATS");
+        const char *e = cfg_get("ACR_BIND_STATS");
         BS.on = e && *e && strcmp(e, "0");
     }
     return BS.on;
@@ -1847,7 +1847,7 @@ static void bind_stats(const VkPipeInfo *info) {
     }
 }
 
-// The bound state a draw reads, compared with the previous draw's (AOC_BIND_STATS only).
+// The bound state a draw reads, compared with the previous draw's (ACR_BIND_STATS only).
 static void repeat_stats(const VkExec *ex, const VkPipeInfo *info) {
     static struct {
         const prog_t *prog;
@@ -1874,17 +1874,17 @@ static void repeat_stats(const VkExec *ex, const VkPipeInfo *info) {
     last = cur;
 }
 
-static int push_skip_on(void) {   // AOC_PUSH_SKIP=0: every graphics draw pushes its set again
+static int push_skip_on(void) {   // ACR_PUSH_SKIP=0: every graphics draw pushes its set again
     static int on = -1;
     if (on < 0) {
-        on = cfg_bool("AOC_PUSH_SKIP");
+        on = cfg_bool("ACR_PUSH_SKIP");
     }
     return on;
 }
 
 // A graphics draw whose descriptor inputs equal the previous graphics draw's in this command buffer skips building its
 // sets: every write would be the same, the push would be skipped and the allocated set reused without a bind (about a
-// quarter of field and monsters2 draws, AOC_BIND_STATS). The inputs, compared and stored in place, are what
+// quarter of field and monsters2 draws, ACR_BIND_STATS). The inputs, compared and stored in place, are what
 // bind_resources and its helpers read beyond the pipeline info's fixed bindings and Z's stand-ins:
 // - the info (bindings, layouts), the program and its serial (the compiler-constant range of UBO slot 1);
 // - vk_texture_slots_gen, vk_texture_epoch (a slot's image, view and once-per-submit storage check), vk_sampler_gen;
@@ -1899,11 +1899,11 @@ static int push_skip_on(void) {   // AOC_PUSH_SKIP=0: every graphics draw pushes
 // the views cached per submission. The census counts are added again. A build that copied guest bytes into transient
 // memory (an unaligned host range) is never skipped after: the copy may differ. B.res_valid says the sets bound hold
 // the last build; vk_exec_draw_new_cb's memset clears it, and every build clears it until it ends.
-// AOC_BIND_SKIP=0 builds every draw; =check builds every draw and stops when a draw with equal inputs gets other
+// ACR_BIND_SKIP=0 builds every draw; =check builds every draw and stops when a draw with equal inputs gets other
 // writes, census counts or descriptor commands.
 static int bind_skip_on(void) {
     if (RS.on < 0) {
-        const char *e = cfg_value("AOC_BIND_SKIP");
+        const char *e = cfg_value("ACR_BIND_SKIP");
         RS.on = !strcmp(e, "check") ? 2 : strcmp(e, "0") != 0;
         if (RS.on != 1) rt_log("vk_exec: descriptor build skip %s", RS.on ? "check" : "off");
     }
@@ -2110,14 +2110,14 @@ static void bind_resources(VkExec *ex, const VkPipeInfo *info) {
                     uint64_t h = img ? (slot >= 0 && slot < 32 ? ex->img[st][slot] : 0)
                                      : (slot >= 0 && slot < 128 ? ex->tex[st][slot] : 0);
                     int zero = texel_zero_slot(slot, img);
-                    if (zero) {   // AOC_TEXEL_ZERO: say once that the filter matched, and which shaders
+                    if (zero) {   // ACR_TEXEL_ZERO: say once that the filter matched, and which shaders
                         static char seen[64][9];
                         static int nseen;
                         int k = 0;
                         while (k < nseen && strcmp(seen[k], B_fs_key)) k++;
                         if (k == nseen && nseen < 64) {
                             memcpy(seen[nseen++], B_fs_key, 9);
-                            rt_log("vk: AOC_TEXEL_ZERO zeroed slot %d (fragment key %s)", slot, B_fs_key);
+                            rt_log("vk: ACR_TEXEL_ZERO zeroed slot %d (fragment key %s)", slot, B_fs_key);
                         }
                     }
                     VkBufferView v = zero ? Z.zview : texel_view(h, img);
@@ -2232,7 +2232,7 @@ static void bind_resources(VkExec *ex, const VkPipeInfo *info) {
     }
     if (skip) {
         RS.rec = 0;
-        // An equal next draw records nothing when every push set holds its push (AOC_PUSH_SKIP on) and nothing made
+        // An equal next draw records nothing when every push set holds its push (ACR_PUSH_SKIP on) and nothing made
         // the build unrepeatable; allocated sets are always bound to the one written last.
         int valid = !RS.volatile_ && !RS.cnt_over && RS.hn;
         for (uint32_t s = 0; s < n_sets; s++)
@@ -2346,7 +2346,7 @@ static void bind_vertex_buffers(VkExec *ex) {
     B.vb_valid = 1;
 }
 
-// AOC_PIPE_SKIP: which draws are skipped, rather than waited for, while their shaders or pipeline build.
+// ACR_PIPE_SKIP: which draws are skipped, rather than waited for, while their shaders or pipeline build.
 // strict (0): only draws whose pass targets were all rendered in the previous presented frame; a pass with a target
 //   that was not counts as one-shot and waits.
 // any (1): also draws in a pass with at least one target rendered in the previous frame (a per-frame depth
@@ -2359,11 +2359,11 @@ static void bind_vertex_buffers(VkExec *ex) {
 static int pipe_skip_mode(void) {
     static int mode = -1;
     if (mode < 0) {
-        const char *e = cfg_value("AOC_PIPE_SKIP");
+        const char *e = cfg_value("ACR_PIPE_SKIP");
         mode = !strcmp(e, "strict") || !strcmp(e, "0") ? 0 : !strcmp(e, "fullscreen") || !strcmp(e, "2") ? 2 : 1;
-        static const char *const what[3] = {"only draws into per-frame passes (AOC_PIPE_SKIP=strict)",
+        static const char *const what[3] = {"only draws into per-frame passes (ACR_PIPE_SKIP=strict)",
                                             "draws into passes with a target the previous frame rendered",
-                                            "those and full-screen draws (AOC_PIPE_SKIP=fullscreen)"};
+                                            "those and full-screen draws (ACR_PIPE_SKIP=fullscreen)"};
         rt_log("vk_exec: draws skipped while their pipeline builds: %s", what[mode]);
     }
     return mode;
@@ -2373,7 +2373,7 @@ static int pipe_skip_mode(void) {
 // texture and image handles and every slot's resolution (vk_texture_slots_gen, read unlocked: a registration racing
 // with it is ordered after this draw, as answers_for's own check would order it) stay the same: answers_for reads
 // nothing else, so shader_for would return the same shaders. About 65% of field draws repeat them
-// (AOC_BIND_STATS). AOC_SHADER_MEMO=0 turns it off; =check looks the shaders up on every hit too, and every slot's
+// (ACR_BIND_STATS). ACR_SHADER_MEMO=0 turns it off; =check looks the shaders up on every hit too, and every slot's
 // texture type in answers_for, and stops on a difference.
 // tex_serial (bumped by every texture and image bind) equal to the key's means the handles were not rebound since
 // they were compared, so the 1 KiB compare is skipped; a rebind to the same handles still matches by the compare.
@@ -2410,7 +2410,7 @@ static int memo_match(const VkExec *ex, uint32_t gen, MemoKey *k) {
 
 static int shader_memo_on(void) {
     if (SM.on < 0) {
-        const char *e = cfg_value("AOC_SHADER_MEMO");
+        const char *e = cfg_value("ACR_SHADER_MEMO");
         SM.on = !strcmp(e, "check") ? 2 : strcmp(e, "0") != 0;
     }
     return SM.on;
@@ -2419,17 +2419,17 @@ static int shader_memo_on(void) {
 static struct { int on, valid; VkPipeState s; const VkPipeInfo *info; } PM = {-1};
 
 static int pipe_memo_on(void) {
-    if (PM.on < 0) PM.on = cfg_bool("AOC_PIPE_MEMO");
+    if (PM.on < 0) PM.on = cfg_bool("ACR_PIPE_MEMO");
     return PM.on;
 }
 
 // Pass, shaders, pipeline, fixed state and resources for a draw. 0: the draw is skipped.
-// AOC_SKIP_LOG=<n>: the first n draws prepare_draw skips are logged with the reason, the frame, the vertex count and
-// the pass targets (a diagnosis aid: AOC_TRACE=gfx counts skips per frame but says not why).
+// ACR_SKIP_LOG=<n>: the first n draws prepare_draw skips are logged with the reason, the frame, the vertex count and
+// the pass targets (a diagnosis aid: ACR_TRACE=gfx counts skips per frame but says not why).
 static int skip_log_left = -1;
 static void skip_note(VkExec *ex, const char *why, int32_t count) {
     if (skip_log_left < 0) {
-        const char *e = cfg_get("AOC_SKIP_LOG");
+        const char *e = cfg_get("ACR_SKIP_LOG");
         skip_log_left = e ? atoi(e) : 0;
     }
     if (!skip_log_left) return;
@@ -2500,7 +2500,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
     int pending;
     // A draw of at most 6 vertices over half the render area or more (a full-screen triangle or quad, a tile) waits for
     // its pipeline: skipping it can leave a black tile. The waits share 50 ms per presented frame
-    // (AOC_PIPE_SKIP=fullscreen skips them instead). A one-shot draw waits without that budget. Everything else is
+    // (ACR_PIPE_SKIP=fullscreen skips them instead). A one-shot draw waits without that budget. Everything else is
     // skipped while its pipeline is built.
     static uint64_t wait_frame;
     static uint64_t wait_left_ns;
@@ -2514,7 +2514,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
         wait_ms = (uint32_t)(wait_left_ns / 1000000);
         if (wait_ms) t0 = kern_now_ns();
     }
-    // The previous draw's pipeline while its state repeats (PM, AOC_PIPE_MEMO=0 turns it off): the cache key is made
+    // The previous draw's pipeline while its state repeats (PM, ACR_PIPE_MEMO=0 turns it off): the cache key is made
     // from the state alone, and a pipeline once found only changes from its fast link to its optimised build, read
     // from the info the cache entry keeps.
     VkPipeline p;
@@ -2561,10 +2561,10 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
     vk_dlaa_draw(ex);
     record_fixed(ex);
     repeat_stats(ex, info);
-    if (texel_log_on) {   // AOC_TEXEL_LOG_FS (diagnosis)
+    if (texel_log_on) {   // ACR_TEXEL_LOG_FS (diagnosis)
         static const char *lf;
         if (texel_log_on < 0) {
-            lf = cfg_get("AOC_TEXEL_LOG_FS");
+            lf = cfg_get("ACR_TEXEL_LOG_FS");
             texel_log_on = lf && *lf;
         }
         if (texel_log_on) {
@@ -2573,12 +2573,12 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
             texel_log_match = !strncmp(k, lf, strlen(lf) < 8 ? strlen(lf) : 8);
         }
     }
-    {   // AOC_TEXEL_ZERO_FS (diagnosis): AOC_TEXEL_ZERO only in draws whose fragment shader key starts so
+    {   // ACR_TEXEL_ZERO_FS (diagnosis): ACR_TEXEL_ZERO only in draws whose fragment shader key starts so
         static const char *zf = (const char *)1;
         static int zany = -1;
-        if (zf == (const char *)1) zf = cfg_get("AOC_TEXEL_ZERO_FS");
+        if (zf == (const char *)1) zf = cfg_get("ACR_TEXEL_ZERO_FS");
         if (zany < 0) {
-            const char *e = cfg_get("AOC_TEXEL_ZERO");
+            const char *e = cfg_get("ACR_TEXEL_ZERO");
             zany = e && *e;
         }
         if (zany && (zf == NULL || !*zf)) key8(s.fs, B_fs_key);
@@ -2613,7 +2613,7 @@ static void bind_index(VkExec *ex, const void *data, uint64_t bytes, VkIndexType
     ex->recorded++;
 }
 
-extern uint32_t vk_dump_draw_first, vk_dump_draw_count;   // vk_dump.c (AOC_DUMP_UBO)
+extern uint32_t vk_dump_draw_first, vk_dump_draw_count;   // vk_dump.c (ACR_DUMP_UBO)
 extern int vk_dump_draw_indexed;                           // 0, or 1 + the NVN index type
 extern uint64_t vk_dump_draw_ibuf;
 
@@ -2735,9 +2735,9 @@ static void op_draw_idx_ind(VkExec *ex, const p_draw_idx_ind *d) {
 // behind a barrier on each side. Line loops would need the count on the CPU: skipped, logged once.
 int vk_quad_ind_convert(VkCommandBuffer cb, const VkMemSpan *src, VkBuffer *cmd, VkDeviceSize *cmd_off, VkBuffer *index);
 static void op_draw_ind(VkExec *ex, const p_draw_ind *d) {
-    static int skip = -1;   // AOC_SKIP_DRAW_IND=1 (diagnosis only: hides the game's GPU-driven effects)
+    static int skip = -1;   // ACR_SKIP_DRAW_IND=1 (diagnosis only: hides the game's GPU-driven effects)
     if (skip < 0) {
-        const char *e = cfg_get("AOC_SKIP_DRAW_IND");
+        const char *e = cfg_get("ACR_SKIP_DRAW_IND");
         skip = e && *e && strcmp(e, "0");
     }
     if (skip) return;

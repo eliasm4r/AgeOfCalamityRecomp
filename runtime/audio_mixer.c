@@ -7,8 +7,8 @@
 // DSP-ADPCM) along the sample path the voice clock consumes, resamples it linearly, runs the voice biquads, scales it
 // into its destination mix, folds the submixes, runs the mix effects and writes the device sink's stereo mix into a
 // single-producer single-consumer ring. The SDL audio thread drains that ring without taking any lock: an empty ring
-// plays silence and never blocks the render thread or the guest. AOC_AUDIO=none (or AOC_AUDIO_OFF) mixes without a
-// device; AOC_AUDIO_PREFILL_MS (0..500, default 20) is the queued audio the output waits for after start or underrun.
+// plays silence and never blocks the render thread or the guest. ACR_AUDIO=none (or ACR_AUDIO_OFF) mixes without a
+// device; ACR_AUDIO_PREFILL_MS (0..500, default 20) is the queued audio the output waits for after start or underrun.
 // The device's clock paces the render thread, as the audio hardware paces the Switch's DSP (audio_mixer_pace_ns): a
 // frame is rendered when the ring holds less than the output target, max(prefill, two device periods), so the queue and
 // the delay from the game to the speakers stay there and the host and device clocks cannot drift apart. LASRecomp and
@@ -63,8 +63,8 @@ typedef struct Mixer {
     unsigned reported;                             // one-time reports
     float voice_scratch[6][MAX_FRAME], filter_scratch[MAX_FRAME], output_scratch[MAX_FRAME * 2];
     double level_sum, level_peak; uint64_t level_count, level_frames; int first_sound_logged;
-    float *voice_peak; uint32_t *voice_frames;     // AOC_TRACE=audio: per voice since the last census (voice_census)
-    float mix_peak_in[256], mix_peak_out[256];     // AOC_TRACE=audio: per mix, before and after its effects
+    float *voice_peak; uint32_t *voice_frames;     // ACR_TRACE=audio: per voice since the last census (voice_census)
+    float mix_peak_in[256], mix_peak_out[256];     // ACR_TRACE=audio: per mix, before and after its effects
     int prefill;                                   // render blocks
 } Mixer;
 
@@ -72,8 +72,8 @@ static _Atomic float device_volume = 1.0f;
 
 float audio_device_volume(void) { return atomic_load(&device_volume); }
 
-// AOC_VOLUME: the player's volume in percent (0..100) on top of the game's own; AOC_MUTE silences it, and
-// AOC_MUTE_BACKGROUND does while another window has the focus (as HWDER's Sound options). Live settings (the menu),
+// ACR_VOLUME: the player's volume in percent (0..100) on top of the game's own; ACR_MUTE silences it, and
+// ACR_MUTE_BACKGROUND does while another window has the focus (as HWDER's Sound options). Live settings (the menu),
 // parsed again when cfg_version changes. Render thread only.
 int gfx_window_focused(void);   // gfx_present.c
 static float host_volume(void) {
@@ -83,9 +83,9 @@ static float host_volume(void) {
     unsigned ver = cfg_version();
     if (ver != seen) {
         seen = ver;
-        double pct = cfg_double("AOC_VOLUME");
-        v = cfg_bool("AOC_MUTE") ? 0.0f : (float)((pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100);
-        mute_bg = cfg_bool("AOC_MUTE_BACKGROUND");
+        double pct = cfg_double("ACR_VOLUME");
+        v = cfg_bool("ACR_MUTE") ? 0.0f : (float)((pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100);
+        mute_bg = cfg_bool("ACR_MUTE_BACKGROUND");
     }
     return mute_bg && !gfx_window_focused() ? 0.0f : v;
 }
@@ -97,7 +97,7 @@ static void report_once(Mixer *m, unsigned bit, const char *msg, int value) {
 }
 
 // ---- output: SDL3 audio stream fed from the ring
-// How much audio the output waits for before it starts, and again after an underrun: AOC_AUDIO_PREFILL_MS rounded up
+// How much audio the output waits for before it starts, and again after an underrun: ACR_AUDIO_PREFILL_MS rounded up
 // to whole 5 ms render blocks. Returns -1 for a value outside 0..500 ms.
 static int prefill_blocks_for(const char *e) {
     if (!e || !*e) return 4;
@@ -179,9 +179,9 @@ static void SDLCALL sdl_pull(void *user, SDL_AudioStream *stream, int additional
 }
 
 static void output_open(Mixer *m, int rate) {
-    const char *mode = cfg_get("AOC_AUDIO");
-    if ((mode && !strcmp(mode, "none")) || cfg_get("AOC_AUDIO_OFF")) {
-        rt_log("audio: AOC_AUDIO=none: mixing without a device");
+    const char *mode = cfg_get("ACR_AUDIO");
+    if ((mode && !strcmp(mode, "none")) || cfg_get("ACR_AUDIO_OFF")) {
+        rt_log("audio: ACR_AUDIO=none: mixing without a device");
         return;
     }
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -254,7 +254,7 @@ static float mix_peak(AudioRenderer *r, Mixer *m, int mix) {
 }
 static void mix_effects_traced(AudioRenderer *r, Mixer *m, int mix);
 
-// Voice census (AOC_TRACE=audio), with each level line: how many voices the game holds, plays and feeds, by sample
+// Voice census (ACR_TRACE=audio), with each level line: how many voices the game holds, plays and feeds, by sample
 // format, and the busiest playing ones: what they decode (peak of the samples since the last census), their volume
 // and where they go. Tells a stream that never starts (no voice) from one that plays silence (peak 0) or is muted
 // on the way (volume 0, a mix that leads nowhere).
@@ -346,7 +346,7 @@ static void voice_census(AudioRenderer *r, Mixer *m) {
     memset(m->mix_peak_out, 0, sizeof m->mix_peak_out);
 }
 
-// Level meter (AOC_TRACE=audio): one line per 5 s of output, and the first nonzero frame.
+// Level meter (ACR_TRACE=audio): one line per 5 s of output, and the first nonzero frame.
 static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) {
     diag_audio(lr, frames);
     if (!(rt_trace & RT_TRACE_AUDIO)) return;
@@ -405,10 +405,10 @@ void audio_mixer_open(AudioRenderer *r) {
     m->sink_written = calloc(sinks, sizeof(uint32_t));
     if (!m->sink_address || !m->sink_size || !m->sink_offset || !m->sink_old || !m->sink_written)
         rt_fatal("audio sink state allocation");
-    const char *pe = cfg_get("AOC_AUDIO_PREFILL_MS");
+    const char *pe = cfg_get("ACR_AUDIO_PREFILL_MS");
     m->prefill = prefill_blocks_for(pe);
     if (m->prefill < 0) {
-        rt_log("audio: AOC_AUDIO_PREFILL_MS=%s is not 0..500 ms: using 20", pe);
+        rt_log("audio: ACR_AUDIO_PREFILL_MS=%s is not 0..500 ms: using 20", pe);
         m->prefill = 4;
     }
     r->mixer = m;
@@ -818,7 +818,7 @@ static void mix_effects(AudioRenderer *r, int mix) {
     }
 }
 
-// mix_effects, with the mix's level before and after for the census (AOC_TRACE=audio).
+// mix_effects, with the mix's level before and after for the census (ACR_TRACE=audio).
 static void mix_effects_traced(AudioRenderer *r, Mixer *m, int mix) {
     int trace = (rt_trace & RT_TRACE_AUDIO) && mix < 256;
     if (trace) { float p = mix_peak(r, m, mix); if (p > m->mix_peak_in[mix]) m->mix_peak_in[mix] = p; }

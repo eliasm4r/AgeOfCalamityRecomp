@@ -1,4 +1,4 @@
-// --probe-cfg: aoc.ini parsing, the environment override and a missing file (cfg.c). Needs no game files.
+// --probe-cfg: settings.ini parsing, the environment override and a missing file (cfg.c). Needs no game files.
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -32,33 +32,33 @@ int probe_cfg(void) {
         "Realtime=0\r\n"
         "[Display]\r\n"
         "GPU_name = \"My GPU 1\"\r\n"
-        "AOC_Locale = de-DE\r\n"
+        "ACR_Locale = de-DE\r\n"
         "lang =\r\n"
         "trace = a\r\n"
         "trace = b\r\n"
         "no_such_setting = 1\r\n"
         "no equals sign\r\n"
         "last = no newline at the end";
-    plat_setenv("AOC_LOCALE", NULL);
-    plat_setenv("AOC_FPS60", NULL);
+    plat_setenv("ACR_LOCALE", NULL);
+    plat_setenv("ACR_FPS60", NULL);
     CHECK(plat_file_write(path, ini, sizeof ini - 1), "write the probe ini");
     CHECK(cfg_load(path) == 1, "load the probe ini");
-    CHECK(EQ(cfg_get("AOC_FPS60"), "0"), "value read, whitespace trimmed, lower-case key");
-    CHECK(EQ(cfg_get("AOC_REALTIME"), "0"), "key without spaces, mixed case");
-    CHECK(EQ(cfg_get("AOC_GPU_NAME"), "My GPU 1"), "quoted value, section ignored");
-    CHECK(EQ(cfg_get("AOC_LOCALE"), "de-DE"), "AOC_ prefix accepted in the file");
-    CHECK(cfg_get("AOC_LANG") == NULL, "empty value is unset");
-    CHECK(EQ(cfg_get("AOC_TRACE"), "b"), "later line wins");
-    CHECK(cfg_get("AOC_CLOTH_REALTIME") == NULL, "absent key is NULL");
-    CHECK(cfg_get("AOC_comment") == NULL, "comment is not a key");
-    CHECK(EQ(cfg_get("AOC_NO_SUCH_SETTING"), "1"), "unknown key is still readable");
-    plat_setenv("AOC_FPS60", "1");
-    CHECK(EQ(cfg_get("AOC_FPS60"), "1"), "environment overrides the file");
-    plat_setenv("AOC_FPS60", NULL);
-    CHECK(EQ(cfg_get("AOC_FPS60"), "0"), "file value returns when the variable is removed");
+    CHECK(EQ(cfg_get("ACR_FPS60"), "0"), "value read, whitespace trimmed, lower-case key");
+    CHECK(EQ(cfg_get("ACR_REALTIME"), "0"), "key without spaces, mixed case");
+    CHECK(EQ(cfg_get("ACR_GPU_NAME"), "My GPU 1"), "quoted value, section ignored");
+    CHECK(EQ(cfg_get("ACR_LOCALE"), "de-DE"), "ACR_ prefix accepted in the file");
+    CHECK(cfg_get("ACR_LANG") == NULL, "empty value is unset");
+    CHECK(EQ(cfg_get("ACR_TRACE"), "b"), "later line wins");
+    CHECK(cfg_get("ACR_CLOTH_REALTIME") == NULL, "absent key is NULL");
+    CHECK(cfg_get("ACR_comment") == NULL, "comment is not a key");
+    CHECK(EQ(cfg_get("ACR_NO_SUCH_SETTING"), "1"), "unknown key is still readable");
+    plat_setenv("ACR_FPS60", "1");
+    CHECK(EQ(cfg_get("ACR_FPS60"), "1"), "environment overrides the file");
+    plat_setenv("ACR_FPS60", NULL);
+    CHECK(EQ(cfg_get("ACR_FPS60"), "0"), "file value returns when the variable is removed");
     plat_file_delete(path);
     CHECK(cfg_load(path) == 0, "missing file is not an error");
-    CHECK(cfg_get("AOC_FPS60") == NULL, "missing file leaves no keys");
+    CHECK(cfg_get("ACR_FPS60") == NULL, "missing file leaves no keys");
 
     // cfg_set / cfg_save: only changed lines move, comments stay, a missing key goes under its section
     static const char before[] =
@@ -94,18 +94,18 @@ int probe_cfg(void) {
         "\r\n"
         "[audio]\r\n"
         "volume = 40\r\n";
-    plat_setenv("AOC_MOTION", NULL);
-    plat_setenv("AOC_VOLUME", NULL);
-    plat_setenv("AOC_RUMBLE_STRENGTH", NULL);
+    plat_setenv("ACR_MOTION", NULL);
+    plat_setenv("ACR_VOLUME", NULL);
+    plat_setenv("ACR_RUMBLE_STRENGTH", NULL);
     CHECK(plat_file_write(path, before, sizeof before - 1), "write the save ini");
     CHECK(cfg_load(path) == 1, "load the save ini");
     unsigned v0 = cfg_version();
-    cfg_set("AOC_FPS60", "0");
-    cfg_set("AOC_MOTION", "0");
-    cfg_set("AOC_RUMBLE_STRENGTH", "80");
-    cfg_set("AOC_VOLUME", "40");
+    cfg_set("ACR_FPS60", "0");
+    cfg_set("ACR_MOTION", "0");
+    cfg_set("ACR_RUMBLE_STRENGTH", "80");
+    cfg_set("ACR_VOLUME", "40");
     CHECK(cfg_version() == v0 + 4, "cfg_set bumps the version");
-    CHECK(EQ(cfg_get("AOC_FPS60"), "0") && EQ(cfg_get("AOC_VOLUME"), "40"), "cfg_set values are read back at once");
+    CHECK(EQ(cfg_get("ACR_FPS60"), "0") && EQ(cfg_get("ACR_VOLUME"), "40"), "cfg_set values are read back at once");
     CHECK(cfg_save_to(path) == 1, "cfg_save_to writes");
     uint64_t got_n = 0;
     uint8_t *got = plat_file_read(path, &got_n);
@@ -117,16 +117,16 @@ int probe_cfg(void) {
     got = plat_file_read(path, &got_n);
     CHECK(got && got_n == sizeof after - 1 && !memcmp(got, after, got_n), "a save with nothing changed keeps the file");
     free(got);
-    CHECK(cfg_load(path) == 1 && EQ(cfg_get("AOC_FPS60"), "0") && EQ(cfg_get("AOC_MOTION"), "0") &&
-          EQ(cfg_get("AOC_RUMBLE_STRENGTH"), "80") && EQ(cfg_get("AOC_VOLUME"), "40") &&
-          EQ(cfg_get("AOC_ROMFS_MODS"), "C:\\mods"), "the saved file reads back");
-    const char *held = cfg_get("AOC_VOLUME");
-    plat_setenv("AOC_VOLUME", "70");
-    cfg_set("AOC_VOLUME", "90");
-    CHECK(cfg_from_env("AOC_VOLUME") && EQ(cfg_get("AOC_VOLUME"), "70"), "environment wins over cfg_set");
+    CHECK(cfg_load(path) == 1 && EQ(cfg_get("ACR_FPS60"), "0") && EQ(cfg_get("ACR_MOTION"), "0") &&
+          EQ(cfg_get("ACR_RUMBLE_STRENGTH"), "80") && EQ(cfg_get("ACR_VOLUME"), "40") &&
+          EQ(cfg_get("ACR_ROMFS_MODS"), "C:\\mods"), "the saved file reads back");
+    const char *held = cfg_get("ACR_VOLUME");
+    plat_setenv("ACR_VOLUME", "70");
+    cfg_set("ACR_VOLUME", "90");
+    CHECK(cfg_from_env("ACR_VOLUME") && EQ(cfg_get("ACR_VOLUME"), "70"), "environment wins over cfg_set");
     CHECK(EQ(held, "40"), "a pointer cfg_get handed out stays valid after cfg_set");
-    plat_setenv("AOC_VOLUME", NULL);
-    CHECK(!cfg_from_env("AOC_VOLUME") && EQ(cfg_get("AOC_VOLUME"), "90"), "cfg_set value returns without the variable");
+    plat_setenv("ACR_VOLUME", NULL);
+    CHECK(!cfg_from_env("ACR_VOLUME") && EQ(cfg_get("ACR_VOLUME"), "90"), "cfg_set value returns without the variable");
     plat_file_delete(path);
     CHECK(cfg_save_to(path) == 1, "cfg_save_to creates a missing file");
     got = plat_file_read(path, &got_n);
@@ -138,7 +138,7 @@ int probe_cfg(void) {
     CHECK(m && EQ(m->def, "1") && m->live, "meta: fps60 defaults to 1 and is live");
     m = cfg_meta("ASYNC_PREEMPT");
     CHECK(m && EQ(m->values, "0|1|2") && !m->live, "meta: async_preempt takes 0|1|2 and needs a restart");
-    m = cfg_meta("aoc_vk_present");
+    m = cfg_meta("acr_vk_present");
     CHECK(m && EQ(m->key, "VK_PRESENT") && EQ(m->values, "mailbox|fifo|immediate") && m->live,
           "meta: prefix and case are accepted");
     m = cfg_meta("RUMBLE_STRENGTH");
@@ -148,20 +148,20 @@ int probe_cfg(void) {
     CHECK(cfg_meta("BIND_A") == NULL && cfg_meta("FPS_COUNTER") == NULL && cfg_meta("NO_SUCH") == NULL,
           "meta: keys the menu does not show are NULL");
 
-    // cfg_reset: the key's active lines leave aoc.ini, the commented example stays
+    // cfg_reset: the key's active lines leave settings.ini, the commented example stays
     static const char rbase[] = "[audio]\n# volume = 100\n[input]\nmotion = 0\n";
     static const char *const vol[] = {"VOLUME"};
-    plat_setenv("AOC_VOLUME", NULL);
+    plat_setenv("ACR_VOLUME", NULL);
     CHECK(plat_file_write(path, rbase, sizeof rbase - 1), "write the reset ini");
     CHECK(cfg_load(path) == 1, "load the reset ini");
-    cfg_set("AOC_VOLUME", "40");
+    cfg_set("ACR_VOLUME", "40");
     CHECK(cfg_save_to(path) == 1 && cfg_last_save_ok(), "reset: volume saved");
     got = plat_file_read(path, &got_n);
     CHECK(got && strstr((const char *)got, "\nvolume = 40\n"), "reset: the active line is in the file");
     free(got);
     unsigned v1 = cfg_version();
     CHECK(cfg_reset(vol, 1) == 1, "reset: one key reset");
-    CHECK(cfg_version() > v1 && cfg_get("AOC_VOLUME") == NULL, "reset: the value is gone in memory, the version moved");
+    CHECK(cfg_version() > v1 && cfg_get("ACR_VOLUME") == NULL, "reset: the value is gone in memory, the version moved");
     CHECK(cfg_reset(vol, 1) == 0, "reset: a key already reset counts 0");
     CHECK(cfg_save_to(path) == 1, "reset: save");
     got = plat_file_read(path, &got_n);
@@ -169,31 +169,31 @@ int probe_cfg(void) {
           "reset: no active volume line, the commented example and the other keys stay");
     if (got && (got_n != sizeof rbase - 1 || memcmp(got, rbase, got_n))) fprintf(stderr, "---- saved:\n%s\n----\n", got);
     free(got);
-    cfg_set("AOC_VOLUME", "55");
-    CHECK(cfg_reset(vol, 1) == 1 && cfg_get("AOC_VOLUME") == NULL, "reset: a value set after a save resets too");
-    cfg_set("AOC_VOLUME", "60");
-    CHECK(cfg_save_to(path) == 1 && EQ(cfg_get("AOC_VOLUME"), "60"), "reset then set before the save: the set wins");
+    cfg_set("ACR_VOLUME", "55");
+    CHECK(cfg_reset(vol, 1) == 1 && cfg_get("ACR_VOLUME") == NULL, "reset: a value set after a save resets too");
+    cfg_set("ACR_VOLUME", "60");
+    CHECK(cfg_save_to(path) == 1 && EQ(cfg_get("ACR_VOLUME"), "60"), "reset then set before the save: the set wins");
     got = plat_file_read(path, &got_n);
     CHECK(got && strstr((const char *)got, "\nvolume = 60\n"), "reset then set: the new line is written");
     free(got);
 
     // an active line with an empty value has no entry in memory; Reset still removes it from the file
     static const char rempty[] = "[audio]\n# volume = 100\nvolume =\n[input]\nmotion = 0\n";
-    CHECK(plat_file_write(path, rempty, sizeof rempty - 1) && cfg_load(path) == 1 && cfg_get("AOC_VOLUME") == NULL,
+    CHECK(plat_file_write(path, rempty, sizeof rempty - 1) && cfg_load(path) == 1 && cfg_get("ACR_VOLUME") == NULL,
           "reset: load an ini with an empty value");
     CHECK(cfg_reset(vol, 1) == 0 && cfg_save_to(path) == 1, "reset: an empty-valued key saves");
     got = plat_file_read(path, &got_n);
     CHECK(got && got_n == sizeof rbase - 1 && !memcmp(got, rbase, got_n), "reset: the empty-valued line is gone");
     free(got);
-    cfg_set("AOC_VOLUME", "60");
+    cfg_set("ACR_VOLUME", "60");
     CHECK(cfg_save_to(path) == 1, "reset: volume 60 again for the environment case");
 
     // a key the environment sets is skipped and keeps its file line
-    CHECK(cfg_load(path) == 1 && EQ(cfg_get("AOC_VOLUME"), "60"), "reset: reload");
-    plat_setenv("AOC_VOLUME", "70");
+    CHECK(cfg_load(path) == 1 && EQ(cfg_get("ACR_VOLUME"), "60"), "reset: reload");
+    plat_setenv("ACR_VOLUME", "70");
     CHECK(cfg_reset(vol, 1) == 0, "reset: an environment-set key is skipped");
-    plat_setenv("AOC_VOLUME", NULL);
-    CHECK(EQ(cfg_get("AOC_VOLUME"), "60"), "reset: the skipped key keeps its value");
+    plat_setenv("ACR_VOLUME", NULL);
+    CHECK(EQ(cfg_get("ACR_VOLUME"), "60"), "reset: the skipped key keeps its value");
     CHECK(cfg_save_to(path) == 1, "reset: save after a skip");
     got = plat_file_read(path, &got_n);
     CHECK(got && strstr((const char *)got, "\nvolume = 60\n"), "reset: the skipped key keeps its file line");
@@ -201,13 +201,13 @@ int probe_cfg(void) {
 
     // a failed save: the call fails, cfg_last_save_ok says so, the value stays set and a later save works
     CHECK(cfg_last_save_ok() == 1, "save status: ok after a good save");
-    cfg_set("AOC_VOLUME", "20");
+    cfg_set("ACR_VOLUME", "20");
     char bad[1100];
     snprintf(bad, sizeof bad, "%s", path);
     strcpy(plat_last_sep(bad) + 1, "no-such-dir/cfg-probe.ini");
-    CHECK(cfg_save_to(bad) == 0 && cfg_last_save_ok() == 0 && EQ(cfg_get("AOC_VOLUME"), "20"),
+    CHECK(cfg_save_to(bad) == 0 && cfg_last_save_ok() == 0 && EQ(cfg_get("ACR_VOLUME"), "20"),
           "save status: an unwritable path fails, the value stays");
-    cfg_set("AOC_VOLUME", "21");
+    cfg_set("ACR_VOLUME", "21");
     CHECK(plat_file_write(path, rbase, sizeof rbase - 1), "write the read-only ini");
     CHECK(plat_file_set_readonly(path, 1), "set the file read-only");
 #ifndef _WIN32
@@ -215,7 +215,7 @@ int probe_cfg(void) {
     if (geteuid() == 0) printf("cfg: read-only save check skipped: running as root\n");
     else
 #endif
-    CHECK(cfg_save_to(path) == 0 && cfg_last_save_ok() == 0 && EQ(cfg_get("AOC_VOLUME"), "21"),
+    CHECK(cfg_save_to(path) == 0 && cfg_last_save_ok() == 0 && EQ(cfg_get("ACR_VOLUME"), "21"),
           "save status: a read-only file fails, cfg_get returns the new value");
     plat_file_set_readonly(path, 0);
     CHECK(cfg_save_to(path) == 1 && cfg_last_save_ok() == 1, "save status: the retry after the failure works");
@@ -281,19 +281,19 @@ int probe_cfg(void) {
           "pad stick: a square gate's corner stays on the unit circle");
     input_pad_stick(0, 32767 / 2 + 1, 0.2f, st);
     CHECK(abs(st[1] - 32767 * 3 / 8) <= 3, "pad stick: half deflection past a 20% zone is (0.5 - 0.2) / 0.8 of full");
-    plat_setenv("AOC_STICK_DEADZONE", "12");
-    plat_setenv("AOC_LSTICK_DEADZONE", NULL);
-    plat_setenv("AOC_RSTICK_DEADZONE", NULL);
+    plat_setenv("ACR_STICK_DEADZONE", "12");
+    plat_setenv("ACR_LSTICK_DEADZONE", NULL);
+    plat_setenv("ACR_RSTICK_DEADZONE", NULL);
     CHECK(fabsf(input_pad_deadzone(0) - 0.12f) < 1e-6f && fabsf(input_pad_deadzone(1) - 0.12f) < 1e-6f,
           "pad dead zone: both sticks follow stick_deadzone while lstick/rstick are unset");
-    plat_setenv("AOC_RSTICK_DEADZONE", "20");
+    plat_setenv("ACR_RSTICK_DEADZONE", "20");
     CHECK(fabsf(input_pad_deadzone(0) - 0.12f) < 1e-6f && fabsf(input_pad_deadzone(1) - 0.20f) < 1e-6f,
           "pad dead zone: rstick_deadzone sets the right stick alone");
-    plat_setenv("AOC_LSTICK_DEADZONE", "80");
+    plat_setenv("ACR_LSTICK_DEADZONE", "80");
     CHECK(fabsf(input_pad_deadzone(0) - 0.5f) < 1e-6f, "pad dead zone: clamped to 50%");
-    plat_setenv("AOC_STICK_DEADZONE", NULL);
-    plat_setenv("AOC_LSTICK_DEADZONE", NULL);
-    plat_setenv("AOC_RSTICK_DEADZONE", NULL);
+    plat_setenv("ACR_STICK_DEADZONE", NULL);
+    plat_setenv("ACR_LSTICK_DEADZONE", NULL);
+    plat_setenv("ACR_RSTICK_DEADZONE", NULL);
     CHECK(input_stick_percent(32767, 0) > 99.99 && input_stick_percent(32767, 0) < 100.01 &&
               input_stick_percent(0, 0) == 0 && fabs(input_stick_percent(3000, -4000) - 5000 * 100.0 / 32767) < 1e-9,
           "stick percent: an axis's end is 100%, the centre 0%, round in between");
@@ -400,30 +400,30 @@ int probe_cfg(void) {
     CHECK(!strcmp(line, "none"), "edit: a stick direction without keys is none");
     // defaults live in the CfgMeta table: cfg_value and the typed accessors fall back to it
     cfg_load("cfg-probe-missing.ini");
-    plat_setenv("AOC_FPS60", NULL);
-    plat_setenv("AOC_MOUSE_SENS", NULL);
-    plat_setenv("AOC_FREE_CORES", NULL);
-    CHECK(cfg_bool("AOC_FPS60") == 1, "default: unset FPS60 is on");
-    CHECK(EQ(cfg_value("AOC_VK_PRESENT"), "mailbox") && cfg_int("AOC_SPLIT_DRAWS") == 64, "default: text and integer");
-    plat_setenv("AOC_MOUSE_SENS", "2.5");
-    CHECK(cfg_double("AOC_MOUSE_SENS") == 2.5, "double: the environment value");
-    plat_setenv("AOC_MOUSE_SENS", "fast");
-    CHECK(cfg_double("AOC_MOUSE_SENS") == 1.0, "double: a value that does not parse gives the default");
-    plat_setenv("AOC_MOUSE_SENS", NULL);
-    cfg_set("AOC_MOUSE_SENS", "3");
-    CHECK(cfg_double("AOC_MOUSE_SENS") == 3.0 && cfg_int("AOC_MOUSE_SENS") == 3, "a cfg_set value beats the default");
-    CHECK(cfg_bool("AOC_FREE_CORES") == 0, "free_cores unset: off");
-    plat_setenv("AOC_FREE_CORES", "0");
-    CHECK(cfg_bool("AOC_FREE_CORES") == 0, "free_cores 0 gives the same as unset");
-    plat_setenv("AOC_FREE_CORES", "1");
-    CHECK(cfg_bool("AOC_FREE_CORES") == 1, "free_cores 1: on");
-    plat_setenv("AOC_FREE_CORES", NULL);
+    plat_setenv("ACR_FPS60", NULL);
+    plat_setenv("ACR_MOUSE_SENS", NULL);
+    plat_setenv("ACR_FREE_CORES", NULL);
+    CHECK(cfg_bool("ACR_FPS60") == 1, "default: unset FPS60 is on");
+    CHECK(EQ(cfg_value("ACR_VK_PRESENT"), "mailbox") && cfg_int("ACR_SPLIT_DRAWS") == 64, "default: text and integer");
+    plat_setenv("ACR_MOUSE_SENS", "2.5");
+    CHECK(cfg_double("ACR_MOUSE_SENS") == 2.5, "double: the environment value");
+    plat_setenv("ACR_MOUSE_SENS", "fast");
+    CHECK(cfg_double("ACR_MOUSE_SENS") == 1.0, "double: a value that does not parse gives the default");
+    plat_setenv("ACR_MOUSE_SENS", NULL);
+    cfg_set("ACR_MOUSE_SENS", "3");
+    CHECK(cfg_double("ACR_MOUSE_SENS") == 3.0 && cfg_int("ACR_MOUSE_SENS") == 3, "a cfg_set value beats the default");
+    CHECK(cfg_bool("ACR_FREE_CORES") == 0, "free_cores unset: off");
+    plat_setenv("ACR_FREE_CORES", "0");
+    CHECK(cfg_bool("ACR_FREE_CORES") == 0, "free_cores 0 gives the same as unset");
+    plat_setenv("ACR_FREE_CORES", "1");
+    CHECK(cfg_bool("ACR_FREE_CORES") == 1, "free_cores 1: on");
+    plat_setenv("ACR_FREE_CORES", NULL);
     // 0.1.9's pad_layout = xbox_prompts (cfg.c migrate): read as the Nintendo layout with the Xbox prompts, saved so
-    plat_setenv("AOC_PAD_LAYOUT", NULL);
-    plat_setenv("AOC_PROMPTS", NULL);
+    plat_setenv("ACR_PAD_LAYOUT", NULL);
+    plat_setenv("ACR_PROMPTS", NULL);
     static const char old_layout[] = "[input]\r\npad_layout = xbox_prompts\r\n";
     CHECK(plat_file_write(path, old_layout, sizeof old_layout - 1) && cfg_load(path) == 1 &&
-              EQ(cfg_get("AOC_PAD_LAYOUT"), "nintendo") && EQ(cfg_get("AOC_PROMPTS"), "xbox"),
+              EQ(cfg_get("ACR_PAD_LAYOUT"), "nintendo") && EQ(cfg_get("ACR_PROMPTS"), "xbox"),
           "0.1.9's pad_layout = xbox_prompts reads as nintendo with prompts = xbox");
     CHECK(cfg_save_to(path) == 1, "the read pad layout and prompts save");
     uint64_t saved_n = 0;
@@ -433,7 +433,7 @@ int probe_cfg(void) {
     free(saved);
     static const char old_layout_own[] = "[input]\r\npad_layout = xbox_prompts\r\nprompts = nintendo\r\n";
     CHECK(plat_file_write(path, old_layout_own, sizeof old_layout_own - 1) && cfg_load(path) == 1 &&
-              EQ(cfg_get("AOC_PAD_LAYOUT"), "nintendo") && EQ(cfg_get("AOC_PROMPTS"), "nintendo"),
+              EQ(cfg_get("ACR_PAD_LAYOUT"), "nintendo") && EQ(cfg_get("ACR_PROMPTS"), "nintendo"),
           "a prompts line of the file's own wins over 0.1.9's pad_layout = xbox_prompts");
     plat_file_delete(path);
     cfg_load("cfg-probe-missing.ini");
@@ -443,7 +443,7 @@ int probe_cfg(void) {
         if (!*m->def) continue;
         listed++;
         char name[96];
-        snprintf(name, sizeof name, "AOC_%s", m->key);
+        snprintf(name, sizeof name, "ACR_%s", m->key);
         plat_setenv(name, "");
         CHECK(EQ(cfg_value(name), m->def), "cfg_value returns the table default");
         int ok = 0;

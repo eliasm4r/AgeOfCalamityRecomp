@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- The application manifest of aoc.exe, embedded by aoc.rc (tools/build.py compiles it with windres on Windows only).
+<!-- The application manifest of AgeOfCalamityRecomp.exe, embedded by AgeOfCalamityRecomp.rc (tools/build.py compiles it with windres on Windows only).
      Adapted from astral-chain-pc-recomp runtime/astralchain.manifest (MIT, THIRD_PARTY_NOTICES.md).
      activeCodePage UTF-8 (Windows 10 1903 and later): the narrow file functions (fopen, CreateFileA,
      GetModuleFileNameA) and getenv carry UTF-8, the encoding platform/win32.c and fs_host.c convert with, so a folder

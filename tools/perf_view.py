@@ -3,7 +3,7 @@
 and tells where the game loses time.
 
 Usage:
-    python tools/perf_view.py                       # the newest session of dist/aoc-windows or dist/aoc-deck
+    python tools/perf_view.py                       # the newest session of dist/windows or dist/steamdeck
     python tools/perf_view.py <file.csv | logs/performance folder> [--rows] [--stutters N]
 
 Shows: length, mean fps, how long it stayed under 28 and 25 fps, the stutters (seconds with a frame over 50 ms)
@@ -32,7 +32,7 @@ def newest_csv(arg):
             return files[-1] if files else None
         return p
     files = []
-    for d in ("aoc-windows", "aoc-deck"):
+    for d in ("windows", "steamdeck"):
         files += (ROOT / "dist" / d / "logs" / "performance").glob("*.csv")
     here = Path("logs/performance")
     if here.is_dir():

@@ -12,10 +12,10 @@
 // - A GPU write within the submission (UpdateUniformBuffer, a storage buffer a shader writes, a buffer copy or fill,
 //   an image-to-buffer copy: vk_usnap_drop) drops the copies it touches from then on, so later draws read the result.
 // - The arena goes back to a free list once the submission's fence is done (completion thread).
-// The design follows MacNativeGames' AOC_UBO_SNAPSHOT (games/totk/third_party/d2r_gfx/gfx/nvn/nvn_mtl.m usnap_take,
+// The design follows MacNativeGames' ACR_UBO_SNAPSHOT (games/totk/third_party/d2r_gfx/gfx/nvn/nvn_mtl.m usnap_take,
 // usnap_drop; MIT, Copyright (c) 2026 jhaizhou); the code is ours.
 // The copy is taken where vk_exec_record starts: at the submit call when the replay runs on the submitting thread, later
-// with AOC_REPLAY_ASYNC. AOC_UBO_SNAPSHOT=0 binds live memory as before; =ab alternates (AOC_AB).
+// with ACR_REPLAY_ASYNC. ACR_UBO_SNAPSHOT=0 binds live memory as before; =ab alternates (ACR_AB).
 #include <stdlib.h>
 #include <string.h>
 

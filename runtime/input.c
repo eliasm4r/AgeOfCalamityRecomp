@@ -1,6 +1,6 @@
 // Host input for nn::hid (runtime/ov_input.c): an SDL3 gamepad (no SDL window needed), the keyboard and the mouse,
 // merged into Switch npad button bits and stick axes. Button order follows libnx HidNpadButton (ISC). The key and pad
-// bindings are the tables in input_map.c (aoc.ini overrides them). The keyboard and the mouse come from the window
+// bindings are the tables in input_map.c (settings.ini overrides them). The keyboard and the mouse come from the window
 // system's back end (input_wsys.h: input_win.c with Win32, input_sdl.c with SDL), which also owns the cursor capture.
 // Keys and their map: docs/controls.md.
 // The gamepad also rumbles (input_rumble) and, when it has a gyro and an accelerometer, feeds the six-axis sensor from a
@@ -30,13 +30,13 @@ static SDL_Gamepad *pad;
 static uint64_t next_scan;
 static int pad_rumble;               // the open gamepad has rumble motors
 static volatile int32_t pad_labels[4];  // ... and the labels of its south, east, west, north buttons (PAD_LABEL_*), any thread
-static int pad_east_a;               // ... and labels its east face button A (Nintendo layout under AOC_PAD_LAYOUT=auto)
+static int pad_east_a;               // ... and labels its east face button A (Nintendo layout under ACR_PAD_LAYOUT=auto)
 static int pad_layout = -1;          // PAD_LAYOUT_* in effect for the open gamepad, -1 to pick again; live (cfg_version)
 static unsigned pad_layout_seen;
 static volatile int32_t pad_layout_shown = -1;   // pad_layout for the menu (any thread), -1 without a gamepad
 static SDL_JoystickID sensor_pad;    // the gamepad whose sensors the motion thread set up, 0 none
 static int sensor_ok;                // ... and it has both sensors, enabled
-static int motion_thread;            // 0 not started, 1 running, -1 off (AOC_MOTION=0, no SDL)
+static int motion_thread;            // 0 not started, 1 running, -1 off (ACR_MOTION=0, no SDL)
 
 // SDL buttons of the gamepad inputs (input_map.h PAD_*), by position; PAD_ZL and PAD_ZR are the triggers (axes).
 static const SDL_GamepadButton pad_sdl[PAD_COUNT] = {
@@ -50,7 +50,7 @@ static const SDL_GamepadButton pad_sdl[PAD_COUNT] = {
     [PAD_LPADDLE2] = SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, [PAD_RPADDLE2] = SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,
 };
 
-// AOC_INPUT_SCRIPT=<file>: lines "<frame> <button> [hold]" or "<frame> LSTICK|RSTICK <x> <y> [hold]", ORed into the real input.
+// ACR_INPUT_SCRIPT=<file>: lines "<frame> <button> [hold]" or "<frame> LSTICK|RSTICK <x> <y> [hold]", ORed into the real input.
 // <frame> and its hold are 60 Hz ticks of game time since the first present (frame_step_ticks: presents at 60 fps), so
 // the title menus get the presses at the same game time at any frame limit. A line "@<ms> ..." is timed instead: <ms>
 // and its hold are milliseconds of the world clock (frame_step_world_us, game time since the loaded save's first
@@ -69,10 +69,10 @@ static int script_mixed;             // the script has timed lines: its untimed 
 
 static void script_load(void) {
     script_state = 1;
-    const char *path = cfg_get("AOC_INPUT_SCRIPT");
+    const char *path = cfg_get("ACR_INPUT_SCRIPT");
     if (!path || !*path) return;
     FILE *f = fopen(path, "r");
-    if (!f) { rt_log("input: cannot open AOC_INPUT_SCRIPT %s", path); return; }
+    if (!f) { rt_log("input: cannot open ACR_INPUT_SCRIPT %s", path); return; }
     char line[256];
     int cap = 0, ln = 0;
     while (fgets(line, sizeof line, f)) {
@@ -133,7 +133,7 @@ static void script_apply(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     }
 }
 
-// AOC_INPUT_RECORD=<file>: writes the merged input as AOC_INPUT_SCRIPT lines, one per button press and per stick
+// ACR_INPUT_RECORD=<file>: writes the merged input as ACR_INPUT_SCRIPT lines, one per button press and per stick
 // segment, so a played session replays as a script. A stick segment ends when an axis moves by more than REC_STICK_STEP.
 // An event that begins on the world clock is written timed ("@<ms>", hold in ms), one before it in ticks
 // (frame_step_ticks). When the world clock starts, held buttons and sticks are cut there and go on as timed events.
@@ -176,12 +176,12 @@ static void rec_flush_all(void) {
 
 static void rec_apply(uint64_t b, const int32_t sl[2], const int32_t sr[2]) {
     if (!rec_state) {
-        const char *path = cfg_get("AOC_INPUT_RECORD");   // unset: a logged game run records under logs/sessions (diag.c)
+        const char *path = cfg_get("ACR_INPUT_RECORD");   // unset: a logged game run records under logs/sessions (diag.c)
         if (!path || !*path) path = diag_record_path();
         rec = path && *path ? fopen(path, "w") : NULL;
         rec_state = rec ? 1 : -1;
-        if (path && *path && !rec) rt_log("input: cannot open AOC_INPUT_RECORD %s", path);
-        if (rec) { fprintf(rec, "# Recorded input (AOC_INPUT_RECORD); frame = 60 Hz ticks of game time, @ms = world clock.\n"); atexit(rec_flush_all);
+        if (path && *path && !rec) rt_log("input: cannot open ACR_INPUT_RECORD %s", path);
+        if (rec) { fprintf(rec, "# Recorded input (ACR_INPUT_RECORD); frame = 60 Hz ticks of game time, @ms = world clock.\n"); atexit(rec_flush_all);
                    rt_log("input: recording to %s", path); }
     }
     if (rec_state != 1) return;
@@ -224,26 +224,26 @@ static void rec_apply(uint64_t b, const int32_t sl[2], const int32_t sr[2]) {
     if (wrote) fflush(rec);
 }
 
-static float mouse_sens = -1;              // AOC_MOUSE_SENS, 0 = mouse camera off; live (cfg_version)
+static float mouse_sens = -1;              // ACR_MOUSE_SENS, 0 = mouse camera off; live (cfg_version)
 static unsigned mouse_sens_seen;
 
 static float mouse_sens_get(void) {
     unsigned ver = cfg_version();
     if (mouse_sens >= 0 && ver == mouse_sens_seen) return mouse_sens;
     mouse_sens_seen = ver;
-    double v = cfg_double("AOC_MOUSE_SENS");
+    double v = cfg_double("ACR_MOUSE_SENS");
     mouse_sens = (float)(v < 0 ? 0 : v > 10 ? 10 : v);
     return mouse_sens;
 }
 
 
-// ---- walk key: the keyboard's stick samples scaled down while a key is held (AOC_WALK_KEY, AOC_WALK_SCALE)
+// ---- walk key: the keyboard's stick samples scaled down while a key is held (ACR_WALK_KEY, ACR_WALK_SCALE)
 // A keyboard key is all or nothing, so every keyboard-driven stick sample is +/-32767 and the game only ever sees a
 // full tilt. Holding this key scales those two samples, which gives the half tilt a gamepad gets from its analog range,
 // so the keyboard can walk as well as run. yuzu and eden do the same with their modifier and modifier_scale settings.
 // Only the keyboard is scaled: the gamepad's axes and the mouse camera sample their own values.
-static int walk_key = KEY_NONE;        // AOC_WALK_KEY as a KEY_*, KEY_NONE = off; live (cfg_version)
-static float walk_scale = 0.51f;       // AOC_WALK_SCALE, 0.2 to 0.9; live (cfg_version)
+static int walk_key = KEY_NONE;        // ACR_WALK_KEY as a KEY_*, KEY_NONE = off; live (cfg_version)
+static float walk_scale = 0.51f;       // ACR_WALK_SCALE, 0.2 to 0.9; live (cfg_version)
 static unsigned walk_seen = ~0u;
 
 // The ini takes the key names the Controls tab writes; a hand-written line may spell them in any case.
@@ -261,7 +261,7 @@ static void walk_get(void) {
     unsigned ver = cfg_version();
     if (ver == walk_seen) return;
     walk_seen = ver;
-    const char *name = cfg_value("AOC_WALK_KEY");   // "none" (the default) turns the key off
+    const char *name = cfg_value("ACR_WALK_KEY");   // "none" (the default) turns the key off
     int key = KEY_NONE;
     if (*name && !name_matches(name, "none")) {
         for (int k = KEY_A; k < KEY_COUNT && key == KEY_NONE; k++)
@@ -271,10 +271,10 @@ static void walk_get(void) {
     // 0.51 rather than 0.5: a keyboard sample is 32767, and 32767 * 0.5 = 16383 falls one short of stick_bits'
     // STICK_DIR (16384), which would leave the game's stick-direction bits clear while the walk key is held. The value
     // in the settings table carries that default; this code only rejects what the table's range does not allow.
-    const char *sv = cfg_value("AOC_WALK_SCALE");
+    const char *sv = cfg_value("ACR_WALK_SCALE");
     char *end;
     double d = strtod(sv, &end);
-    double s = end == sv || *end || !(d >= 0.2 && d <= 0.9) ? strtod(cfg_meta("AOC_WALK_SCALE")->def, NULL) : d;
+    double s = end == sv || *end || !(d >= 0.2 && d <= 0.9) ? strtod(cfg_meta("ACR_WALK_SCALE")->def, NULL) : d;
     if (key != walk_key || (float)s != walk_scale) {
         walk_key = key;
         walk_scale = (float)s;
@@ -285,7 +285,7 @@ static void walk_get(void) {
 
 // The mouse camera as a right-stick sample, held for the whole presented frame. Under `lock`. The sample is divided by
 // the camera speed factor the game runs with (camera_speed.c, cam_speed_applied), which multiplies every right-stick
-// turn rate, so AOC_MOUSE_SENS alone sets the mouse's speed; below 1 the sample stays within the stick's range, so the
+// turn rate, so ACR_MOUSE_SENS alone sets the mouse's speed; below 1 the sample stays within the stick's range, so the
 // mouse's top speed drops with the factor.
 static void mouse_camera(int32_t out[2]) {
     static uint64_t frame = ~0ull, t0;
@@ -373,7 +373,7 @@ static int pad_layout_get(void) {
     if (pad_layout >= 0 && ver == pad_layout_seen) return pad_layout;
     pad_layout_seen = ver;
     int was = pad_layout;
-    const char *set = cfg_value("AOC_PAD_LAYOUT");
+    const char *set = cfg_value("ACR_PAD_LAYOUT");
     pad_layout = input_pad_layout_pick(set, pad_east_a);
     if (pad_layout != was)
         rt_log("input: gamepad layout %s (pad_layout = %s)", pad_layout == PAD_LAYOUT_XBOX ? "xbox" : "nintendo", set);
@@ -381,7 +381,7 @@ static int pad_layout_get(void) {
     return pad_layout;
 }
 
-// The AOC_BIND_* values last applied, one per line; the tables are built again when one changes (the menu's remapping rows write
+// The ACR_BIND_* values last applied, one per line; the tables are built again when one changes (the menu's remapping rows write
 // them while the game runs). Under lock.
 static unsigned binds_seen = ~0u;
 static char binds_applied[4096];
@@ -394,7 +394,7 @@ static void binds_refresh(void) {
     size_t len = 0;
     for (int a = 0; a < ACTION_COUNT; a++) {
         char var[32];
-        snprintf(var, sizeof var, "AOC_BIND_%s", input_action_name(a));
+        snprintf(var, sizeof var, "ACR_BIND_%s", input_action_name(a));
         const char *s = cfg_get(var);
         len += (size_t)snprintf(now + len, len < sizeof now ? sizeof now - len : 0, "%s\n", s ? s : "");
     }
@@ -403,16 +403,16 @@ static void binds_refresh(void) {
     input_map_configure();
 }
 
-// AOC_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
+// ACR_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
 // (-32768..32767, down is +y), attached before the first scan so it is the gamepad the game reads: drift and full
 // deflection go through the same mapping and dead zone as a real pad.
 static void test_pad_attach(void) {
     static SDL_Joystick *joy;   // kept open: a virtual joystick's axes are set through an open handle
-    const char *e = cfg_get("AOC_TEST_PAD");
+    const char *e = cfg_get("ACR_TEST_PAD");
     int v[4];
     if (!e || !*e) return;
     if (sscanf(e, "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]) != 4) {
-        rt_log("input: AOC_TEST_PAD=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", e);
+        rt_log("input: ACR_TEST_PAD=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", e);
         return;
     }
     SDL_VirtualJoystickDesc d;
@@ -436,8 +436,8 @@ static void test_pad_attach(void) {
 
 static void start(void) {
     binds_refresh();
-    const char *e = cfg_get("AOC_INPUT");
-    if (e && !strcmp(e, "none")) { state = -1; rt_log("input: disabled (AOC_INPUT=none)"); return; }
+    const char *e = cfg_get("ACR_INPUT");
+    if (e && !strcmp(e, "none")) { state = -1; rt_log("input: disabled (ACR_INPUT=none)"); return; }
     if (!SDL_Init(SDL_INIT_GAMEPAD)) { state = -1; rt_log("input: SDL gamepad init failed (%s), keyboard only", SDL_GetError()); }
     else state = 1;
     if (state == 1) test_pad_attach();
@@ -472,7 +472,7 @@ static int pad_physical(uint8_t pd[PAD_COUNT]) {
     return 1;
 }
 
-// Under lock, state 1: the open gamepad's buttons (Switch bits after AOC_PAD_LAYOUT and the AOC_BIND_* lines) and
+// Under lock, state 1: the open gamepad's buttons (Switch bits after ACR_PAD_LAYOUT and the ACR_BIND_* lines) and
 // sticks; 0 without a connected gamepad.
 static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     uint8_t pd[PAD_COUNT] = {0};
@@ -507,15 +507,15 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
         binds_refresh();
         if (state == 1) {
             pad_read(&b, sl, sr);
-            // AOC_INVERT_LX / LY / RX / RY: the gamepad's stick axes mirrored (the camera's, mostly), before the
+            // ACR_INVERT_LX / LY / RX / RY: the gamepad's stick axes mirrored (the camera's, mostly), before the
             // sticks become direction buttons. Keyboard and mouse keep their directions: they have bindings.
             static unsigned inv_seen = ~0u;
             static int inv[4];
             unsigned ver = cfg_version();
             if (ver != inv_seen) {
                 inv_seen = ver;
-                inv[0] = cfg_bool("AOC_INVERT_LX"), inv[1] = cfg_bool("AOC_INVERT_LY");
-                inv[2] = cfg_bool("AOC_INVERT_RX"), inv[3] = cfg_bool("AOC_INVERT_RY");
+                inv[0] = cfg_bool("ACR_INVERT_LX"), inv[1] = cfg_bool("ACR_INVERT_LY");
+                inv[2] = cfg_bool("ACR_INVERT_RX"), inv[3] = cfg_bool("ACR_INVERT_RY");
             }
             if (inv[0]) sl[0] = -sl[0];
             if (inv[1]) sl[1] = -sl[1];
@@ -554,10 +554,10 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
     script_apply(&b, sl, sr);
     rec_apply(b, sl, sr);
     diag_attack_button((b >> B_Y & 1) != 0);
-    // L3+R3: a tap steps the performance overlay (F10); held AOC_QUICK_HOLD_MS (default 1500) opens the quick menu,
+    // L3+R3: a tap steps the performance overlay (F10); held ACR_QUICK_HOLD_MS (default 1500) opens the quick menu,
     // or closes it when it is open. Read before the menu gate, which blanks the pad while a menu is open.
     static InputQuickGate quick;
-    const char *hold = cfg_get("AOC_QUICK_HOLD_MS");
+    const char *hold = cfg_get("ACR_QUICK_HOLD_MS");
     uint64_t hold_ns = (uint64_t)(hold && atoi(hold) > 0 ? atoi(hold) : 1500) * 1000000ull;
     int gesture = input_quick_gate(&quick, &b, plat_now_ns(), hold_ns);
     // Minus and Plus held together (gamepad or keys) open or close the menu and never reach the game
@@ -581,7 +581,7 @@ static volatile int32_t g_block;
 static volatile int32_t g_menu;   // the in-game menu, the same way (input_menu)
 
 int input_cursor_allowed(void) {
-    const char *in = cfg_get("AOC_INPUT");
+    const char *in = cfg_get("ACR_INPUT");
     return g_block != 1 && g_menu != 1 && mouse_sens_get() > 0 && !(in && !strcmp(in, "none"));
 }
 
@@ -683,7 +683,7 @@ int input_capture(int reset, int *id) {
 }
 
 int input_rumble_triggers_enabled(void) {
-    return cfg_bool("AOC_RUMBLE_TRIGGERS");
+    return cfg_bool("ACR_RUMBLE_TRIGGERS");
 }
 
 int input_rumble(uint16_t low, uint16_t high, uint32_t ms) {
@@ -740,13 +740,13 @@ int input_motion_enabled(void) {
     unsigned v = cfg_version();
     if (on < 0 || v != seen) {
         seen = v;
-        on = cfg_bool("AOC_MOTION");
+        on = cfg_bool("ACR_MOTION");
     }
     return on;
 }
 
 // 250 Hz: the gamepads update (reports read, rumble expiry) and the newest gyro and accelerometer sample goes into the
-// fusion. Without a gamepad with sensors, or with motion off (AOC_MOTION=0, live), nothing is fed and the six-axis
+// fusion. Without a gamepad with sensors, or with motion off (ACR_MOTION=0, live), nothing is fed and the six-axis
 // sensor reads at rest.
 static void motion_main(void *arg) {
     (void)arg;
@@ -772,7 +772,7 @@ void input_motion_start(void) {
     plat_mutex_lock(&lock);
     if (!state) start();
     if (!motion_thread) {
-        if (!input_motion_enabled()) rt_log("input: motion off (AOC_MOTION=0); it can be turned on while the game runs");
+        if (!input_motion_enabled()) rt_log("input: motion off (ACR_MOTION=0); it can be turned on while the game runs");
         if (state != 1) motion_thread = -1;
         else {
             if (!plat_thread_spawn(motion_main, NULL, "motion", 0)) rt_fatal("input: cannot start the motion thread");
