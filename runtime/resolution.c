@@ -9,6 +9,10 @@
 // Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
 // texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), ACR_RENDER_SCALE = the
 // scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 100.
+// A scene larger than the output (supersampling) crashes the game (2026-11-19, the same route from the title screen into
+// the first battle: at 200 a null write in main+0x1151520 on leaving the title screen, at 150 a null read in
+// main+0x191a9f0 after the intro movie; game and 100 reached the battle): the KTGL sizes something from the scene that
+// is not grown with it.
 // The game's own final passes scale the scene to the output; the present scales the output to the window.
 //
 // Patch page: +32 the output size and +40 the scene size, each {w, h} in one 64-bit word (width in the low half), the

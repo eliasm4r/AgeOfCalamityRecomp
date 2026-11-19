@@ -25,27 +25,27 @@ typedef struct { const char *lang; const char *const *text; } Row;
     [UI_SWKBD_CANCEL] = cancel, [UI_SWKBD_PAD_HINT] = hint, LANG_NAMES
 
 static const char *const text_en[UI_TEXT_COUNT] = {
-    [UI_MENU_QUICK_TITLE] = "Quick menu",
+    [UI_MENU_QUICK_TITLE] = "Age of Calamity Recomp  ·  quick menu",
     [UI_MENU_QUICK_HINT] = "Hold L3+R3 to open or close. B closes.",
     [UI_MENU_QUICK_FPS] = "Frame rate",
     [UI_MENU_QUICK_FPS_DESC] = "30 FPS is the game's own rate: it moves a fixed step per frame, so a lower cap would slow the game down. 60 FPS needs the frame-step patch, which is not ported yet. For more battery, also lower the TDP in the Steam performance menu.",
     [UI_MENU_QUICK_FPS_LATER] = "60 FPS: needs the 60 FPS patch (coming)",
-    [UI_MENU_QUICK_RES] = "Internal resolution",
-    [UI_MENU_QUICK_RES_DESC] = "Handheld: the game draws at its own handheld resolution, lighter on the GPU and the battery. TV: its docked resolution, sharper and heavier. The game switches as a Switch does when docked; if it does not, the choice applies from the next start.",
-    [UI_MENU_QUICK_RES_HANDHELD] = "Handheld (lighter)",
-    [UI_MENU_QUICK_RES_DOCKED] = "TV (sharper)",
+    [UI_MENU_QUICK_RES] = "Console mode",
+    [UI_MENU_QUICK_RES_DESC] = "Whether the game thinks the Switch is docked (TV) or in handheld mode, as when you dock it. Age of Calamity draws at the same size in both: the picture size is the Game resolution of the full menu.",
+    [UI_MENU_QUICK_RES_HANDHELD] = "Handheld",
+    [UI_MENU_QUICK_RES_DOCKED] = "TV (docked)",
     [UI_MENU_QUICK_FULL] = "Full menu",
     [UI_MENU_QUICK_MARK] = "Mark this moment",
     SWKBD("Text entry", "Enter a name", "Horse", "OK", "Cancel", "Controller: A = OK, B = Cancel"),
 
-    [UI_MENU_TITLE] = "Settings",
+    [UI_MENU_TITLE] = "Age of Calamity Recomp",
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_MODS] = "Mods", [UI_MENU_TAB_SOUND] = "Sound",
     [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
     [UI_MENU_AFTER_RESTART] = "after restart", [UI_MENU_SET_BY_ENV] = "set by environment variable",
     [UI_MENU_SAVE_FAILED] = "could not save settings",
-    [UI_MENU_VERSION] = "Age of Calamity Recomp %s, game %s",
+    [UI_MENU_VERSION] = "Settings  ·  version %s  ·  game %s",
 
     [UI_MENU_FULLSCREEN] = "Fullscreen", [UI_MENU_FULLSCREEN_DESC] = "Fills the screen with the game; F11 toggles it.",
     [UI_MENU_WINDOW_SIZE] = "Window size", [UI_MENU_WINDOW_SIZE_DESC] = "Size of the game window when not fullscreen.",
@@ -67,7 +67,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                 "Steam Deck's screen and spares the GPU; below 1920 x 1080 the 3D scene can go up to 85 %.",
     [UI_MENU_RENDER_SCALE] = "3D render scale",
     [UI_MENU_RENDER_SCALE_DESC] = "Size of the 3D scene relative to the game resolution; the game's FSR scales it to "
-                                  "that size. Above 100 % smooths jagged edges (supersampling) at a high GPU cost.",
+                                  "that size. 100 % draws it at full size: the sharpest.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (75 %)",
     [UI_MENU_UPSCALER] = "Scaling to the window",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
@@ -204,10 +204,11 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_RUMBLE_TRIGGERS] = "Trigger vibration (Xbox)",
     [UI_MENU_RUMBLE_TRIGGERS_DESC] = "Vibrates the triggers of an Xbox controller too.",
     [UI_MENU_PAD_LAYOUT] = "Button layout",
-    [UI_MENU_PAD_LAYOUT_DESC] = "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one, as "
-                                "labelled on an Xbox controller (cross on a PlayStation controller). Automatic picks "
-                                "Nintendo for controllers with Nintendo labels and Xbox for the others. Which "
-                                "controller the game's prompts show is set under Button prompts.",
+    [UI_MENU_PAD_LAYOUT_DESC] = "Which button is A. Nintendo: the right one, as on a Switch (circle A, cross B, square "
+                                "Y, triangle X on a PlayStation controller). Xbox: the bottom one, as labelled on an "
+                                "Xbox controller. Automatic picks Nintendo for Nintendo and PlayStation controllers "
+                                "and Xbox for the others. Which controller the game's prompts show is set under "
+                                "Button prompts.",
     [UI_MENU_PAD_LAYOUT_AUTO] = "Automatic", [UI_MENU_PAD_LAYOUT_NINTENDO] = "Nintendo (A right)",
     [UI_MENU_PAD_LAYOUT_XBOX] = "Xbox (A bottom)",
     [UI_MENU_PAD_LAYOUT_IN_USE] = "in use: %s",
@@ -382,7 +383,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_VK_VALIDATION] = "Validation layer",
     [UI_MENU_VK_VALIDATION_DESC] = "Checks every Vulkan call and slows the game down a lot.",
     [UI_MENU_VK_VALIDATION_MISSING] = "The validation layer is not installed.",
-    [UI_MENU_DLAA_MISSING] = "DLSS is not available: put nvngx_dlss.dll next to AgeOfCalamityRecomp.exe and restart.",
+    [UI_MENU_DLAA_MISSING] = "DLSS is not available: it needs an NVIDIA RTX card and nvngx_dlss.dll, which the Windows build downloads. Build again, or put the file next to AgeOfCalamityRecomp.exe, and restart.",
     [UI_MENU_STICK_SENS_MISSING] = "Not available in this game yet: use the camera sensitivity in the game's own options.",
     [UI_MENU_VK_DYN_VERTEX] = "Dynamic vertex state",
     [UI_MENU_VK_DYN_VERTEX_DESC] = "Forces dynamic vertex input on or off; the default depends on the GPU.",

@@ -134,7 +134,7 @@ void tab_amiibo(float scale) {
 
     // ---- Left Pane: Explorer & List ----
     ImGui::BeginChild("##amiibo_explorer", ImVec2(left_w, content_h), true);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1.0f), "%s", menu_text(UI_MENU_AMIIBO_DIR));
+    ImGui::TextColored(ImVec4(0.98f, 0.66f, 0.28f, 1), "%s", menu_text(UI_MENU_AMIIBO_DIR));
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     if (ImGui::InputText("##amiibo_dir_input", g_dir_input, sizeof(g_dir_input), ImGuiInputTextFlags_EnterReturnsTrue)) {
@@ -195,7 +195,7 @@ void tab_amiibo(float scale) {
 
     // ---- Right Pane: Controls & Status ----
     ImGui::BeginChild("##amiibo_controls", ImVec2(right_w, content_h), true);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1.0f), "%s", menu_text(UI_MENU_AMIIBO_READER));
+    ImGui::TextColored(ImVec4(0.98f, 0.66f, 0.28f, 1), "%s", menu_text(UI_MENU_AMIIBO_READER));
     ImGui::Separator();
 
     AmiiboDeviceState state = amiibo_get_device_state();

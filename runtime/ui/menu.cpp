@@ -6,10 +6,10 @@
 // da35b83a9611d046a9a681aae668d7085954d37f, MIT, Copyright (c) 2026 Peiikai): dynamic rendering into the swapchain
 // image, an internal descriptor pool, vertex buffers rotated over more frames than are in flight.
 //
-// The look (colours, rounding, the tab bar with L / R and Q / E, the window over a dimmed game) follows
-// SavageWindRecomp's runtime/ui/menu.mm (https://github.com/Revivedx/SavageWindRecomp @
-// 575ad88e02f9a89a9a885d90039d48af33c982f4, MIT, Copyright (c) 2026 Revivedx and the Savage Wind Recomp contributors,
-// Copyright (c) 2026 Peiikai); the pages are rows of option_rows.cpp.
+// The layout (the tab bar with L / R and Q / E, the window over a dimmed game) follows SavageWindRecomp's
+// runtime/ui/menu.mm (https://github.com/Revivedx/SavageWindRecomp @ 575ad88e02f9a89a9a885d90039d48af33c982f4, MIT,
+// Copyright (c) 2026 Revivedx and the Savage Wind Recomp contributors, Copyright (c) 2026 Peiikai); the colours are this
+// port's own (style_init); the pages are rows of option_rows.cpp.
 #include <atomic>
 #include <limits.h>
 #include <math.h>
@@ -62,6 +62,7 @@ void cheats_frame(uint64_t frame);   // cheats.c
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
 void ov_operation_mode_changed(void);   // ov_system.c: ACR_OPERATION_MODE changed while the game runs
 void diag_mark_user(void);              // diag.c: a mark in the performance log and a report
+int rt_patch_set(const char *name);     // patches.c: a patch set of the generated C, -1 when this game has none
 }
 
 // Roboto Medium (Apache-2.0, ui/fonts/LICENSE-Roboto.txt) with Latin and Cyrillic glyphs.
@@ -216,28 +217,72 @@ static float menu_scale(uint32_t h) {
     return ((float)h >= least ? (float)h : least) / 1080.0f;
 }
 
-// SavageWindRecomp's colours: dark green panels, gold accents.
+// Sheikah slate colours: night-blue panels, the glowing cyan of Sheikah technology for what has the cursor or is chosen,
+// and a warm amber for the title, the light of a Guardian's eye before the Calamity turns it red.
+static const ImVec4 kSheikah(0.30f, 0.82f, 0.95f, 1);   // accents: cursor, selected tab, sliders, checks
+static const ImVec4 kAmber(0.98f, 0.66f, 0.28f, 1);     // the title
+static const ImVec4 kCalamity(0.93f, 0.33f, 0.42f, 1);  // warnings (a failed save)
+
 static void style_init(ImGuiStyle &s) {
     ImGui::StyleColorsDark(&s);
-    s.WindowRounding = 14; s.FrameRounding = 8; s.GrabRounding = 8; s.TabRounding = 8; s.ChildRounding = 10;
-    s.WindowPadding = ImVec2(28, 22); s.FramePadding = ImVec2(14, 8); s.ItemSpacing = ImVec2(14, 12);
-    s.WindowBorderSize = 0; s.ScrollbarSize = 18;
+    s.WindowRounding = 6; s.FrameRounding = 4; s.GrabRounding = 3; s.TabRounding = 4; s.ChildRounding = 4;
+    s.PopupRounding = 6; s.ScrollbarRounding = 3;
+    s.WindowPadding = ImVec2(30, 22); s.FramePadding = ImVec2(14, 8); s.ItemSpacing = ImVec2(14, 12);
+    s.WindowBorderSize = 1.5f; s.PopupBorderSize = 1.5f; s.FrameBorderSize = 0; s.TabBorderSize = 0;
+    s.ScrollbarSize = 14; s.GrabMinSize = 14;
     ImVec4 *c = s.Colors;
-    ImVec4 gold(0.93f, 0.76f, 0.33f, 1), green(0.15f, 0.36f, 0.25f, 1);
-    c[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.09f, 0.08f, 0.94f);
+    ImVec4 deep(0.08f, 0.17f, 0.27f, 1), mid(0.11f, 0.27f, 0.40f, 1), lit(0.14f, 0.40f, 0.56f, 1);
+    c[ImGuiCol_WindowBg] = ImVec4(0.03f, 0.06f, 0.10f, 0.95f);
+    c[ImGuiCol_PopupBg] = ImVec4(0.04f, 0.08f, 0.13f, 0.98f);
     c[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_Text] = ImVec4(0.96f, 0.94f, 0.88f, 1);
-    c[ImGuiCol_TextDisabled] = ImVec4(0.62f, 0.64f, 0.58f, 1);
-    c[ImGuiCol_Button] = ImVec4(0.14f, 0.22f, 0.18f, 1);
-    c[ImGuiCol_ButtonHovered] = green;
-    c[ImGuiCol_ButtonActive] = ImVec4(0.21f, 0.50f, 0.34f, 1);
-    c[ImGuiCol_Tab] = ImVec4(0.12f, 0.18f, 0.15f, 1);
-    c[ImGuiCol_TabHovered] = green;
-    c[ImGuiCol_TabSelected] = ImVec4(0.21f, 0.44f, 0.31f, 1);
-    c[ImGuiCol_TabSelectedOverline] = gold;
-    c[ImGuiCol_NavCursor] = gold;
-    c[ImGuiCol_Separator] = ImVec4(0.30f, 0.36f, 0.30f, 1);
+    c[ImGuiCol_Border] = ImVec4(kSheikah.x, kSheikah.y, kSheikah.z, 0.35f);
+    c[ImGuiCol_Text] = ImVec4(0.90f, 0.95f, 0.98f, 1);
+    c[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.60f, 0.68f, 1);
+    c[ImGuiCol_FrameBg] = deep;
+    c[ImGuiCol_FrameBgHovered] = mid;
+    c[ImGuiCol_FrameBgActive] = lit;
+    c[ImGuiCol_Button] = deep;
+    c[ImGuiCol_ButtonHovered] = mid;
+    c[ImGuiCol_ButtonActive] = lit;
+    c[ImGuiCol_Header] = deep;
+    c[ImGuiCol_HeaderHovered] = mid;
+    c[ImGuiCol_HeaderActive] = lit;
+    c[ImGuiCol_CheckMark] = kSheikah;
+    c[ImGuiCol_SliderGrab] = ImVec4(kSheikah.x, kSheikah.y, kSheikah.z, 0.80f);
+    c[ImGuiCol_SliderGrabActive] = kSheikah;
+    c[ImGuiCol_Tab] = ImVec4(0.05f, 0.11f, 0.18f, 1);
+    c[ImGuiCol_TabHovered] = mid;
+    c[ImGuiCol_TabSelected] = ImVec4(0.09f, 0.22f, 0.33f, 1);
+    c[ImGuiCol_TabSelectedOverline] = kSheikah;
+    c[ImGuiCol_NavCursor] = kSheikah;
+    c[ImGuiCol_Separator] = ImVec4(kSheikah.x, kSheikah.y, kSheikah.z, 0.25f);
+    c[ImGuiCol_ScrollbarBg] = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_ScrollbarGrab] = mid;
+    c[ImGuiCol_ScrollbarGrabHovered] = lit;
+    c[ImGuiCol_ScrollbarGrabActive] = kSheikah;
+    c[ImGuiCol_PlotLines] = kSheikah;
+    c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.01f, 0.03f, 0.06f, 0.55f);
 }
+
+// The title line of both menus: the name in amber, the text on the right dimmed, and a thin Sheikah line under them
+// that fades out toward the middle.
+static void title_line(const char *title, const char *right) {
+    ImGui::TextColored(kAmber, "%s", title);
+    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(right).x);
+    ImGui::TextDisabled("%s", right);
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float x1 = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+    float t = fmaxf(1.0f, ImGui::GetFontSize() / 18), xm = (p.x + x1) * 0.5f;
+    ImU32 on = ImGui::GetColorU32(kSheikah), off = ImGui::GetColorU32(ImVec4(kSheikah.x, kSheikah.y, kSheikah.z, 0));
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilledMultiColor(p, ImVec2(xm, p.y + t), on, off, off, on);
+    dl->AddRectFilledMultiColor(ImVec2(xm, p.y), ImVec2(x1, p.y + t), off, on, on, off);
+    ImGui::Dummy(ImVec2(0, t));
+}
+
+// A row whose setting needs a patch set this game version has (recomp/patches-*.txt): without it the setting does
+// nothing, so the menu leaves it out; it comes back once the patch is ported.
+static bool has_patch(const char *set) { return rt_patch_set(set) >= 0; }
 
 static void make_context(void) {
     ImGui::CreateContext();
@@ -245,7 +290,7 @@ static void make_context(void) {
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-    io.BackendPlatformName = "totk_menu";
+    io.BackendPlatformName = "acr_menu";
     style_init(g_base_style);
     ImGui::GetStyle() = g_base_style;
     g_ctx_ok = 1;
@@ -393,7 +438,7 @@ extern "C" void menu_vk_release(void) {
 // ACR_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (ACR_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. settings.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_MENU, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
+enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -566,8 +611,8 @@ static void row_gpu(void) {
     opt_choice_list("ACR_GPU_INDEX", UI_MENU_GPU, vals, names, g_gpu_n + 1, UI_MENU_GPU_DESC);
 }
 
-// The game language: one entry per language TotK ships (a Switch code that names it), each under its own name. The
-// Switch's Portuguese is not among them.
+// The game language: one entry per language Age of Calamity ships (a Switch code that names it), each under its own
+// name. The Switch's Portuguese is not among them.
 static void row_game_lang(void) {
     static const struct { const char *code; UiTextId name; } langs[] = {
         {"en-US", UI_MENU_LANGNAME_EN}, {"ja", UI_MENU_LANGNAME_JA}, {"fr", UI_MENU_LANGNAME_FR},
@@ -674,20 +719,21 @@ static void tab_screen(float scale) {
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
     row_render_scale();
-    row_shadow_res();
+    if (has_patch("shadow")) row_shadow_res();
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR};
     opt_choice("ACR_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("ACR_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
     static const UiTextId aspect[] = {UI_MENU_ASPECT_FIT, UI_MENU_ASPECT_STRETCH};
     opt_choice("ACR_ASPECT", UI_MENU_ASPECT, aspect, 2, UI_MENU_ASPECT_DESC);
-    opt_slider("ACR_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
+    if (has_patch("fov")) opt_slider("ACR_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
     static const char *const aniso[] = {"game", "2", "4", "8", "16"};
     const char *aniso_names[] = {menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
     opt_choice_list("ACR_ANISO", UI_MENU_ANISO, aniso, aniso_names, 5, UI_MENU_ANISO_DESC);
     row_shadow_scale();
-    row_shadow_range();
+    if (has_patch("cascade")) row_shadow_range();
     opt_slider("ACR_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
-    opt_slider("ACR_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%");
+    // contact shadows (vk_contact.c) find their passes by Astral Chain's G-buffer layout, not yet matched to this game's
+    // frame: the row stays out of the menu (settings.ini still takes contact_shadows) until it is
     if (vk_dlaa_missing()) opt_disable_next(UI_MENU_DLAA_MISSING);
     opt_toggle("ACR_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
@@ -806,7 +852,7 @@ static void restart_confirm(void) {
     ImGui::TextUnformatted(menu_text(UI_MENU_RESTART_CONFIRM));
     bool saving = fs_save_busy() != 0;
     if (saving || !cfg_last_save_ok())
-        ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1), "%s",
+        ImGui::TextColored(kCalamity, "%s",
                            menu_text(saving ? UI_MENU_RESTART_SAVING : UI_MENU_SAVE_FAILED));
     ImGui::Spacing();
     const char *yes = menu_text(UI_MENU_RESTART_YES), *no = menu_text(UI_MENU_RESET_NO);
@@ -859,8 +905,9 @@ static void tab_controls(float scale) {
     opt_toggle("ACR_INVERT_RY", UI_MENU_INVERT_RY, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_LX", UI_MENU_INVERT_LX, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_LY", UI_MENU_INVERT_LY, UI_MENU_INVERT_DESC);
-    if (cam_speed_available() == 0) opt_disable_next(UI_MENU_STICK_SENS_MISSING);   // camera_speed.c: TotK's pack only
-    opt_slider("ACR_STICK_SENS", UI_MENU_STICK_SENS, 0.1f, 3, UI_MENU_STICK_SENS_DESC, 0.05f, "%.2f");
+    // camera_speed.c reads TotK's camera pack, which this game does not have: the row shows once it is ported
+    if (cam_speed_available() > 0)
+        opt_slider("ACR_STICK_SENS", UI_MENU_STICK_SENS, 0.1f, 3, UI_MENU_STICK_SENS_DESC, 0.05f, "%.2f");
     opt_slider("ACR_MOUSE_SENS", UI_MENU_MOUSE_SENS, 0, 10, UI_MENU_MOUSE_SENS_DESC, 0.1f, "%.1f");
     row_walk_key();
     opt_slider("ACR_WALK_SCALE", UI_MENU_WALK_SCALE, 0.2f, 0.9f, UI_MENU_WALK_SCALE_DESC, 0.01f, "%.2f");
@@ -869,11 +916,6 @@ static void tab_controls(float scale) {
     binds_after_page();
     if (ask) ImGui::OpenPopup("##restart_confirm");   // at the level BeginPopupModal looks it up
     restart_confirm();
-}
-
-static void tab_menu(float scale) {
-    opt_begin("##menu", scale);
-    opt_end();
 }
 
 // ---- Advanced: the testing and troubleshooting keys, the bug report helpers and the reset of every setting
@@ -1033,9 +1075,9 @@ static void tab_advanced(float scale) {
     }
 }
 
-static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,   UI_MENU_TAB_SOUND,
-                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO, UI_MENU_TAB_MENU,
-                                              UI_MENU_TAB_ADVANCED, UI_MENU_TAB_MODS,   UI_MENU_TAB_CHEATS};
+static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,     UI_MENU_TAB_SOUND,
+                                              UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,   UI_MENU_TAB_ADVANCED,
+                                              UI_MENU_TAB_MODS,     UI_MENU_TAB_CHEATS};
 static int g_tab;               // the tab shown
 static int g_tab_request = -1;  // select this tab at the next layout; -1 none
 static int g_focus_page = -1;   // this tab's first row takes the cursor once it is shown; -1 none
@@ -1117,8 +1159,8 @@ static void tab_mods(float scale) {
 // B on the gamepad and Esc close it.
 // ---- the quick menu (AgeOfCalamityRecomp): L3+R3 held. The three settings that spare the Steam Deck, without the full menu's tabs.
 // Frame rate: 30 is the game's own rate and the only one that works today (60 needs
-// the 60 fps patch, docs/NOTES.md; below 30 the game would run slow, as it steps a fixed amount per update). Internal resolution:
-// the Switch's handheld or docked mode, so the game itself picks its lighter or its sharper render resolution
+// the 60 fps patch, docs/NOTES.md; below 30 the game would run slow, as it steps a fixed amount per update). Console mode:
+// the Switch's handheld or docked mode (Age of Calamity draws at the same size in both, resolution.c)
 // (ov_operation_mode_changed tells the running game). Overlay: the performance overlay's three modes.
 static void layout_quick(uint32_t w, uint32_t h, float scale) {
     ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), ImVec2((float)w, (float)h), IM_COL32(0, 0, 0, 90));
@@ -1127,10 +1169,7 @@ static void layout_quick(uint32_t w, uint32_t h, float scale) {
     ImGui::SetNextWindowSize(ImVec2(ww, wh), ImGuiCond_Always);
     ImGui::Begin("##quick", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                                          ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "%s", menu_text(UI_MENU_QUICK_TITLE));
-    const char *hint = menu_text(UI_MENU_QUICK_HINT);
-    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(hint).x);
-    ImGui::TextDisabled("%s", hint);
+    title_line(menu_text(UI_MENU_QUICK_TITLE), menu_text(UI_MENU_QUICK_HINT));
     ImGui::Spacing();
     const ImGuiStyle &st = ImGui::GetStyle();
     opt_reserve_bottom(ImGui::GetFrameHeight() + st.ItemSpacing.y * 2);
@@ -1181,13 +1220,11 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     ImGui::SetNextWindowSize(ImVec2(ww, wh), ImGuiCond_Always);
     ImGui::Begin("##menu", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                                         ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "%s", menu_text(UI_MENU_TITLE));
     // the port version and the game update, right-aligned on the title line: what a bug report needs first
     char game[16], version[96];
     snprintf(game, sizeof game, "%d.%d.%d", rt_game_version / 100, rt_game_version / 10 % 10, rt_game_version % 10);
     snprintf(version, sizeof version, menu_text(UI_MENU_VERSION), rt_port_version, game);
-    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize(version).x);
-    ImGui::TextDisabled("%s", version);
+    title_line(menu_text(UI_MENU_TITLE), version);
 
     int step = g_modal || binds_modal()                                                                  ? 0
              : ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) || ImGui::IsKeyPressed(ImGuiKey_E, false) ? 1
@@ -1220,7 +1257,6 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             case TAB_SOUND: tab_sound(scale); break;
             case TAB_CONTROLS: tab_controls(scale); break;
             case TAB_AMIIBO: tab_amiibo(scale); break;
-            case TAB_MENU: tab_menu(scale); break;
             case TAB_CHEATS:
                 if (tab_cheats(scale)) {
                     restart_rebuild = true;
@@ -1241,7 +1277,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
     float y = ImGui::GetCursorPosY();
     if (!cfg_last_save_ok()) {   // stays until a save succeeds; the settings hold for the session
         ImGui::SetCursorPosY(y + st.FramePadding.y);
-        ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1), "%s", menu_text(UI_MENU_SAVE_FAILED));
+        ImGui::TextColored(kCalamity, "%s", menu_text(UI_MENU_SAVE_FAILED));
     }
     const char *cont = menu_text(UI_MENU_CONTINUE), *quit = menu_text(UI_MENU_QUIT);
     float bw = fmaxf(ImGui::CalcTextSize(cont).x, ImGui::CalcTextSize(quit).x) + st.FramePadding.x * 4;
@@ -1427,7 +1463,7 @@ static void perf_full_draw(const MenuTarget *t, float scale) {
     else ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
     ImGui::SetWindowFontScale(0.72f);
     const ImVec4 gpu_c(0.55f, 0.83f, 0.31f, 1), cpu_c(0.18f, 0.59f, 0.80f, 1), ram_c(0.80f, 0.45f, 0.70f, 1),
-        fps_c(0.95f, 0.95f, 0.95f, 1), wait_c(0.93f, 0.76f, 0.33f, 1), pic_c(0.62f, 0.70f, 0.95f, 1);
+        fps_c(0.95f, 0.95f, 0.95f, 1), wait_c(0.98f, 0.66f, 0.28f, 1), pic_c(0.62f, 0.70f, 0.95f, 1);
     if (ImGui::BeginTable("##perft", 4, ImGuiTableFlags_SizingFixedFit)) {
         static const UiTextId labels[] = {UI_MENU_OV_GPU, UI_MENU_OV_VRAM, UI_MENU_OV_CPU, UI_MENU_OV_RAM};
         static const PerfCol c0[] = {{UI_MENU_OV_FPS, 888}};
