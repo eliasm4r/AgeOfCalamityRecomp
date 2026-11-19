@@ -46,7 +46,8 @@ enum {
 };
 
 // Gamepad layouts (ACR_PAD_LAYOUT): which face button is Switch A. Nintendo: by position, east A, south B, west Y,
-// north X. Xbox: south A, east B, west X, north Y, as an Xbox pad labels them (cross A, circle B on a PlayStation pad).
+// north X (circle A, cross B, square Y, triangle X on a PlayStation pad, which auto picks). Xbox: south A, east B,
+// west X, north Y, as an Xbox pad labels them.
 enum { PAD_LAYOUT_NINTENDO, PAD_LAYOUT_XBOX, PAD_LAYOUT_COUNT };
 
 enum { INPUT_BINDING_MAX = 96, INPUT_PAD_BINDING_MAX = 48 };

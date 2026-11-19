@@ -30,7 +30,7 @@ static SDL_Gamepad *pad;
 static uint64_t next_scan;
 static int pad_rumble;               // the open gamepad has rumble motors
 static volatile int32_t pad_labels[4];  // ... and the labels of its south, east, west, north buttons (PAD_LABEL_*), any thread
-static int pad_east_a;               // ... and labels its east face button A (Nintendo layout under ACR_PAD_LAYOUT=auto)
+static int pad_east_a;               // ... and plays by position under ACR_PAD_LAYOUT=auto (Nintendo layout): east labelled A, or a PlayStation pad
 static int pad_layout = -1;          // PAD_LAYOUT_* in effect for the open gamepad, -1 to pick again; live (cfg_version)
 static unsigned pad_layout_seen;
 static volatile int32_t pad_layout_shown = -1;   // pad_layout for the menu (any thread), -1 without a gamepad
@@ -348,7 +348,10 @@ static void scan_pads(void) {
     SDL_free(ids);
     if (!pad) return;
     pad_rumble = SDL_GetBooleanProperty(SDL_GetGamepadProperties(pad), SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
-    pad_east_a = SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_EAST) == SDL_GAMEPAD_BUTTON_LABEL_A;
+    // A Nintendo pad plays by label, which is by position; a PlayStation pad plays by position too, as the Switch
+    // buttons sit (circle A, cross B, square Y, triangle X), since its shapes name no Switch button.
+    SDL_GamepadButtonLabel east = SDL_GetGamepadButtonLabel(pad, SDL_GAMEPAD_BUTTON_EAST);
+    pad_east_a = east == SDL_GAMEPAD_BUTTON_LABEL_A || east == SDL_GAMEPAD_BUTTON_LABEL_CIRCLE;
     for (int i = 0; i < 4; i++) {
         SDL_GamepadButtonLabel lb = SDL_GetGamepadButtonLabel(pad, pad_sdl[PAD_SOUTH + i]);
         plat_xchg32(&pad_labels[i], lb == SDL_GAMEPAD_BUTTON_LABEL_A          ? PAD_LABEL_A
@@ -364,7 +367,8 @@ static void scan_pads(void) {
     pad_layout = -1;
     int motion = SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO) && SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL);
     rt_log("input: gamepad \"%s\" (%s, %s, east button %s)", SDL_GetGamepadName(pad), pad_rumble ? "rumble" : "no rumble",
-           motion ? "gyro and accelerometer" : "no motion sensors", pad_east_a ? "labelled A" : "not labelled A");
+           motion ? "gyro and accelerometer" : "no motion sensors",
+           east == SDL_GAMEPAD_BUTTON_LABEL_A ? "labelled A" : east == SDL_GAMEPAD_BUTTON_LABEL_CIRCLE ? "circle" : "not labelled A");
 }
 
 // Under lock: the layout of the open gamepad, picked again when a setting or the gamepad changed; logs each change.
