@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Fase 0: confere um dump extraído de Age of Calamity sem modificar nada.
+"""Checks an extracted Age of Calamity dump without changing anything.
 
-Lê o ExeFS (cabeçalhos NSO e main.npdm) e, opcionalmente, o RomFS extraído, e responde:
+Reads the ExeFS (NSO headers and main.npdm) and, optionally, the extracted RomFS, and answers:
 
-- os build IDs de main/subsdk0/sdk batem com uma versão conhecida (tools/data/known-builds.json)?
-- quanto cada módulo ocupa em memória (texto, rodata, data, bss) e no total — o perfil do nxnative diz 66,6 MB,
-  o que obriga o host a reportar mem_used = 72 MB;
-- o que o NPDM declara (prioridade/core/pilha da thread principal, system resource size);
-- quantos arquivos e bytes o RomFS tem, por extensão (RDB, dados RDB, DLC), para o orçamento do cartão SD.
+- do the build IDs of main/subsdk0/sdk match a known version (tools/data/known-builds.json)?
+- how much memory each module takes (text, rodata, data, bss) and in total — the nxnative profile says 66.6 MB,
+  which makes the host report mem_used = 72 MB;
+- what the NPDM declares (main thread priority/core/stack, system resource size);
+- how many files and bytes the RomFS has, by extension (RDB, RDB data, DLC), for the SD card budget.
 
-Só lê cabeçalhos e tamanhos: não descomprime código, não abre NCA/NSP e nunca toca nas chaves.
-O relatório (opcional, --out) deve ir para build/, que o git ignora.
+Only reads headers and sizes: decompresses no code, opens no NCA/NSP and never touches the keys.
+The report (optional, --out) should go to build/, which git ignores.
 
-Uso:
+Usage:
     python3 tools/inspect_dump.py --exefs build/v130/exefs [--romfs build/v130/romfs] [--out build/v130/inspect.json]
 """
 from __future__ import annotations
@@ -37,11 +37,11 @@ def _align(v: int, a: int = PAGE) -> int:
 
 
 def read_nso_header(path: Path) -> dict:
-    """Cabeçalho NSO0 (0x100 bytes), layout em switchbrew.org/wiki/NSO."""
+    """NSO0 header (0x100 bytes), layout at switchbrew.org/wiki/NSO."""
     with path.open("rb") as f:
         hdr = f.read(0x100)
     if len(hdr) < 0x100 or hdr[:4] != b"NSO0":
-        raise ValueError(f"{path.name}: não é um NSO (magic {hdr[:4]!r})")
+        raise ValueError(f"{path.name}: not an NSO (magic {hdr[:4]!r})")
     flags = struct.unpack_from("<I", hdr, 0x0C)[0]
 
     def seg(off: int) -> dict:
@@ -69,11 +69,11 @@ def read_nso_header(path: Path) -> dict:
 
 
 def read_npdm(path: Path) -> dict:
-    """Cabeçalho META do main.npdm (switchbrew.org/wiki/NPDM)."""
+    """META header of main.npdm (switchbrew.org/wiki/NPDM)."""
     with path.open("rb") as f:
         meta = f.read(0x80)
     if len(meta) < 0x30 or meta[:4] != b"META":
-        raise ValueError(f"{path.name}: não é um NPDM (magic {meta[:4]!r})")
+        raise ValueError(f"{path.name}: not an NPDM (magic {meta[:4]!r})")
     flags = meta[0x0C]
     name = meta[0x20:0x30].split(b"\0", 1)[0].decode("ascii", "replace")
     return {
@@ -99,7 +99,7 @@ def classify(rel: str) -> str:
         return "rdb-data"
     if base.endswith(".file"):
         return "rdb-file"
-    ext = base.rsplit(".", 1)[-1] if "." in base else "(sem extensão)"
+    ext = base.rsplit(".", 1)[-1] if "." in base else "(no extension)"
     return ext
 
 
@@ -140,10 +140,10 @@ def human(n: int) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exefs", type=Path, required=True, help="pasta com main, subsdk0, sdk, main.npdm")
-    ap.add_argument("--romfs", type=Path, help="pasta do RomFS extraído (opcional)")
+    ap.add_argument("--exefs", type=Path, required=True, help="folder with main, subsdk0, sdk, main.npdm")
+    ap.add_argument("--romfs", type=Path, help="extracted RomFS folder (optional)")
     ap.add_argument("--known", type=Path, default=KNOWN)
-    ap.add_argument("--out", type=Path, help="grava o relatório JSON (use build/...)")
+    ap.add_argument("--out", type=Path, help="writes the JSON report (use build/...)")
     args = ap.parse_args(argv)
 
     known = json.loads(args.known.read_text(encoding="utf-8"))
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     for m in MODULES:
         p = args.exefs / m
         if not p.exists():
-            report["problems"].append(f"módulo ausente: {m}")
+            report["problems"].append(f"missing module: {m}")
             continue
         report["modules"][m] = read_nso_header(p)
 
@@ -171,20 +171,20 @@ def main(argv: list[str] | None = None) -> int:
     report["modules_total_image"] = total
     report["version"] = match_version(report["modules"], known)
     if report["version"] is None:
-        report["problems"].append("build IDs não batem com nenhuma versão conhecida (esperado 1.3.0)")
+        report["problems"].append("build IDs match no known version (expected 1.3.0)")
 
     if args.romfs:
         report["romfs"] = scan_romfs(args.romfs)
         if not report["romfs"]["has_marker"]:
-            report["problems"].append("RomFS sem asset/MaterialEditor.rdb.bin (pasta errada?)")
+            report["problems"].append("RomFS without asset/MaterialEditor.rdb.bin (wrong folder?)")
 
-    # Saída legível
-    print(f"Versão identificada: {report['version'] or 'DESCONHECIDA'}")
+    # Readable output
+    print(f"Version found: {report['version'] or 'UNKNOWN'}")
     for m, h in report["modules"].items():
         print(f"  {m:8s} build {h['build_id_prefix']}  imagem {human(h['image_size'])}"
               f"  (text {human(h['text']['size'])}, ro {human(h['rodata']['size'])},"
               f" data {human(h['data']['size'])}, bss {human(h['bss'])})")
-    print(f"  total dos módulos: {human(total)}  ({total / 1e6:.1f} MB)")
+    print(f"  modules in total: {human(total)}  ({total / 1e6:.1f} MB)")
     if "npdm" in report:
         n = report["npdm"]
         print(f"  NPDM '{n['name']}': prioridade {n['main_thread_priority']}, core {n['main_thread_core']},"
@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"relatório: {args.out}")
+        print(f"report: {args.out}")
     return 1 if report["problems"] else 0
 
 

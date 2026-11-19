@@ -1,12 +1,12 @@
-# Patches de código do AoC 1.3.0 (recomp/patches.py). Por enquanto só os spin waits: laços que só outra thread
-# encerra, achados por tools/spin_waits.py nos três módulos do nosso ExeFS (build IDs de tools/data/known-builds.json).
-# O gerador manda as arestas de volta desses laços por rt_spin_gate (runtime/kernel.c). Sem eles o clang pode içar a
-# leitura do laço e virar um "jmp $" (visto no Astral Chain). Regenerar com:
+# Code patches of AoC 1.3.0 (recomp/patches.py). Spin waits: loops that only another thread ends, found by
+# tools/spin_waits.py in the three modules of our ExeFS (build IDs in tools/data/known-builds.json). The generator sends
+# the back edges of these loops through rt_spin_gate (runtime/kernel.c). Without them clang can hoist the loop's load
+# and turn it into a "jmp $" (seen in Astral Chain). Regenerate with:
 #   python3 tools/spin_waits.py --exefs build/v130/exefs
-# Resolução do jogo (runtime/resolution.c). nnMain monta a configuração do dispositivo KTGL na pilha e a entrega a
-# main+0x17c34f0 uma vez: {1920, 1080, 3, 9, 5, intervalo 2, 9, 1920, 1080, ...}; logo depois grava 1440x810 (a cena 3D)
-# em [x20+0x368]. Os dois pares passam a ser lidos da página de patches: +32 a saída e +40 a cena, largura nos 32 bits
-# baixos e altura nos altos, como as constantes do jogo. Bytes originais conferidos no nosso dump (build IDs de
+# Game resolution (runtime/resolution.c). nnMain builds the KTGL device config on the stack and hands it to
+# main+0x17c34f0 once: {1920, 1080, 3, 9, 5, interval 2, 9, 1920, 1080, ...}; right after, it writes 1440x810 (the 3D
+# scene) to [x20+0x368]. Both pairs are now read from the patch page: +32 the output and +40 the scene, width in the low
+# 32 bits and height in the high ones, like the game's constants. Original bytes checked in our dump (build IDs in
 # tools/data/known-builds.json).
 set  output AOC_PATCH_OUTPUT 0
 set  scene  AOC_PATCH_SCENE  0
@@ -14,28 +14,28 @@ site output main 8d9490 d280f008 @page:x8 f9401108   # mov x8,#0x780 -> adrp x8,
 site output main 8d9498 f2c08708 d503201f            # movk x8,#0x438,lsl #32 -> nop
 site scene  main 8d94d0 d280b408 @page:x8 f9401508   # mov x8,#0x5a0 -> adrp x8,page ; ldr x8,[x8,#40]
 site scene  main 8d94d4 f2c06548 d503201f            # movk x8,#0x32a,lsl #32 -> nop
-# Desenho 2D no alvo de saída (minimapa e marcadores, máscaras, a imagem da cena). Os quads da UI 2D estão em unidades
-# de layout de 1920x1080, e o KTGL monta a projeção 2D com o tamanho do alvo ([alvo+0x78]): 2/largura. Com a saída em
-# 1280x720 os marcadores do minimapa (um draw do programa 14, pontos de 6,4 unidades em (1551..1839, 721..1044))
-# caíam em x = 1,42 do NDC, fora da tela (medido 2026-11-12). Onde o KTGL lê esse tamanho para a projeção (quatro
-# cópias da mesma conta e a função que define o alvo) e para os quads de tela cheia (main+0x161a45c; a imagem da cena, logo abaixo),
-# ele passa a ler 1920x1080 quando o alvo tem o tamanho de saída (página +32) e o tamanho real nos outros alvos: a
-# projeção fica constante no frame (o bloco de uniformes dela é compartilhado entre draws; mudar a escala do contexto
-# no meio do frame encolhia a cena) e o quad de tela cheia cobre o alvo. Sem desvio e sem flags (NEON): d16 = alvo,
-# d17 = saída, d18 = layout (página +104), d19 = cmeq ? layout : alvo; x17 e v16..v19 são temporários ali.
-site output main 17def58 2d4f0901 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204261 5e0c0662   # ldp s1,s2,[x8,#0x78] -> par virtual
+# 2D drawing on the output target (minimap and markers, masks, the scene picture). The 2D UI quads are in 1920x1080
+# layout units, and the KTGL builds the 2D projection from the target size ([target+0x78]): 2/width. With the output at
+# 1280x720 the minimap markers (one draw of program 14, 6.4-unit points at (1551..1839, 721..1044)) landed at
+# x = 1.42 in NDC, off screen (measured 2026-11-12). Where the KTGL reads that size for the projection (four copies of
+# the same sum and the function that sets the target) and for the full-screen quads (main+0x161a45c; the scene picture,
+# just below), it now reads 1920x1080 when the target has the output size (page +32) and the real size on the other
+# targets: the projection stays constant through the frame (its uniform block is shared between draws; changing the
+# context scale mid-frame shrank the scene) and the full-screen quad covers the target. No branch and no flags (NEON):
+# d16 = target, d17 = output, d18 = layout (page +104), d19 = cmeq ? layout : target; x17 and v16..v19 are scratch there.
+site output main 17def58 2d4f0901 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204261 5e0c0662   # ldp s1,s2,[x8,#0x78] -> virtual pair
 site output main 17df7c8 2d4f0901 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204261 5e0c0662
 site output main 17e103c 2d4f0901 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204261 5e0c0662
 site output main 17e1e58 2d4f0901 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204261 5e0c0662
-site output main 17dfebc 1e2202c1 fd400290 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 5e21da61            # scvtf s1,w22 -> par de [x20] ; scvtf s1,s19
+site output main 17dfebc 1e2202c1 fd400290 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 5e21da61            # scvtf s1,w22 -> pair of [x20] ; scvtf s1,s19
 site output main 17dfed8 1e2202a2 5e0c0662 5e21d842                   # scvtf s2,w21 -> mov s2,v19.s[1] ; scvtf s2,s2
-site output main 161a45c 2d4f2508 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204268 5e0c0669   # quad de tela cheia: ldp s8,s9,[x8,#0x78]
-# A imagem da cena é o quad do renderizador de UI 2D (main+0x161f434, achado por gdb em main+0x17e16c0): o tamanho vem
-# de [objeto+0x58] (inteiros, convertidos logo depois em 0x161f3ec); recebe a mesma escolha.
+site output main 161a45c 2d4f2508 fd403d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e204268 5e0c0669   # full-screen quad: ldp s8,s9,[x8,#0x78]
+# The scene picture is the 2D UI renderer's quad (main+0x161f434, found with gdb at main+0x17e16c0): its size comes
+# from [object+0x58] (integers, converted right after at 0x161f3ec); it gets the same choice.
 site output main 161f394 294b5d18 fd402d10 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e260278 0e0c3e77   # ldp w24,w23,[x8,#0x58]
-# A imagem das cinemáticas e do vídeo de abertura: quad de main+0x151e1ec (chamado de main+0x15fdb78), tamanho num
-# par de inteiros na pilha ([sp], [sp+4]).
-site output main 151e194 b94003e8 fd4003f0 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e260268   # ldr w8,[sp] -> largura virtual
+# The picture of cutscenes and the opening video: quad of main+0x151e1ec (called from main+0x15fdb78), size in a pair
+# of integers on the stack ([sp], [sp+4]).
+site output main 151e194 b94003e8 fd4003f0 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e260268   # ldr w8,[sp] -> virtual width
 site output main 151e19c b94007e8 0e0c3e68                            # ldr w8,[sp,#4] -> mov w8,v19.s[1]
 # main: 1090 spin waits
 spin main 8de78 8deac   # 6 instructions; loads

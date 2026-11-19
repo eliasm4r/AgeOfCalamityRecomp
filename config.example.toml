@@ -1,20 +1,20 @@
-# Copie para config.local.toml (ignorado pelo git) e aponte para os SEUS arquivos.
-# Caminhos no WSL: /mnt/d/... ou ~/...  (o dump pode ficar em 'Game Files/', ignorado pelo git)
+# Copy to config.local.toml (ignored by git) and point it at YOUR files.
+# Paths in WSL: /mnt/d/... or ~/...  (the dump can sit in 'Game Files/', ignored by git)
 
 [input]
-# Jogo base 1.0.0, title id 01002B00111A2000 (NSP ou XCI)
-base = '/mnt/d/Decomp/Age of Calamity/Game Files/<pasta da base>/<arquivo>.nsp'
+# Base game 1.0.0, title id 01002B00111A2000 (NSP or XCI)
+base = '/mnt/d/Age of Calamity/Game Files/<base folder>/<file>.nsp'
 # Update 1.3.0 (v327680), title id 01002B00111A2800
-update = '/mnt/d/Decomp/Age of Calamity/Game Files/<pasta do update>/<arquivo>.nsp'
-# DLCs (opcional nesta fase)
-dlc = []   # lista de caminhos dos NSP de DLC (01002B00111A3001..3004)
-# Chaves do SEU console. As ferramentas leem o arquivo; os valores nunca são impressos nem copiados.
-keys = '/mnt/d/Decomp/Age of Calamity/Game Files/prod.keys'
+update = '/mnt/d/Age of Calamity/Game Files/<update folder>/<file>.nsp'
+# DLCs (optional)
+dlc = []   # list of DLC NSP paths (01002B00111A3001..3004)
+# YOUR console's keys. The tools read the file; the values are never printed or copied.
+keys = '/mnt/d/Age of Calamity/Game Files/prod.keys'
 
 [work]
-# Extração, C gerado e builds. Reserve bastante espaço (estimativa: 60+ GB no PC).
+# Extraction, generated C and builds. Keep plenty of space (estimate: 60+ GB on the PC).
 dir = 'build'
 
 [deck]
-# Pasta final que vai para o cartão SD
+# Finished folder that goes to the SD card
 dist = 'dist/aoc-deck'

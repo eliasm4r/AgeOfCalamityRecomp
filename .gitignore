@@ -1,4 +1,4 @@
-# --- Conteúdo do jogo e derivados: NUNCA versionar ---
+# --- Game content and anything derived from it: NEVER commit ---
 /Game Files/
 /dumps/
 /build/
@@ -42,7 +42,7 @@ logs/
 screenshots/
 *.png.local
 
-# --- Ambiente ---
+# --- Environment ---
 .venv*/
 __pycache__/
 *.pyc
@@ -52,7 +52,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Peças que só os pacotes da release levam (tools/make_release.py)
+# Pieces only the release packages carry (tools/make_release.py)
 /prebuilt/
 /python/
 /AoC-Launcher.exe

@@ -952,8 +952,8 @@ def _bounds(st):
         if vals is not None and 0 < len(vals) <= MAX_COUNT:
             a = lo(a) if a[0] in ('zx', 'sx') else a
             out.append((a, vals))
-            # AoC: um `cmp wN` limita lo(x); quando x cabe em 32 bits por construção (ubfx/and de poucos bits), o
-            # mesmo limite vale para o x de 64 bits que indexa a tabela (main+0x1867d08: ubfx x8 de 4 bits, cmp w8, #3).
+            # AoC: a `cmp wN` bounds lo(x); when x fits in 32 bits by construction (a few-bit ubfx/and), the same
+            # bound holds for the 64-bit x that indexes the table (main+0x1867d08: 4-bit ubfx x8, cmp w8, #3).
             if a[0] == 'lo':
                 d = _domain(a[1])
                 if d is not None and max(d, default=0) <= M32:

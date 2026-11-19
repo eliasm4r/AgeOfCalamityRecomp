@@ -56,7 +56,7 @@ MSYS2_PKGS = ["clang", "lld", "llvm", "ninja", "sdl3", "opus", "libvpx", "zstd",
               "vulkan-memory-allocator", "python", "python-cryptography", "python-lz4"]
 GIB = 2**30
 
-LANG = "pt"
+LANG = "en"
 TEXT = {
     # step titles
     "t_check": ("Conferir os arquivos", "Check your files"),
@@ -107,14 +107,14 @@ TEXT = {
     "p_update": ("não achei o update 1.3.0 (01002B00111A2800) entre os NSPs da pasta",
                  "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder"),
     "p_updates": ("há mais de um update 1.3.0 na pasta; deixe só um", "there is more than one update 1.3.0 in the folder; keep one"),
-    "p_wrong_update": ("o update da sua pasta é de outra versão (v{0}; o 1.4.1 é o v458752). O AoC Recomp só funciona "
+    "p_wrong_update": ("o update da sua pasta é de outra versão (v{0}; o 1.4.1 é o v458752). O AgeOfCalamityRecomp só funciona "
                        "com o update 1.3.0 (v327680): troque o NSP do update pelo da 1.3.0 e forje de novo",
-                       "the update in your folder is another version (v{0}; 1.4.1 is v458752). AoC Recomp only works "
+                       "the update in your folder is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
                        "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and forge again"),
     "no_nsp": ("não há arquivos .nsp na pasta escolhida", "there are no .nsp files in the chosen folder"),
-    "wrong_build": ("o código do jogo extraído não é o da versão 1.3.0. O AoC Recomp só funciona com o update 1.3.0 "
+    "wrong_build": ("o código do jogo extraído não é o da versão 1.3.0. O AgeOfCalamityRecomp só funciona com o update 1.3.0 "
                     "(v327680); o 1.4.1 ainda não é aceito. Troque o NSP do update e forje de novo",
-                    "the extracted game code is not version 1.3.0. AoC Recomp only works with update 1.3.0 (v327680); "
+                    "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
                     "1.4.1 is not accepted yet. Replace the update NSP and forge again"),
     "stale_exefs": ("o código extraído numa tentativa anterior não é o da versão 1.3.0: extraindo de novo",
                     "the game code extracted by an earlier attempt is not version 1.3.0: extracting again"),
@@ -125,9 +125,9 @@ TEXT = {
                    "the merged RomFS has {0} bytes, the 1.3.0 one has {1}: check that the base game and the update are "
                    "the right ones (base v0 and update 1.3.0)"),
     "steamos": ("o SteamOS não deixa instalar as ferramentas de compilação (o sistema é somente leitura). Forje num PC "
-                "com Windows ou Linux e copie a pasta dist/aoc-deck para cá (guia, seção 4)",
+                "com Windows ou Linux e copie a pasta dist/aoc-deck para cá (README, seção Steam Deck)",
                 "SteamOS does not let the build tools be installed (the system is read-only). Forge on a Windows or "
-                "Linux PC and copy the dist/aoc-deck folder here (guide, section 4)"),
+                "Linux PC and copy the dist/aoc-deck folder here (README, Steam Deck section)"),
 }
 
 
@@ -486,7 +486,7 @@ def s_winxlate(args) -> str:
               f"( [ -x ~/aoc-build/xlate/aoc_xlate ] || python3 tools/build_xlate.py --out ~/aoc-build/xlate "
               f"--sysroot ~/aoc-build/toolchain/sniper ) && "
               f"if [ -f '{w}/aoc_xlate.exe' ] && cmp -s ~/aoc-build/xlate/aoc_xlate.id '{w}/aoc_xlate.id'; then "
-              f"echo 'tradutor do Windows em dia'; else B=~/aoc-build/xlate && rm -rf /tmp/aoc-xlwin && "
+              f"echo 'Windows translator up to date'; else B=~/aoc-build/xlate && rm -rf /tmp/aoc-xlwin && "
               f"dotnet publish \"$B/xlate/aoc_xlate.csproj\" -c Release -r win-x64 --self-contained -p:PublishAot=false "
               f"-p:PublishSingleFile=true -p:InvariantGlobalization=true -p:RyuSrc=\"$B/ryujinx\" -o /tmp/aoc-xlwin "
               f"| tail -2 && cp /tmp/aoc-xlwin/aoc_xlate.exe '{w}/' && cp \"$B/aoc_xlate.id\" '{w}/'; fi")
@@ -541,7 +541,7 @@ def s_windist(args) -> str:
     ini = dist / "aoc.ini"
     if not ini.exists():
         lang = "en" if LANG == "en" else "pt-BR"
-        ini.write_text(f"# AoC Recomp settings. The menu (F1) writes here.\n[menu]\nmenu_lang = {lang}\n", encoding="utf-8")
+        ini.write_text(f"# Age of Calamity Recomp settings. The menu (F1) writes here.\n[menu]\nmenu_lang = {lang}\n", encoding="utf-8")
     out(tr("folder_ok", dist))
     return "ok"
 
@@ -567,12 +567,12 @@ def main() -> int:
     ap.add_argument("--windows", action="store_true", help="Windows version (dist/aoc-windows)")
     ap.add_argument("--with-romfs", action="store_true", help="Deck: also put romfs.bin in the folder (first install)")
     ap.add_argument("--send", action="store_true", help="send to the Deck over SSH at the end")
-    ap.add_argument("--deck-host", default="", help="user@address of the Deck (default: tools/deck/deploy.sh's)")
+    ap.add_argument("--deck-host", default="", help="user@address of the Deck (required for send)")
     ap.add_argument("--win-work", type=Path, default=None, help="work folder of the Windows build")
     ap.add_argument("--wsl-distro", default=os.environ.get("AOC_WSL_DISTRO", ""),
                     help=f"WSL distro (default: {DISTRO}, made by the tools step)")
     ap.add_argument("--msys2", default="", help="MSYS2 folder (default: C:/msys64, installed there if missing)")
-    ap.add_argument("--lang", choices=("pt", "en"), default="pt")
+    ap.add_argument("--lang", choices=("pt", "en"), default="en")
     ap.add_argument("--check-only", action="store_true", help="only the check step")
     ap.add_argument("--prepare", action="store_true",
                     help="setup for a launcher: build for this PC (Windows or Linux), print 'progress <0-1> <text>' lines")
@@ -601,7 +601,7 @@ def main() -> int:
     for old in sorted(logs.glob("forge-*.log"))[:-9]:   # keep the last ten
         old.unlink(missing_ok=True)
     LOG = open(logs / time.strftime("forge-%Y%m%d-%H%M%S.log"), "w", encoding="utf-8")
-    out(f"AoC Recomp {VERSION}, {' '.join(sys.argv[1:])}")
+    out(f"AgeOfCalamityRecomp {VERSION}, {' '.join(sys.argv[1:])}")
     for sid, _ in plan:
         out(f"@@PLAN {sid} {tr('t_' + sid)}")
     for n, (sid, fn) in enumerate(plan):

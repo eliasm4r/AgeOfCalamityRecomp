@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Resume um log do runtime (logs/aoc.log de uma sessão jogada, ou o run.log de uma medição): fps, consumo, temperatura,
-GPU, custo da sombra dos pools e do write-watch, áudio e erros, por trecho da sessão.
+"""Sums up a runtime log (logs/aoc.log of a played session, or the run.log of a measurement): fps, power, temperature,
+GPU, cost of the pool shadows and of write watching, audio and errors, per stretch of the session.
 
-Uso: logsum.py <log> [--from <frame>] [--to <frame>] [--rows]
-     logsum.py --list <log> [<log> ...]
+Usage: logsum.py <log> [--from <frame>] [--to <frame>] [--rows]
+       logsum.py --list <log> [<log> ...]
 
-Sem --from/--to o resumo cobre o log inteiro e, à parte, o trecho mais pesado (a janela de 60 s com menor fps). As
-linhas "sys:" (runtime/sysmon.c, sempre ligadas no Linux) dão consumo e temperatura; as de "perf:", "mem:" e "fps:" só
-existem com AOC_TRACE=perf. --rows lista as linhas "sys:" uma a uma. --list dá uma linha por sessão (data, duração, fps,
-watts, temperaturas, erros), para comparar sessões. Lê também logs comprimidos (.gz, os de logs/sessoes/ no Deck).
+Without --from/--to the summary covers the whole log and, apart, the heaviest stretch (the 60 s window with the lowest
+fps). The "sys:" lines (runtime/sysmon.c, always on under Linux) give power and temperature; the "perf:", "mem:" and
+"fps:" ones only exist with AOC_TRACE=perf. --rows lists the "sys:" lines one by one. --list gives one line per session
+(date, length, fps, watts, temperatures, errors) to compare sessions. Also reads compressed logs (.gz, the ones in
+logs/sessions/ on the Deck).
 """
 import argparse
 import gzip
@@ -120,12 +121,12 @@ def session_row(path):
 
 
 def list_sessions(paths):
-    print('início            min    frames    fps  APU W  pico W  bat W  CPU°C GPU°C erros arquivo')
+    print('start             min    frames    fps  APU W  peak W  bat W  CPU°C GPU°C errs file')
     for p in paths:
         try:
             print(session_row(p))
         except (OSError, EOFError) as e:
-            print(f'(não li {p}: {e})')
+            print(f'(could not read {p}: {e})')
 
 
 def stat(rows, key):
@@ -138,75 +139,75 @@ def show(title, rows, keys):
     for key, label, unit in keys:
         s = stat(rows, key)
         if s:
-            out.append(f'  {label}: média {s[1]:.1f}{unit} (mín {s[0]:.1f}, máx {s[2]:.1f})')
+            out.append(f'  {label}: mean {s[1]:.1f}{unit} (min {s[0]:.1f}, max {s[2]:.1f})')
     if out:
         print(title)
         print('\n'.join(out))
 
 
-SYS_KEYS = [('fps', 'fps', ''), ('apu', 'APU', ' W'), ('bat', 'bateria', ' W'), ('cpu_c', 'CPU', ' °C'),
-            ('gpu_c', 'GPU', ' °C'), ('fan', 'ventoinha', ' rpm'), ('gpu_busy', 'GPU ocupada', ' %'),
-            ('load', 'carga da CPU', ' %'), ('cores', 'núcleos usados pelo jogo', ''), ('cpu_mhz', 'clock da CPU', ' MHz'),
-            ('gpu_mhz', 'clock da GPU', ' MHz')]
+SYS_KEYS = [('fps', 'fps', ''), ('apu', 'APU', ' W'), ('bat', 'battery', ' W'), ('cpu_c', 'CPU', ' °C'),
+            ('gpu_c', 'GPU', ' °C'), ('fan', 'fan', ' rpm'), ('gpu_busy', 'GPU busy', ' %'),
+            ('load', 'CPU load', ' %'), ('cores', 'cores used by the game', ''), ('cpu_mhz', 'CPU clock', ' MHz'),
+            ('gpu_mhz', 'GPU clock', ' MHz')]
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('log', nargs='+')
-    ap.add_argument('--from', dest='lo', type=int, default=0, help='primeiro frame do trecho')
-    ap.add_argument('--to', dest='hi', type=int, default=1 << 62, help='último frame do trecho')
-    ap.add_argument('--rows', action='store_true', help='lista as linhas sys: do trecho')
-    ap.add_argument('--list', action='store_true', help='uma linha por sessão (um log por sessão)')
+    ap.add_argument('--from', dest='lo', type=int, default=0, help='first frame of the stretch')
+    ap.add_argument('--to', dest='hi', type=int, default=1 << 62, help='last frame of the stretch')
+    ap.add_argument('--rows', action='store_true', help='lists the sys: lines of the stretch')
+    ap.add_argument('--list', action='store_true', help='one line per session (one log per session)')
     a = ap.parse_args()
     if a.list:
         list_sessions(a.log)
         return 0
     if len(a.log) != 1:
-        ap.error('um log só (ou --list para vários)')
+        ap.error('a single log (or --list for several)')
     a.log = a.log[0]
     d = parse(a.log)
-    print(f'Sessão iniciada em {d["started"]}')
+    print(f'Session started at {d["started"]}')
     for t in d['info']:
         print('·', t)
 
     def cut(rows):
         return [r for r in rows if a.lo <= r.get('frame', a.lo) <= a.hi]
     rows = cut(d['sys'])
-    span = f'frames {a.lo}–{a.hi}' if a.lo or a.hi < 1 << 62 else 'log inteiro'
+    span = f'frames {a.lo}–{a.hi}' if a.lo or a.hi < 1 << 62 else 'whole log'
     if rows:
         charging = any((r['bat_state'] or '').lower().startswith('charg') for r in rows)
-        show(f'Máquina ({span}; {len(rows)} linhas sys: de ~10 s)', rows, SYS_KEYS)
+        show(f'Machine ({span}; {len(rows)} sys: lines of ~10 s)', rows, SYS_KEYS)
         if charging:
-            print('  (bateria carregando em parte do trecho: o número da bateria é a carga, não o consumo; vale o da APU)')
+            print('  (battery charging during part of the stretch: the battery figure is the charge, not the draw; use the APU one)')
         if not (a.lo or a.hi < 1 << 62) and len(rows) >= 6:   # the heaviest minute: six lines with the lowest fps
             worst = min(range(len(rows) - 5), key=lambda i: sum(r['fps'] or 0 for r in rows[i:i + 6]))
             w = rows[worst:worst + 6]
-            show(f'Minuto mais pesado (frames {w[0]["frame"]}–{w[-1]["frame"]})', w, SYS_KEYS)
+            show(f'Heaviest minute (frames {w[0]["frame"]}–{w[-1]["frame"]})', w, SYS_KEYS)
         if a.rows:
-            print('  frame    fps   APU W  bat W  CPU°C GPU°C  GPU%  núcleos')
+            print('  frame    fps   APU W  bat W  CPU°C GPU°C  GPU%  cores')
             for r in rows:
                 def n(k, f='{:6.1f}'):
                     return f.format(r[k]) if r.get(k) is not None else '     -'
                 print(f'  {r["frame"]:6d} {n("fps")} {n("apu")} {n("bat")} {n("cpu_c")} {n("gpu_c")} {n("gpu_busy")} {n("cores")}')
     else:
-        print('(sem linhas sys: neste log: runtime anterior ao sysmon, ou não é Linux)')
-    show('Frame (AOC_TRACE=perf)', cut(d['perf']), [('interval', 'intervalo', ' ms'), ('max', 'pior intervalo da janela', ' ms')])
-    show('GPU (AOC_TRACE=perf)', cut(d['gpu']), [('gpu', 'tempo de GPU por frame', ' ms'), ('vram', 'VRAM', ' MiB'), ('ram', 'RAM', ' MiB')])
-    show('Sombra dos pools, por frame', cut(d['shadow']),
-         [('ms', 'tempo', ' ms'), ('queries', 'consultas', ''), ('in', 'copiado para a sombra', ' MiB'),
-          ('back', 'devolvido ao jogo', ' MiB')])
-    show('Write-watch, por frame', cut(d['ww']), [('ms', 'tempo', ' ms'), ('queries', 'consultas', ''),
-                                                   ('mib', 'memória consultada', ' MiB'), ('frozen', 'congelado', ' MiB')])
+        print('(no sys: lines in this log: a runtime older than sysmon, or not Linux)')
+    show('Frame (AOC_TRACE=perf)', cut(d['perf']), [('interval', 'interval', ' ms'), ('max', 'worst interval of the window', ' ms')])
+    show('GPU (AOC_TRACE=perf)', cut(d['gpu']), [('gpu', 'GPU time per frame', ' ms'), ('vram', 'VRAM', ' MiB'), ('ram', 'RAM', ' MiB')])
+    show('Pool shadows, per frame', cut(d['shadow']),
+         [('ms', 'time', ' ms'), ('queries', 'queries', ''), ('in', 'copied to the shadow', ' MiB'),
+          ('back', 'given back to the game', ' MiB')])
+    show('Write watch, per frame', cut(d['ww']), [('ms', 'time', ' ms'), ('queries', 'queries', ''),
+                                                   ('mib', 'memory queried', ' MiB'), ('frozen', 'frozen', ' MiB')])
     if d['fps'] and not (a.lo or a.hi < 1 << 62):
-        show('Linhas fps: (janelas de 120 frames)', d['fps'], [('fps', 'fps', ''), ('speed', 'velocidade do jogo', '×')])
+        show('fps: lines (120 frame windows)', d['fps'], [('fps', 'fps', ''), ('speed', 'game speed', '×')])
     for r in d['ft']:
-        print(f'frametime {r["tag"]}: {r["frames"]} frames, média {r["mean"]} fps, 1% low {r["low"]} fps, '
-              f'acima de 50 ms {r["over50"]}, de 100 ms {r["over100"]}')
+        print(f'frametime {r["tag"]}: {r["frames"]} frames, mean {r["mean"]} fps, 1% low {r["low"]} fps, '
+              f'over 50 ms {r["over50"]}, over 100 ms {r["over100"]}')
     if d['audio']:
         silent = sum(1 for x in d['audio'] if x == 0)
-        print(f'Áudio: {len(d["audio"])} janelas de 5 s, {silent} em silêncio total, rms médio {sum(d["audio"]) / len(d["audio"]):.4f}')
+        print(f'Audio: {len(d["audio"])} windows of 5 s, {silent} fully silent, mean rms {sum(d["audio"]) / len(d["audio"]):.4f}')
     if d['bad']:
-        print(f'Linhas de erro ou aviso ({len(d["bad"])}):')
+        print(f'Error or warning lines ({len(d["bad"])}):')
         for t in d['bad'][:12]:
             print('  !', t)
     return 0

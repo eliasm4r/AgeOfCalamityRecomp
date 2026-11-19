@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Censo dos arquivos RDB do Koei Tecmo (Fase 0): o que há dentro do RomFS 1.3.0 e dos DLCs, por tipo.
+"""Census of the Koei Tecmo RDB files: what is inside RomFS 1.3.0 and the DLCs, by type.
 
-Os dados do jogo ficam em `asset/*.rdb.bin*` e `asset/data/*.file`: uma sequência de entradas IDRK
-('IDRK0000', u64 tamanho da entrada, u64 tamanho guardado, u64 tamanho real, u32 0, u32 KTID do arquivo,
-u32 KTID do tipo, u32 flags; os dados guardados ficam no fim da entrada; flag 0x100000 = zlib em blocos
-de até 16 KB). Formato descrito pelo nxnative (`dm/gfx/tools/shader_split.py`, `idrk_entries`/`idrk_data`).
+The game data sits in `asset/*.rdb.bin*` and `asset/data/*.file`: a sequence of IDRK entries
+('IDRK0000', u64 entry size, u64 stored size, u64 real size, u32 0, u32 file KTID, u32 type KTID, u32 flags; the
+stored data sits at the end of the entry; flag 0x100000 = zlib in blocks of up to 16 KB). Format described by nxnative
+(`dm/gfx/tools/shader_split.py`, `idrk_entries`/`idrk_data`).
 
-Para cada tipo conta entradas, bytes guardados e bytes reais, e anota a "magic" dos dados de algumas
-amostras (ex.: `_S2G` = shaders G2S, `GT1G` = texturas G1T). Para as texturas G1T lê o cabeçalho de cada
-uma e conta os códigos de formato — é o que decide o custo de ASTC no Steam Deck.
+For each type it counts entries, stored bytes and real bytes, and notes the data "magic" of a few samples (e.g.
+`_S2G` = G2S shaders, `GT1G` = G1T textures). For G1T textures it reads each one's header and counts the format
+codes — that is what decides the ASTC cost on the Steam Deck.
 
-Só lê cabeçalhos e o primeiro bloco das entradas; retoma de onde parou (--budget segundos por execução).
+Only reads headers and the first block of each entry; resumes where it stopped (--budget seconds per run).
 
-Uso:
+Usage:
     python3 tools/census_rdb.py --romfs build/v130/romfs.bin [--budget 150]
-    python3 tools/census_rdb.py --report      # junta os resultados em build/v130/rdb-census.json
+    python3 tools/census_rdb.py --report      # gathers the results into build/v130/rdb-census.json
 """
 from __future__ import annotations
 
@@ -33,16 +33,16 @@ import nx  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 IDRK = b"IDRK0000"
 SAMPLES_PER_TYPE = 3
-# Códigos de formato do G1T. 0x59–0x5F e 0x06/0x08: Amicitia Wiki (G1T), conferidos no nosso dump pela razão
-# tamanho/pixels (BC1 e BC4 dão 4 bpp, BC5/BC6H/BC7 dão 8 bpp, com mipmaps). 0x01–0x04 só aparecem em texturas
-# de 1×1 (placeholders não comprimidos).
-G1T_FORMATS = {0x01: "BGRA8 (1×1)", 0x02: "32 bpp (1×1)", 0x03: "não comprimido (1×1?)", 0x04: "não comprimido (1×1)",
-               0x06: "BC1 (antigo)", 0x08: "BC3 (antigo)", 0x59: "BC1", 0x5A: "BC2", 0x5B: "BC3", 0x5C: "BC4",
+# G1T format codes. 0x59–0x5F and 0x06/0x08: Amicitia Wiki (G1T), checked in our dump by the size/pixels ratio
+# (BC1 and BC4 give 4 bpp, BC5/BC6H/BC7 give 8 bpp, with mipmaps). 0x01–0x04 only show up in 1×1 textures
+# (uncompressed placeholders).
+G1T_FORMATS = {0x01: "BGRA8 (1×1)", 0x02: "32 bpp (1×1)", 0x03: "uncompressed (1×1?)", 0x04: "uncompressed (1×1)",
+               0x06: "BC1 (old)", 0x08: "BC3 (old)", 0x59: "BC1", 0x5A: "BC2", 0x5B: "BC3", 0x5C: "BC4",
                0x5D: "BC5", 0x5E: "BC6H", 0x5F: "BC7"}
 
 
 def first_bytes(f, start: int, end: int, flags: int, n: int) -> bytes:
-    """Primeiros n bytes reais de uma entrada (descomprime só o primeiro bloco)."""
+    """First n real bytes of an entry (decompresses only the first block)."""
     if not flags & 0x100000:
         return nx.read_at(f, start, min(n, end - start))
     head = nx.read_at(f, start, min(end - start, 4 + 0x4400))
@@ -55,9 +55,9 @@ def first_bytes(f, start: int, end: int, flags: int, n: int) -> bytes:
 
 
 def g1t_formats(data: bytes) -> list[int]:
-    """Códigos de formato das texturas de um G1T ('GT1G'): u32 magic, u32 versão, u32 tamanho, u32 offset da
-    tabela, u32 número de texturas; a tabela tem um u32 por textura (relativo à tabela); no cabeçalho de cada
-    textura o 2º byte é o formato."""
+    """Format codes of the textures of a G1T ('GT1G'): u32 magic, u32 version, u32 size, u32 table offset, u32
+    texture count; the table has one u32 per texture (relative to the table); in each texture header the 2nd byte
+    is the format."""
     if data[:4] != b"GT1G" or len(data) < 0x14:
         return []
     table, count = struct.unpack_from("<II", data, 0x0C)
@@ -72,7 +72,7 @@ def g1t_formats(data: bytes) -> list[int]:
 
 
 def scan_file(f, path: str, base: int, size: int, deadline: float, state: dict) -> bool:
-    """Percorre as entradas de um arquivo RDB a partir de state['pos']; devolve True quando termina."""
+    """Walks the entries of an RDB file from state['pos']; returns True when done."""
     pos = state.get("pos", 0)
     types = state.setdefault("types", {})
     while pos + 0x30 <= size:
@@ -81,7 +81,7 @@ def scan_file(f, path: str, base: int, size: int, deadline: float, state: dict) 
             return False
         hdr = nx.read_at(f, base + pos, 0x30)
         if hdr[:8] != IDRK:
-            # entradas podem vir depois de preenchimento até 64 KB: procura a próxima
+            # entries can follow padding up to 64 KB: look for the next one
             window = nx.read_at(f, base + pos, min(0x10000, size - pos))
             nxt = window.find(IDRK, 1)
             if nxt < 0:
@@ -124,7 +124,7 @@ def main(argv=None) -> int:
     ap.add_argument("--state", type=Path, default=ROOT / "build" / "v130" / "rdb-census-state.json")
     ap.add_argument("--budget", type=float, default=150.0)
     ap.add_argument("--report", action="store_true")
-    ap.add_argument("--dlc", action="store_true", help="também os RDB dos DLCs, lidos direto dos NSPs em --game-dir")
+    ap.add_argument("--dlc", action="store_true", help="also the DLC RDBs, read straight from the NSPs in --game-dir")
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
     ap.add_argument("--keys", type=Path, default=ROOT / "Game Files" / "prod.keys")
     args = ap.parse_args(argv)
@@ -148,7 +148,7 @@ def main(argv=None) -> int:
                     break
             done += sum(1 for p, _o, _s in files if state["files"].get(p, {}).get("done"))
         args.state.write_text(json.dumps(state) + "\n", encoding="utf-8")
-        print(f"arquivos RDB processados: {done}/{total_files}" + ("" if done == total_files else " (rode de novo para continuar)"))
+        print(f"RDB files processed: {done}/{total_files}" + ("" if done == total_files else " (run again to continue)"))
         if done < total_files:
             return 2
 
@@ -173,7 +173,7 @@ def main(argv=None) -> int:
     out = args.state.with_name("rdb-census.json")
     out.write_text(json.dumps({k: {**t, "magic": dict(t["magic"]), "g1t_formats": dict(t["g1t_formats"])}
                                for k, t in rows}, indent=1) + "\n", encoding="utf-8")
-    print(f"relatório: {out}")
+    print(f"report: {out}")
     return 0
 
 

@@ -1,17 +1,17 @@
 #!/bin/sh
-# Clona os projetos de referência em refs/, nas revisões fixadas em docs/referencias.md.
-# refs/ é material de leitura (somente leitura) e é ignorado pelo git.
+# Clones the reference projects into refs/ at pinned revisions (the commits below, also in THIRD_PARTY_NOTICES.md).
+# refs/ is reading material (read only) and is ignored by git.
 set -eu
 
 cd "$(dirname "$0")/.."
 mkdir -p refs
 
-# fetch <nome> <url> <commit>: checkout raso exatamente daquele commit.
+# fetch <name> <url> <commit>: shallow checkout of exactly that commit.
 fetch() {
     name=$1 url=$2 commit=$3
     dir=refs/$name
     if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$commit" ]; then
-        echo "$name: atualizado"
+        echo "$name: up to date"
         return
     fi
     rm -rf "$dir"

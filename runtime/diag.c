@@ -23,7 +23,7 @@
 // whatever the vibration does. AOC_ATTACK_DUMP=<k> dumps the frame 6 presents after the k-th of them.
 // Frame dumps (vk_dump.c, AOC_DUMP=arm): AOC_HIT_DUMP=<k> dumps the frame after the k-th watched hit; AOC_MARK_DUMP=1
 // dumps on F8; a dark or black report dumps too.
-// Performance log: one CSV row a second for the whole session in <log dir>/desempenho/<start time>.csv (the newest
+// Performance log: one CSV row a second for the whole session in <log dir>/performance/<start time>.csv (the newest
 // 40 kept; AOC_PERF_LOG=0 off): frames and the slowest one with what held it (shader translation, pipeline build,
 // texture upload, replay, GPU fence, pacing), draws, skipped draws, translations, pipelines and uploads, picture
 // brightness, file reads, the main thread's state, and on Linux the APU and battery watts, temperatures, GPU load,
@@ -230,7 +230,7 @@ static int csv_add(const char *name, void *ctx) {
     return l->n < 256;
 }
 
-// Opens <log dir>/desempenho/<time>.csv and drops all but the newest 40 files there.
+// Opens <log dir>/performance/<time>.csv and drops all but the newest 40 files there.
 static void perf_open(void) {
     perf_state = -1;
     const char *e = cfg_get("AOC_PERF_LOG");
@@ -238,7 +238,7 @@ static void perf_open(void) {
     char dir[PLAT_PATH_MAX * 3 + 64], path[PLAT_PATH_MAX * 3 + 128];
     log_dir(dir, PLAT_PATH_MAX * 3);
     size_t n = strlen(dir);
-    snprintf(dir + n, sizeof dir - n, "/desempenho");
+    snprintf(dir + n, sizeof dir - n, "/performance");
     plat_file_mkdir_p(dir);
     CsvList cl = {0};
     plat_file_list(dir, ".csv", csv_add, &cl);
@@ -260,7 +260,7 @@ static void perf_open(void) {
         rt_log("diag: cannot write the performance log %s", path);
         return;
     }
-    fprintf(perf_f, "# AoC Recomp %s performance log, one row a second (tools/perf_view.py)\n", rt_port_version);
+    fprintf(perf_f, "# AgeOfCalamityRecomp %s performance log, one row a second (tools/perf_view.py)\n", rt_port_version);
     // the settings in effect, so sessions played with different ones can be told apart (tools/perf_view.py shows them)
     static const char *const keys[] = {"AOC_DEVICE_PROFILE", "AOC_OUTPUT_RES", "AOC_RENDER_SCALE", "AOC_OPERATION_MODE",
                                        "AOC_FPS_LIMIT", "AOC_REPLAY_ASYNC", "AOC_SHADOW_RES", "AOC_VK_PRESENT"};

@@ -1,4 +1,4 @@
-// AoC Recomp launcher: one window with two screens, for Windows and Linux. Dear ImGui on SDL3's renderer
+// AgeOfCalamityRecomp launcher: one window with two screens, for Windows and Linux. Dear ImGui on SDL3's renderer
 // (runtime/third_party/imgui, MIT). The look is drawn here (colours, geometric lines, rings): no game or Nintendo
 // artwork is in the repository.
 //
@@ -132,8 +132,8 @@ static const char *STR[T_COUNT][2] = {
      "The WSL install did not finish (code %d). Try again or see the guide."},
     {"cancelado pelo usuário", "cancelled by the user"},
     {"não consegui iniciar o Python: ", "could not start Python: "},
-    {"Versão nova do AoC Recomp: forje de novo para atualizar o jogo (só o que mudou é refeito).",
-     "New AoC Recomp version: forge again to update the game (only what changed is redone)."},
+    {"Versão nova do AgeOfCalamityRecomp: forje de novo para atualizar o jogo (só o que mudou é refeito).",
+     "New AgeOfCalamityRecomp version: forge again to update the game (only what changed is redone)."},
     {"GRÁFICOS", "GRAPHICS"},
     {"CONTROLE E SOM", "CONTROLS AND SOUND"},
     {"Valem na próxima vez que o jogo abrir. Mais opções no jogo: F1.",
@@ -163,7 +163,7 @@ static const char *STR[T_COUNT][2] = {
     {"Não consegui abrir o jogo.", "Could not start the game."},
     {"(nome sem o ID; conferido ao forjar)", "(no ID in the name; checked when forging)"},
 };
-static int g_lang = 0;   // 0 Portuguese, 1 English
+static int g_lang = 1;   // 0 Portuguese, 1 English (the default)
 static const char *tr(Str s) { return STR[s][g_lang]; }
 // A label whose text changes with the language but keeps its ImGui id.
 static std::string lab(Str s, const char *id) { return std::string(tr(s)) + "###" + id; }
@@ -1128,7 +1128,7 @@ static void set_status(const char *msg, const ImVec4 &c) { g_status = msg, g_sta
 static void draw_header(ImGuiIO &io, float pad) {
     float s = g_scale;
     ImGui::SetCursorPos(ImVec2(io.DisplaySize.x - pad - 40 * s * 2 - 90 * s - 20 * s, pad * 0.55f));
-    const fs::path guide = g_root / (g_lang ? "GUIDE.md" : "GUIA.md");
+    const fs::path guide = g_root / "README.md";
     if (ImGui::Button(lab(T_GUIDE, "guide").c_str(), ImVec2(90 * s, 0))) open_path(guide);
     ImGui::SameLine(0, 20 * s);
     if (lang_chip("PT", g_lang == 0) && g_lang != 0) g_lang = 0, settings_save();
@@ -1176,9 +1176,9 @@ static void draw_header(ImGuiIO &io, float pad) {
     ImGui::Dummy(ImVec2(0, 18 * s));
 }
 
-// Where problems are reported: the repository's issue form (.github/ISSUE_TEMPLATE/problema.yml). "Report a problem"
+// Where problems are reported: the repository's issue form (.github/ISSUE_TEMPLATE/problem.yml). "Report a problem"
 // makes aoc-report.zip (tools/make_report.py), opens its folder and this page, where the zip is attached.
-static const char ISSUES_URL[] = "https://github.com/eliasm4r/AgeOfCalamityRecomp/issues/new?template=problema.yml";
+static const char ISSUES_URL[] = "https://github.com/eliasm4r/AgeOfCalamityRecomp/issues/new?template=problem.yml";
 
 // The bottom bar's small buttons, all of one height.
 static bool bar_button(Str s, const char *id) {

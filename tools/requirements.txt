@@ -1,4 +1,4 @@
-# Ferramentas Python do AoC Recomp (extração, censos, gerador, testes). Versões testadas em 2026-11.
+# Python tools of Age of Calamity Recomp (extraction, censuses, generator, tests). Versions tested in 2026-11.
 cryptography>=42
 lz4>=4.3
 numpy>=1.26

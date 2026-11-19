@@ -1,4 +1,4 @@
-"""Testes das ferramentas da Fase 0 com arquivos sintéticos (nenhum dado do jogo)."""
+"""Tests of the extraction tools with synthetic files (no game data)."""
 from __future__ import annotations
 
 import io
@@ -77,7 +77,7 @@ class InspectDumpTest(unittest.TestCase):
 
 class CheckContentTest(unittest.TestCase):
     def check(self, rel: str, content: bytes) -> list[str]:
-        # Escreve num diretório temporário: o teste nunca cria arquivos dentro do repositório.
+        # Writes to a temporary folder: the test never creates files inside the repository.
         with tempfile.TemporaryDirectory() as t:
             path = Path(t) / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,14 +105,14 @@ class CheckContentTest(unittest.TestCase):
         self.assertTrue(self.check("tests/_tmp_g.c", f"// {check_content.GENERATED_MARKER}\n".encode()))
 
 
-try:   # nx.py precisa do pacote cryptography, que o CI mínimo não instala
+try:   # nx.py needs the cryptography package, which the minimal CI does not install
     import extract_dlc
 except ImportError:
     extract_dlc = None
 
 
 def fake_ivfc(data: bytes, block_log2: int = 12):
-    """Cabeçalho de seção IVFC e bytes da seção para `data` no nível de dados: (fs, seção)."""
+    """IVFC section header and section bytes for `data` in the data level: (fs, section)."""
     import hashlib
     block = 1 << block_log2
 
@@ -147,9 +147,9 @@ class FakeSection:
         return self.data[offset:offset + size]
 
 
-@unittest.skipUnless(extract_dlc, "sem o pacote cryptography")
+@unittest.skipUnless(extract_dlc, "no cryptography package")
 class ExtractDlcTest(unittest.TestCase):
-    DATA = bytes(range(256)) * 97 + b"fim"   # não é múltiplo do bloco: o último bloco é completado com zeros
+    DATA = bytes(range(256)) * 97 + b"fim"   # not a multiple of the block: the last block is padded with zeros
 
     def test_copy_checks_the_hash_tree(self):
         fs, section = fake_ivfc(self.DATA)
@@ -163,7 +163,7 @@ class ExtractDlcTest(unittest.TestCase):
     def test_changed_data_block_fails(self):
         fs, section = fake_ivfc(self.DATA)
         bad = bytearray(section)
-        bad[len(section) - (-len(self.DATA) % 4096) - 100] ^= 1   # um byte do nível de dados (antes do enchimento)
+        bad[len(section) - (-len(self.DATA) % 4096) - 100] ^= 1   # one byte of the data level (before the padding)
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(ValueError):
                 extract_dlc.copy_verified(FakeSection(fs, bytes(bad)), Path(d) / "dlc.bin")
@@ -172,7 +172,7 @@ class ExtractDlcTest(unittest.TestCase):
     def test_changed_hash_table_fails(self):
         fs, section = fake_ivfc(self.DATA)
         bad = bytearray(section)
-        bad[3] ^= 1   # o nível 0
+        bad[3] ^= 1   # level 0
         with tempfile.TemporaryDirectory() as d, self.assertRaises(ValueError):
             extract_dlc.copy_verified(FakeSection(fs, bytes(bad)), Path(d) / "dlc.bin")
 
@@ -181,7 +181,7 @@ try:
     import extract
 except ImportError:
     extract = None
-import make_build  # noqa: E402  (só a biblioteca padrão)
+import make_build  # noqa: E402  (standard library only)
 
 
 def fake_pkg(role: str, version, name: str) -> dict:
@@ -190,9 +190,9 @@ def fake_pkg(role: str, version, name: str) -> dict:
             "tickets": 0}
 
 
-@unittest.skipUnless(extract, "sem o pacote cryptography")
+@unittest.skipUnless(extract, "no cryptography package")
 class InventoryTest(unittest.TestCase):
-    """O inventário decide pelo papel que scan() tirou do conteúdo; o nome do arquivo não entra."""
+    """The inventory goes by the role scan() took from the contents; the file name plays no part."""
 
     def inventory(self, pkgs):
         from types import SimpleNamespace

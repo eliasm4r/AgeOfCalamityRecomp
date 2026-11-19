@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Censo dos shaders (Fase 0): quantos são, de que estágio, quantos únicos, quanto código.
+"""Shader census: how many there are, of which stage, how many unique, how much code.
 
-Fontes, todas estáticas (não precisa rodar o jogo nem emulador):
-- containers G2S (`_S2G3000`, tipo KTID 0x7bcd279f) e `_DOK0000` (0x20a6a0bb) dentro das entradas IDRK dos RDB do
-  RomFS 1.3.0 mesclado;
-- saídas GLSLC embutidas no `main` (ExeFS 1.3.0).
+Sources, all static (no need to run the game or an emulator):
+- G2S containers (`_S2G3000`, KTID type 0x7bcd279f) and `_DOK0000` (0x20a6a0bb) inside the IDRK entries of the RDBs
+  of the merged RomFS 1.3.0;
+- GLSLC outputs embedded in `main` (ExeFS 1.3.0).
 
-Cada shader é uma saída do compilador GLSLC da Nintendo: uma seção de controle (0x850 ou 0x880 bytes) e o código
-Maxwell. A chave de cada shader é a mesma que o runtime vai usar para achar a tradução: os 16 primeiros dígitos
-hexadecimais do SHA-256 de (seção de controle até o próprio tamanho + código).
+Each shader is an output of Nintendo's GLSLC compiler: a control section (0x850 or 0x880 bytes) and the Maxwell code.
+Each shader's key is the one the runtime uses to find the translation: the first 16 hex digits of the SHA-256 of
+(control section up to its own size + code).
 
-Leitura de GLSLC portada de nxnative `dm/gfx/tools/shader_split.py` @ 3ace3df33b81681cdc9d17bfa48eadaccd446b5c
-(funções sph_stage, ctl_len, skey, check, glslc_stage, glslc_layout, glslc_section, glslc_shaders, idrk_data;
-MIT, Copyright (c) 2026 seedds). Sem o caminho NVN2 (Switch 2) e sem o perfil de jogo (o AoC não pula bytes na chave).
+GLSLC reading ported from nxnative `dm/gfx/tools/shader_split.py` @ 3ace3df33b81681cdc9d17bfa48eadaccd446b5c
+(functions sph_stage, ctl_len, skey, check, glslc_stage, glslc_layout, glslc_section, glslc_shaders, idrk_data;
+MIT, Copyright (c) 2026 seedds). Without the NVN2 path (Switch 2) and without the game profile (AoC skips no bytes in
+the key).
 
-Retoma de onde parou (--budget segundos por execução). Saídas em build/v130/ (fora do git):
-shader-census-state.json (progresso) e, no fim, shader-inventory.tsv (chave, estágio, ocorrências, bytes de código)
-e shader-census.json (resumo).
+Resumes where it stopped (--budget seconds per run). Outputs in build/v130/ (outside git):
+shader-census-state.json (progress) and, at the end, shader-inventory.tsv (key, stage, occurrences, code bytes)
+and shader-census.json (summary).
 
-Uso:
+Usage:
     python3 tools/census_shaders.py [--budget 150]
 """
 from __future__ import annotations
@@ -66,11 +67,11 @@ def skey(ctl: bytes, code: bytes) -> str:
 
 def check(st: str, ctl: bytes, code: bytes):
     if ctl[:4] != CTL_MAGIC or len(ctl) < 0x24 or len(ctl) < ctl_len(ctl):
-        return "seção de controle inválida"
+        return "invalid control section"
     if (st == "cs" and code[:4] in (CS_MAGIC, GFX_MAGIC) and code[:4] != CS_MAGIC) or (st != "cs" and code[:4] != GFX_MAGIC):
-        return "magic do código não bate com o estágio"
+        return "code magic does not match the stage"
     if struct.unpack_from("<I", ctl, 0x704)[0] != len(code):
-        return "controle +0x704 não bate com o tamanho do código"
+        return "control +0x704 does not match the code size"
     return None
 
 
@@ -113,7 +114,7 @@ def glslc_program(d: bytes, h: int, size: int):
 
 
 def glslc_shaders(d: bytes):
-    """Todas as saídas GLSLC em d → [(estágio, controle, código)]."""
+    """Every GLSLC output in d -> [(stage, control, code)]."""
     out = []
     for m in re.finditer(re.escape(GLSLC_MAGIC), d):
         h = m.start()
@@ -143,7 +144,7 @@ def glslc_shaders(d: bytes):
 
 
 def idrk_inflate(f, start: int, end: int, flags: int) -> bytes:
-    """Dados reais de uma entrada IDRK do AoC: flag 0x100000 = zlib em blocos (u32 tamanho + stream, 0 termina)."""
+    """Real data of an AoC IDRK entry: flag 0x100000 = zlib in blocks (u32 size + stream, 0 ends)."""
     d = nx.read_at(f, start, end - start)
     if not flags & 0x100000:
         return d
@@ -206,7 +207,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", type=Path, default=ROOT / "build" / "v130")
     ap.add_argument("--budget", type=float, default=150.0)
-    ap.add_argument("--dlc", action="store_true", help="também os shaders dos DLCs, lidos direto dos NSPs")
+    ap.add_argument("--dlc", action="store_true", help="also the DLC shaders, read straight from the NSPs")
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
     ap.add_argument("--keys", type=Path, default=ROOT / "Game Files" / "prod.keys")
     args = ap.parse_args(argv)
@@ -239,7 +240,7 @@ def main(argv=None) -> int:
         done += sum(1 for p, _o, _s in files if state["files"].get(p, {}).get("done"))
     state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
     if done < total_files:
-        print(f"arquivos RDB: {done}/{total_files}; shaders únicos até agora: {len(state['keys'])} (rode de novo)")
+        print(f"RDB files: {done}/{total_files}; unique shaders so far: {len(state['keys'])} (run again)")
         return 2
 
     keys = state["keys"]
@@ -258,14 +259,14 @@ def main(argv=None) -> int:
     total_occ = sum(occ_stage.values())
     dlc_only = Counter(st for st, _n, _c, _l, src in keys.values() if src and all(x.startswith("DLC:") for x in src))
     if dlc_only:
-        print(f"só nos DLCs: {sum(dlc_only.values())} únicos {dict(dlc_only)}")
-    print(f"shaders: {total_occ} ocorrências, {len(keys)} únicos")
+        print(f"only in the DLCs: {sum(dlc_only.values())} unique {dict(dlc_only)}")
+    print(f"shaders: {total_occ} occurrences, {len(keys)} unique")
     for st in ("vs", "ps", "cs", "gs", "hs", "ds"):
         if by_stage[st]:
-            print(f"    {STAGE_NAME[st]:9s} {by_stage[st]:7d} únicos  {occ_stage[st]:7d} ocorrências"
-                  f"  código {code_stage[st] / 2**20:7.1f} MiB")
-    print("containers lidos:", dict(state["containers"]), " com shaders:", dict(state["containers_with_shaders"]))
-    print("únicos por origem:", dict(by_source), " tamanhos de controle:", dict(ctl_sizes))
+            print(f"    {STAGE_NAME[st]:9s} {by_stage[st]:7d} unique  {occ_stage[st]:7d} occurrences"
+                  f"  code {code_stage[st] / 2**20:7.1f} MiB")
+    print("containers read:", dict(state["containers"]), " with shaders:", dict(state["containers_with_shaders"]))
+    print("unique by source:", dict(by_source), " control sizes:", dict(ctl_sizes))
     inv = args.work / "shader-inventory.tsv"
     inv.write_text("chave\testagio\tocorrencias\tbytes_codigo\torigens\n" + "".join(
         f"{k}\t{STAGE_NAME[st]}\t{n}\t{ncode}\t{','.join(sorted(src))}\n"
@@ -275,7 +276,7 @@ def main(argv=None) -> int:
                "control_sizes": dict(ctl_sizes), "unique_by_source": dict(by_source),
                "dlc_only_by_stage": dict(dlc_only), "containers": state["containers"], "containers_with_shaders": state["containers_with_shaders"]}
     (args.work / "shader-census.json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
-    print(f"inventário: {inv}")
+    print(f"inventory: {inv}")
     return 0
 
 

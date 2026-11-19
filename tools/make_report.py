@@ -37,7 +37,7 @@ def cmd(args) -> str:
 
 
 def system_txt() -> str:
-    lines = [f"AoC Recomp {(ROOT / 'VERSION').read_text().strip() if (ROOT / 'VERSION').is_file() else '?'}",
+    lines = [f"AgeOfCalamityRecomp {(ROOT / 'VERSION').read_text().strip() if (ROOT / 'VERSION').is_file() else '?'}",
              f"report made {time.strftime('%Y-%m-%d %H:%M:%S')}",
              f"system: {platform.platform()} ({platform.machine()})",
              f"processor: {platform.processor() or '?'}, {os.cpu_count()} threads",

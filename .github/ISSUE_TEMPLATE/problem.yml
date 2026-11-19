@@ -1,0 +1,59 @@
+name: Bug report
+description: Something failed in the forge or in the game
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem and attach `aoc-report.zip` (the launcher's **Report a problem...** button; on a Steam Deck without the launcher, `./aoc-logs.sh bundle`). The zip holds logs and PC details, nothing of the game.
+
+        Never attach game files, `prod.keys` or saves.
+  - type: input
+    id: version
+    attributes:
+      label: AgeOfCalamityRecomp version
+      description: Shown in the launcher and in the first line of `system.txt`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Windows
+        - Steam Deck
+        - Linux (other)
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which part
+      options:
+        - Forge (launcher, building the game)
+        - Starting the game
+        - Playing (picture, sound, freeze, performance)
+        - DLC
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw. For in-game problems, name the stage and the moment.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: aoc-report.zip
+      description: Drag the zip here (and screenshots, if they help).
+  - type: checkboxes
+    id: own
+    attributes:
+      label: Confirmation
+      options:
+        - label: I use my own copy of the game and attached no game files, keys or saves.
+          required: true

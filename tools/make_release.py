@@ -70,7 +70,7 @@ def fetch(url: str, sha: str) -> bytes:
         print(f"baixando {url}", flush=True)
         data = urllib.request.urlopen(url, timeout=120).read()
         if hashlib.sha256(data).hexdigest() != sha:
-            sys.exit(f"ERRO: {url} não bate com o hash fixado")
+            sys.exit(f"ERROR: {url} does not match the pinned hash")
         dst.write_bytes(data)
     return dst.read_bytes()
 
@@ -99,7 +99,7 @@ def python_embed(wheel_dir: Path) -> list:
     names = {w.name.split("-")[0].lower() for w in wheels}
     for need in WHEELS:
         if need not in names:
-            sys.exit(f"ERRO: falta a wheel de {need} em {wheel_dir}")
+            sys.exit(f"ERROR: the {need} wheel is missing in {wheel_dir}")
     for w in wheels:
         with zipfile.ZipFile(w) as z:
             for n in z.namelist():
@@ -141,7 +141,7 @@ def main() -> int:
     dirty = subprocess.run([GIT, "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
                            capture_output=True, text=True).stdout.strip()
     if dirty and not args.allow_dirty:
-        sys.exit(f"ERRO: há mudanças não commitadas (o pacote leva o HEAD):\n{dirty}")
+        sys.exit(f"ERROR: there are uncommitted changes (the package takes HEAD):\n{dirty}")
     OUT.mkdir(parents=True, exist_ok=True)
     stage = OUT / "stage"
     stage.mkdir(exist_ok=True)
@@ -166,14 +166,14 @@ def main() -> int:
     for idf in (stage / "xlate-linux/aoc_xlate.id", args.win_xlate / "aoc_xlate.id"):
         got = idf.read_text().strip()
         if got != ident:
-            sys.exit(f"ERRO: {idf} é {got[:16]}, as fontes do tradutor no HEAD dão {ident[:16]}; recompile o tradutor")
+            sys.exit(f"ERROR: {idf} is {got[:16]}, the translator sources at HEAD give {ident[:16]}; rebuild the translator")
     # The Windows launcher (MSYS2: this Python)
     sh([sys.executable, ROOT / "tools/build_launcher.py", "--out", stage / "launcher-win"])   # not the one in use
 
     tree = git_tree()
     if not any(n == "recomplauncher.json" for n, _, _ in tree):   # RecompLauncher's file, next to the launcher
         tree.append(("recomplauncher.json", 0o644, (ROOT / "recomplauncher.json").read_bytes()))
-    print(f"repositório no HEAD: {len(tree)} arquivos, {sum(len(d) for _, _, d in tree) / 1e6:.1f} MB")
+    print(f"repository at HEAD: {len(tree)} files, {sum(len(d) for _, _, d in tree) / 1e6:.1f} MB")
     lic = (ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0/LICENSE").read_bytes()
 
     # ---- Windows

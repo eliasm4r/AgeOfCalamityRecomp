@@ -27,7 +27,7 @@ def build_windows(out: Path) -> Path:
     res = out / "launcher.res.o"
     windres = shutil.which("llvm-windres") or shutil.which("windres")
     if not windres:
-        sys.exit("ERRO: llvm-windres/windres não encontrado (pacote mingw-w64-ucrt-x86_64-llvm)")
+        sys.exit("ERROR: llvm-windres/windres not found (package mingw-w64-ucrt-x86_64-llvm)")
     subprocess.run([windres, "-i", str(ROOT / "launcher" / "launcher.rc"), "-o", str(res)], check=True,
                    cwd=str(ROOT / "launcher"))
     exe = out / "aoc-launcher.exe"
@@ -46,7 +46,7 @@ def build_windows(out: Path) -> Path:
             dll = line.split("=>")[1].split("(")[0].strip()
             win = subprocess.run(["cygpath", "-w", dll], capture_output=True, text=True).stdout.strip()
             if Path(win).name.lower() not in ("sdl3.dll", "libiconv-2.dll"):
-                sys.exit(f"ERRO: o launcher importa {Path(win).name} do MSYS2 (só a SDL3 deveria ficar fora do exe)")
+                sys.exit(f"ERROR: the launcher imports {Path(win).name} from MSYS2 (only SDL3 should stay outside the exe)")
             shutil.copy2(win, out / Path(win).name)
             print("  ", Path(win).name)
     return exe
@@ -54,7 +54,7 @@ def build_windows(out: Path) -> Path:
 
 def build_linux(sysroot: Path, out: Path) -> Path:
     if not (sysroot / "usr/lib/x86_64-linux-gnu/libSDL3.a").is_file():
-        sys.exit(f"ERRO: {sysroot} não tem a SDL3 estática; rode antes tools/build.py dist (baixa o sniper)")
+        sys.exit(f"ERROR: {sysroot} has no static SDL3; run tools/build.py dist first (it downloads the sniper)")
     out.mkdir(parents=True, exist_ok=True)
     exe = out / "aoc-launcher"
     cc = ["clang++", "--target=x86_64-linux-gnu", f"--sysroot={sysroot}", "-fuse-ld=lld"]
@@ -68,7 +68,7 @@ def build_linux(sysroot: Path, out: Path) -> Path:
     shutil.copy2((sysroot / "usr/lib/x86_64-linux-gnu/libSDL3.so.0").resolve(), out / "libSDL3.so.0")
     p = subprocess.run(["objdump", "-T", str(exe)], capture_output=True, text=True)
     vers = sorted(set(re.findall(r"GLIBC_(2\.[0-9.]+)", p.stdout)), key=lambda v: tuple(int(x) for x in v.split(".")))
-    print(f"glibc máxima pedida: {vers[-1] if vers else '?'}")
+    print(f"highest glibc needed: {vers[-1] if vers else '?'}")
     return exe
 
 

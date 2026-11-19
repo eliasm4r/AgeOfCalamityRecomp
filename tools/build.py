@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Build do AoC Recomp no Linux (WSL2 ou Linux nativo): gera o C do jogo e compila com clang + ninja.
+"""Age of Calamity Recomp build on Linux (WSL2 or native Linux): generates the game's C and compiles it with clang + ninja.
 
-Passos (cada um pula o que já está feito):
+Steps (each one skips what is already done):
 
-0. `extract` — se build/v130/exefs não existir (máquina nova), extrai o ExeFS do NSP do update em "Game Files/".
-1. `gen`   — recomp/gen.py: ExeFS 1.3.0 → C em <work>/generated/ (~600 MB, ~3 min).
-2. `guest` — compila todo o C gerado em objetos e junta em <work>/lib/libaoc_guest.a. As ~35 funções gigantes do
-             `main` (um arquivo de 1–7 MB de C cada) recebem flags que cortam os passes do LLVM que crescem de forma
-             superlinear (medido: ~40 % menos tempo); são compiladas primeiro, para não ficarem para o fim.
-3. `dist`  — (Fase 2 em diante, quando houver runtime) linka o executável e monta a pasta única para o Deck.
+0. `extract` — when build/v130/exefs does not exist (new machine), extracts the ExeFS from the update NSP in "Game Files/".
+1. `gen`   — recomp/gen.py: ExeFS 1.3.0 to C in <work>/generated/ (~600 MB, ~3 min).
+2. `guest` — compiles all the generated C into objects and packs them into <work>/lib/libaoc_guest.a. The ~35 giant
+             functions of `main` (one file of 1-7 MB of C each) get flags that cut the LLVM passes that grow
+             superlinearly (measured: ~40 % less time); they are compiled first so they do not hold up the end.
+3. `dist`  — links the executable and assembles the single folder for the Deck.
 
-O diretório de trabalho deve ficar no disco do Linux (ex.: ~/aoc-build), não em /mnt/c ou /mnt/d: compilar sobre
-o disco do Windows pelo WSL é muitas vezes mais lento. Só a pasta final (dist) vai para o disco D.
+Keep the work folder on the Linux disk (e.g. ~/aoc-build), not under /mnt/c or /mnt/d: compiling on the Windows
+disk through WSL is many times slower. Only the finished folder (dist) goes to the Windows disk.
 
-Uso (na raiz do repositório):
-    python3 tools/build.py --work ~/aoc-build            # gen + guest, com todos os núcleos
-    python3 tools/build.py --work ~/aoc-build --jobs 8   # limita os núcleos (cada gigante usa até ~2–4 GB de RAM)
+Usage (at the repository root):
+    python3 tools/build.py --work ~/aoc-build            # gen + guest, on every core
+    python3 tools/build.py --work ~/aoc-build --jobs 8   # limits the cores (each giant uses up to ~2-4 GB of RAM)
 """
 from __future__ import annotations
 
@@ -36,24 +36,24 @@ ROOT = Path(__file__).resolve().parent.parent
 WIN = os.name == "nt"
 EXE = "aoc.exe" if WIN else "aoc"
 
-# Flags do código gerado, como no Astral Chain (tools/build_game.py GEN_FLAGS).
+# Flags of the generated code, as in Astral Chain (tools/build_game.py GEN_FLAGS).
 GEN_FLAGS = ["-O1", "-fno-strict-aliasing", "-Wno-return-type", "-Wno-unused-label", "-fvisibility=hidden",
              "-march=x86-64-v3"]
-# Para arquivos de uma função só com mais de BIG_BYTES de C: sem machine sinking, sem coalescer de intervalos e sem
-# rotação de laços. Em main_0053.c (1 MB, 1 função): 89 s → 51 s, sem erro.
+# For single-function files with more than BIG_BYTES of C: no machine sinking, no interval coalescing and no loop
+# rotation. On main_0053.c (1 MB, 1 function): 89 s to 51 s, no error.
 BIG_BYTES = 900_000
 BIG_EXTRA = ["-mllvm", "-disable-machine-sink", "-mllvm", "-join-liveintervals=false",
              "-mllvm", "-rotation-max-header-size=0"]
 MODULES = ("main", "subsdk0", "sdk")
-# Tabela de patches do lifter (spin waits; depois os patches de jogo). Obrigatória: sem os spin waits o jogo pode travar.
+# Lifter patch table (spin waits, then the game patches). Required: without the spin waits the game can hang.
 PATCHES = ROOT / "recomp" / "patches-v130.txt"
-# RAM que uma compilação de função gigante pode usar (medido: 1,8 GB na de 5 MB; a de 6,6 MB passa disso).
+# RAM a giant function compile can use (measured: 1.8 GB for the 5 MB one; the 6.6 MB one goes beyond).
 BIG_MEM = 4 << 30
 GEN_WORKER_MEM = 1536 << 20   # recomp/gen.py WORKER_MEM
 
 
 def mem_available() -> int:
-    """MemAvailable do Linux em bytes (0 se não der para ler)."""
+    """Linux MemAvailable in bytes (0 when it cannot be read)."""
     try:
         for line in Path("/proc/meminfo").read_text().splitlines():
             if line.startswith("MemAvailable:"):
@@ -66,20 +66,20 @@ def mem_available() -> int:
 def need(tool: str) -> str:
     path = shutil.which(tool)
     if not path:
-        sys.exit(f"ERRO: '{tool}' não encontrado no PATH (rode tools/setup_wsl.sh)")
+        sys.exit(f"ERROR: '{tool}' not found in PATH (run tools/setup_wsl.sh)")
     return path
 
 
 def step_extract(args) -> None:
-    """Numa máquina nova o ExeFS ainda não existe: extrai do NSP do update em "Game Files/" (tools/extract.py)."""
+    """On a new machine the ExeFS does not exist yet: extracts it from the update NSP in "Game Files/" (tools/extract.py)."""
     game, keys = ROOT / "Game Files", ROOT / "Game Files" / "prod.keys"
     if args.exefs != ROOT / "build" / "v130" / "exefs":
-        sys.exit(f"ERRO: ExeFS não encontrado em {args.exefs}")
+        sys.exit(f"ERROR: ExeFS not found in {args.exefs}")
     if not keys.exists() or not any(game.rglob("*.nsp")):
-        sys.exit("ERRO: o código do jogo ainda não foi extraído e não achei o dump.\n"
-                 f"  Coloque os NSPs (base, update 1.3.0 e DLCs) e o prod.keys em: {game}\n"
-                 "  (a pasta 'Game Files' fica na raiz do repositório e é ignorada pelo git)")
-    print("extract: ExeFS ausente, extraindo do update 1.3.0 em 'Game Files/'")
+        sys.exit("ERROR: the game code is not extracted yet and the dump was not found.\n"
+                 f"  Put the NSPs (base, update 1.3.0 and DLCs) and prod.keys in: {game}\n"
+                 "  (the 'Game Files' folder sits at the repository root and is ignored by git)")
+    print("extract: ExeFS missing, extracting it from update 1.3.0 in 'Game Files/'")
     subprocess.run([sys.executable, str(ROOT / "tools" / "extract.py"), "inventory"], check=True)
     subprocess.run([sys.executable, str(ROOT / "tools" / "extract.py"), "exefs"], check=True)
     subprocess.run([sys.executable, str(ROOT / "tools" / "inspect_dump.py"), "--exefs", str(args.exefs)], check=True)
@@ -88,16 +88,16 @@ def step_extract(args) -> None:
 def step_gen(args) -> Path:
     out = args.work / "generated"
     manifests = [out / m / "manifest.json" for m in MODULES]
-    # Mudanças no gerador ou na tabela de patches pedem C novo; o gerador só reescreve os arquivos que mudaram.
+    # Changes to the generator or the patch table call for new C; the generator only rewrites the files that changed.
     inputs = [PATCHES] + list((ROOT / "recomp").glob("*.py"))
     fresh = all(p.exists() for p in manifests) and \
         min(p.stat().st_mtime for p in manifests) > max(p.stat().st_mtime for p in inputs)
     if fresh and not args.regen:
-        print("gen: C já gerado e mais novo que recomp/ (use --regen para refazer)")
+        print("gen: C already generated and newer than recomp/ (use --regen to redo it)")
         return out
     cmd = [sys.executable, str(ROOT / "recomp" / "gen.py"), "--exefs", str(args.exefs), "--out", str(out),
            "--modules", ",".join(MODULES), "--patches", str(PATCHES)]
-    # gen.py só mede a memória livre no Windows; aqui ela limita os workers (cada um carrega os módulos: ~1,5 GB).
+    # gen.py only measures free memory on Windows; here it limits the workers (each loads the modules: ~1.5 GB).
     jobs = args.jobs or max(1, min(os.cpu_count() or 1, int(mem_available() * 0.8) // GEN_WORKER_MEM or 1))
     cmd += ["--jobs", str(jobs)]
     print("gen:", " ".join(cmd))
@@ -106,12 +106,12 @@ def step_gen(args) -> Path:
 
 
 def ninja_escape(p: Path | str) -> str:
-    """Caminho numa linha `build` do ninja (saídas e entradas)."""
+    """A path in a ninja `build` line (outputs and inputs)."""
     return str(p).replace("$", "$$").replace(" ", "$ ").replace(":", "$:")
 
 
 def shell_arg(p: Path | str) -> str:
-    """Argumento dentro do valor de uma variável do ninja, que o ninja passa ao shell (ao CreateProcess no Windows)."""
+    """An argument inside a ninja variable value, which ninja passes to the shell (to CreateProcess on Windows)."""
     if WIN:
         return ('"' + str(p).replace("\\", "/") + '"').replace("$", "$$")
     return shlex.quote(str(p)).replace("$", "$$")
@@ -130,12 +130,12 @@ def step_guest(args, gen: Path) -> Path:
             c = info.get(name, {"functions": 0, "bytes": (gen / m / name).stat().st_size})
             big = c["functions"] == 1 and c["bytes"] > BIG_BYTES
             sources.append((gen / m / name, obj_dir / m / (Path(name).stem + ".o"), big, c["bytes"]))
-    # Maiores primeiro: as gigantes começam logo e não seguram o fim do build.
+    # Largest first: the giants start right away and do not hold up the end of the build.
     sources.sort(key=lambda s: -s[3])
-    # Valores de variável do ninja vão para o shell como texto: os caminhos (o repositório costuma ter espaços, como
-    # "Age of Calamity") precisam de aspas do shell, e só o "$" precisa de escape do ninja.
+    # Ninja variable values reach the shell as text: paths (the repository often has spaces, as in
+    # "Age of Calamity") need shell quotes, and only "$" needs a ninja escape.
     flags = " ".join(GEN_FLAGS + ["-I", shell_arg(ROOT / "runtime"), "-I", shell_arg(gen)])
-    # As gigantes rodam num pool limitado pela RAM livre, para várias delas juntas não esgotarem a memória do WSL.
+    # The giants run in a pool limited by free RAM, so several of them together do not exhaust WSL's memory.
     big_depth = args.big_jobs or max(1, int(mem_available() * 0.8) // BIG_MEM)
     lines = [
         "ninja_required_version = 1.10",
@@ -166,22 +166,22 @@ def step_guest(args, gen: Path) -> Path:
     build_file = args.work / "guest.ninja"
     build_file.write_text("\n".join(lines) + "\n")
     big = sum(1 for s in sources if s[2])
-    print(f"guest: {len(sources)} arquivos de C ({big} com função gigante, até {big_depth} ao mesmo tempo) → {lib}")
+    print(f"guest: {len(sources)} C files ({big} with a giant function, up to {big_depth} at once) -> {lib}")
     if args.ninja_only:
-        print(f"guest: só o arquivo ninja foi escrito ({build_file})")
+        print(f"guest: only the ninja file was written ({build_file})")
         return lib
     t0 = time.time()
     cmd = [ninja, "-f", str(build_file)] + (["-j", str(args.jobs)] if args.jobs else [])
     subprocess.run(cmd, check=True, cwd=args.work)
-    print(f"guest: pronto em {time.time() - t0:.0f} s ({lib.stat().st_size / 2**20:.0f} MiB)")
+    print(f"guest: done in {time.time() - t0:.0f} s ({lib.stat().st_size / 2**20:.0f} MiB)")
     return lib
 
 
-# ---- host: runtime + executável (adaptado de astral-chain-pc-recomp / totk-pc-recomp tools/build_game.py, MIT)
+# ---- host: runtime + executable (adapted from astral-chain-pc-recomp / totk-pc-recomp tools/build_game.py, MIT)
 RUNTIME = ROOT / "runtime"
 RT_FLAGS = ["-O2", "-g", "-Wall", "-fno-strict-aliasing", "-march=x86-64-v3"]
-# -no-pie: as tabelas de funções dos módulos (centenas de milhares de ponteiros) não precisam de relocação na carga.
-# $ORIGIN: uma libSDL3.so.0 ao lado do executável vem antes da do sistema (a pasta do Deck).
+# -no-pie: the modules' function tables (hundreds of thousands of pointers) need no relocation at load.
+# $ORIGIN: a libSDL3.so.0 next to the executable comes before the system's (the Deck folder).
 LINK_FLAGS = ["-fuse-ld=lld", "-no-pie", "-Wl,-z,noexecstack", "'-Wl,-rpath,$$ORIGIN/lib'"]
 LINK_LIBS = ["-lvulkan", "-lSDL3", "-lopus", "-lvpx", "-lzstd", "-l:libstdc++.a", "-lm", "-lpthread", "-ldl"]
 if WIN:   # as astral-chain-pc-recomp tools/build_game.py (MSYS2 UCRT64), plus the libraries folder_pick_win.cpp needs
@@ -191,8 +191,8 @@ if WIN:   # as astral-chain-pc-recomp tools/build_game.py (MSYS2 UCRT64), plus t
     LINK_LIBS = ["-lpsapi", "-lbcrypt", "-lvulkan-1", "-luser32", "-lgdi32", "-ldwmapi", "-limm32", "-lwinmm", "-lole32",
                  "-lshell32", "-luuid", "-lSDL3", "-lopus", "-l:libvpx.a", "-l:libzstd.a", "-l:libstdc++.a",
                  "-l:libwinpthread.a"]
-# vk_mem_alloc.h: o do sistema, senão a versão que o TotK Recomp fixa (VMA 3.4.0, MIT), baixada uma vez em
-# toolchain/vma e conferida pelo hash.
+# vk_mem_alloc.h: the system's, else the version TotK Recomp pins (VMA 3.4.0, MIT), downloaded once to
+# toolchain/vma and checked by hash.
 VMA_FETCH = ("https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/v3.4.0/include/vk_mem_alloc.h",
              "8487b7995ad3b263eb73bc5b9a77d71aa69b6bef5d58a715c02d2663afd81f1a")
 GAME_VERSION = 130   # host.h rt_game_version
@@ -212,24 +212,24 @@ def vma_include() -> Path:
     dst = local / "vk_mem_alloc.h"
     if not dst.is_file():
         url, sha = VMA_FETCH
-        print(f"host: baixando VMA 3.4.0 para {local}")
+        print(f"host: downloading VMA 3.4.0 to {local}")
         data = urllib.request.urlopen(url, timeout=60).read()
         if hashlib.sha256(data).hexdigest() != sha:
-            sys.exit(f"ERRO: {url} não bate com o hash fixado")
+            sys.exit(f"ERROR: {url} does not match the pinned hash")
         local.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(data)
     return local
 
 
 def runtime_sources() -> list[Path]:
-    """Todo runtime/*.c, *.cpp, platform/*.c, ui/*.cpp e o Dear ImGui (sem os back ends SDL, que são do launcher), sem
-    os arquivos de outro sistema (Win32); no
-    Windows também o runtime/aoc.rc (manifesto do aoc.exe: DPI por monitor e página de código UTF-8)."""
+    """Every runtime/*.c, *.cpp, platform/*.c, ui/*.cpp and Dear ImGui (without the SDL back ends, which belong to the
+    launcher), without the files of the other system (Win32); on
+    Windows also runtime/aoc.rc (the aoc.exe manifest: per-monitor DPI and the UTF-8 code page)."""
     pats = ("*.c", "*.cpp", "*.rc", "platform/*.c", "ui/*.cpp", "third_party/imgui/*.cpp",
             "third_party/imgui/backends/*.cpp")
 
     def other_os(p: Path) -> bool:
-        if p.name.startswith("imgui_impl_sdl"):   # back ends SDL do launcher (tools/build_launcher.py), não do jogo
+        if p.name.startswith("imgui_impl_sdl"):   # the launcher's SDL back ends (tools/build_launcher.py), not the game's
             return True
         if WIN:
             return p.stem.endswith("_sdl") or p.name == "linux.c"
@@ -238,7 +238,7 @@ def runtime_sources() -> list[Path]:
 
 
 def runtime_object(out: Path, src: Path) -> Path:
-    """Objeto de um fonte do runtime em <out>/obj; o de um .rc leva .res.o (não colide com um .c de mesmo nome)."""
+    """Object of a runtime source in <out>/obj; a .rc one gets .res.o (no clash with a .c of the same name)."""
     rel = src.relative_to(RUNTIME) if src.is_relative_to(RUNTIME) else Path(src.name)
     o = out / "obj" / rel.with_suffix(".res.o" if src.suffix == ".rc" else ".o")
     o.parent.mkdir(parents=True, exist_ok=True)
@@ -250,15 +250,15 @@ def c_string(s: str) -> str:
 
 
 def module_glue(gen: Path, exefs: Path) -> str:
-    """C de modules.c: layout, tabelas de funções dos módulos (dispatch.h), SHA-256 esperados do ExeFS, versão do jogo
-    e caminhos padrão (host.h). Os caminhos são os desta máquina; na pasta do Deck o runtime acha exefs/, romfs/ e
-    profile/ ao lado do executável (main.c portable_paths)."""
+    """C of modules.c: layout, module function tables (dispatch.h), expected ExeFS SHA-256, game version
+    and default paths (host.h). The paths are this machine's; in the Deck folder the runtime finds exefs/, romfs/ and
+    profile/ next to the executable (main.c portable_paths)."""
     sys.path.insert(0, str(ROOT / "tools"))
     from check_content import GENERATED_MARKER
     layout = json.loads((gen / "layout.json").read_text())
     manifest = json.loads((exefs.parent / "exefs-manifest.json").read_text())
     hashes = {f["name"]: f["sha256"] for f in manifest["files"]}
-    out = [f"// Cola dos módulos escrita por tools/build.py; não editar. {GENERATED_MARKER}",
+    out = [f"// Module glue written by tools/build.py; do not edit. {GENERATED_MARKER}",
            '#include "dispatch.h"', '#include "host.h"', '#include "layout.h"', ""]
     for m in layout:
         u = m["name"].upper()
@@ -287,8 +287,8 @@ def module_glue(gen: Path, exefs: Path) -> str:
 
 
 def write_if_changed(path: Path, text: str) -> None:
-    # Sempre UTF-8: no Windows o padrão depende do modo UTF-8 do Python (o tools/make_build.py o liga), e um arquivo
-    # gravado na página de código antiga não decodifica; ilegível conta como mudado.
+    # Always UTF-8: on Windows the default depends on Python's UTF-8 mode (tools/make_build.py turns it on), and a file
+    # written in the old code page does not decode; unreadable counts as changed.
     data = text.encode("utf-8")
     if path.exists() and path.read_bytes() == data:
         return
@@ -296,7 +296,7 @@ def write_if_changed(path: Path, text: str) -> None:
 
 
 def step_host(args, gen: Path, lib: Path) -> Path:
-    """Compila o runtime e linka <work>/host/aoc com a libaoc_guest.a."""
+    """Compiles the runtime and links <work>/host/aoc with libaoc_guest.a."""
     cc, ninja = need("clang"), need("ninja")
     out = args.work / "host"
     out.mkdir(parents=True, exist_ok=True)
@@ -305,10 +305,10 @@ def step_host(args, gen: Path, lib: Path) -> Path:
     import romfs_index
     if ROMFS_IMAGE.is_file():
         n, size, dt = romfs_index.write(ROMFS_IMAGE, out)
-        print(f"host: índice do RomFS com {n} arquivos ({dt:.1f} s)")
+        print(f"host: RomFS index with {n} files ({dt:.1f} s)")
     else:
         romfs_index.write_placeholder(out)
-        print(f"host: AVISO: {ROMFS_IMAGE} não existe; o executável compila mas não inicia o jogo")
+        print(f"host: WARNING: {ROMFS_IMAGE} does not exist; the executable compiles but does not start the game")
     inc = ["-I", shell_arg(RUNTIME), "-I", shell_arg(gen), "-I", shell_arg(out), "-I", shell_arg(vma_include()),
            "-I", shell_arg(RUNTIME / "third_party" / "imgui")]
     lines = [
@@ -329,7 +329,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
         "  rspfile_content = $in_newline",
         "  description = link $out",
     ]
-    if WIN:   # runtime/aoc.rc, como o tools/build_game.py do Astral Chain (MIT); o windres não escreve depfile
+    if WIN:   # runtime/aoc.rc, as in Astral Chain's tools/build_game.py (MIT); windres writes no depfile
         windres = shutil.which("llvm-windres") or need("windres")
         lines += ["rule rc", f"  command = {windres} -I {shell_arg(RUNTIME)} -O coff $in -o $out",
                   "  description = rc $in"]
@@ -351,13 +351,13 @@ def step_host(args, gen: Path, lib: Path) -> Path:
     t0 = time.time()
     cmd = [ninja, "-f", str(build_file)] + (["-j", str(args.jobs)] if args.jobs else []) + ["-k", "0"] + target
     subprocess.run(cmd, check=True, cwd=args.work)
-    print(f"host: pronto em {time.time() - t0:.0f} s → {exe if not args.runtime_only else 'objetos do runtime'}")
+    print(f"host: done in {time.time() - t0:.0f} s -> {exe if not args.runtime_only else 'runtime objects'}")
     return exe
 
 
-# ---- dist: a pasta única do Steam Deck, compilada contra o sysroot "sniper" do Steam Runtime 3 (glibc 2.31), como o
-# tools/make_release_linux.py do TotK Recomp (MIT). O Arch/Ubuntu do WSL tem glibc mais nova que a do SteamOS; um
-# executável linkado contra ela pediria símbolos GLIBC_2.3x/2.4x que o Deck não tem.
+# ---- dist: the single Steam Deck folder, compiled against the Steam Runtime 3 "sniper" sysroot (glibc 2.31), as
+# TotK Recomp's tools/make_release_linux.py (MIT). WSL's Arch/Ubuntu has a newer glibc than SteamOS; an executable
+# linked against it would ask for GLIBC_2.3x/2.4x symbols the Deck does not have.
 SNIPER = "3.0.20261021.266025"
 SNIPER_TAR = (f"https://repo.steampowered.com/steamrt-images-sniper/snapshots/{SNIPER}/"
               "com.valvesoftware.SteamRuntime.Sdk-amd64%2Ci386-sniper-sysroot.tar.gz",
@@ -366,8 +366,8 @@ SNIPER_MEMBERS = ["usr/include", "usr/share/pkgconfig", "usr/lib/x86_64-linux-gn
                   "lib/x86_64-linux-gnu", "lib64"]
 ZSTD_TAR = ("https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz",
             "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3")
-# Opus e libvpx estáticos do sysroot (o SteamOS tem outra libvpx.so), zstd estática compilada aqui, SDL3 dinâmica
-# copiada para lib/ ao lado do executável, Vulkan do sistema (o loader é estável).
+# Opus and libvpx static from the sysroot (SteamOS has another libvpx.so), zstd static built here, SDL3 dynamic
+# copied to lib/ next to the executable, Vulkan from the system (the loader is stable).
 DIST_LIBS = ["-lvulkan", "-lSDL3", "-l:libopus.a", "-l:libvpx.a", "-l:libzstd.a", "-l:libstdc++.a", "-lm", "-lpthread",
              "-ldl"]
 GLIBC_MAX = (2, 31)
@@ -389,14 +389,14 @@ def fetch(url_sha: tuple[str, str], dst: Path) -> Path:
             h.update(chunk)
     if h.hexdigest() != sha:
         part.unlink()
-        sys.exit(f"ERRO: {url} não bate com o hash fixado")
+        sys.exit(f"ERROR: {url} does not match the pinned hash")
     part.rename(dst)
     return dst
 
 
 def sniper_sysroot(work: Path) -> Path:
-    """O sysroot extraído em <work>/toolchain/sniper, com os links simbólicos absolutos tornados relativos (o SDK aponta
-    alguns para /lib e /usr/lib, que fora do contêiner seriam os do sistema)."""
+    """The sysroot extracted in <work>/toolchain/sniper, with absolute symbolic links made relative (the SDK points
+    some at /lib and /usr/lib, which outside the container would be the system's)."""
     root = work / "toolchain" / "sniper"
     if (root / ".relinked").is_file():
         return root
@@ -416,7 +416,7 @@ def sniper_sysroot(work: Path) -> Path:
 
 
 def dist_deps(work: Path, cc: list[str]) -> Path:
-    """<work>/deps: headers Vulkan 1.4.363 e VMA (só headers) e libzstd.a 1.5.7 compilada contra o sysroot."""
+    """<work>/deps: Vulkan 1.4.363 headers and VMA (headers only) and libzstd.a 1.5.7 built against the sysroot."""
     deps = work / "deps"
     inc, lib = deps / "include", deps / "lib"
     inc.mkdir(parents=True, exist_ok=True)
@@ -424,7 +424,7 @@ def dist_deps(work: Path, cc: list[str]) -> Path:
     for d in ("vulkan", "vk_video"):
         if not (inc / d).is_dir():
             if not Path(f"/usr/include/{d}").is_dir():
-                sys.exit("ERRO: faltam os headers do Vulkan (pacman -S vulkan-headers / apt install libvulkan-dev)")
+                sys.exit("ERROR: the Vulkan headers are missing (pacman -S vulkan-headers / apt install libvulkan-dev)")
             shutil.copytree(f"/usr/include/{d}", inc / d)
     if not (inc / "vk_mem_alloc.h").is_file():
         shutil.copy(vma_include() / "vk_mem_alloc.h", inc / "vk_mem_alloc.h")
@@ -444,7 +444,7 @@ def dist_deps(work: Path, cc: list[str]) -> Path:
 
 
 def glibc_needed(exe: Path) -> tuple[int, int]:
-    """A maior versão GLIBC_x.y que o executável pede."""
+    """The highest GLIBC_x.y version the executable asks for."""
     out = subprocess.run(["llvm-readelf" if shutil.which("llvm-readelf") else "readelf", "-V", str(exe)],
                          capture_output=True, text=True, check=True).stdout
     import re
@@ -453,7 +453,7 @@ def glibc_needed(exe: Path) -> tuple[int, int]:
 
 
 def step_dist(args, gen: Path, lib: Path) -> Path:
-    """Compila o runtime e linka contra o sniper, e monta dist/aoc-deck/ (layout em docs/steam-deck.md)."""
+    """Compiles the runtime, links it against the sniper and assembles dist/aoc-deck/ (layout in docs/NOTES.md)."""
     clang, ninja = need("clang"), need("ninja")
     sysroot = sniper_sysroot(args.work)
     cc = [clang, "--target=x86_64-linux-gnu", f"--sysroot={sysroot}"]
@@ -466,7 +466,7 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
     sys.path.insert(0, str(ROOT / "tools"))
     import romfs_index
     if not ROMFS_IMAGE.is_file():
-        sys.exit(f"ERRO: {ROMFS_IMAGE} não existe (tools/windows/merge_romfs.bat)")
+        sys.exit(f"ERROR: {ROMFS_IMAGE} does not exist (tools/merge_romfs.py)")
     romfs_index.write(ROMFS_IMAGE, host)
     inc = ["-I", shell_arg(deps / "include"), "-I", shell_arg(RUNTIME), "-I", shell_arg(gen), "-I", shell_arg(host),
            "-I", shell_arg(RUNTIME / "third_party" / "imgui")]
@@ -504,137 +504,137 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
                    cwd=args.work)
     need_glibc = glibc_needed(exe)
     if need_glibc > GLIBC_MAX:
-        sys.exit(f"ERRO: {exe} pede GLIBC_{need_glibc[0]}.{need_glibc[1]}, acima da {GLIBC_MAX} do sniper")
-    print(f"dist: executável pronto em {time.time() - t0:.0f} s, pede no máximo GLIBC_{need_glibc[0]}.{need_glibc[1]}")
-    # O tradutor de shaders (Ryujinx 1.3.2, NativeAOT), também contra o sniper: o runtime o procura ao lado do aoc
-    # (gfx_shader.c init_paths). tools/build_xlate.py refaz a identidade a cada build; aqui só se faltar.
+        sys.exit(f"ERROR: {exe} needs GLIBC_{need_glibc[0]}.{need_glibc[1]}, above the sniper's {GLIBC_MAX}")
+    print(f"dist: executable ready in {time.time() - t0:.0f} s, needs GLIBC_{need_glibc[0]}.{need_glibc[1]} at most")
+    # The shader translator (Ryujinx 1.3.2, NativeAOT), also against the sniper: the runtime looks for it next to aoc
+    # (gfx_shader.c init_paths). tools/build_xlate.py redoes the identity on each build; here only when missing.
     xl = args.work / "xlate"
-    # O pacote do launcher traz o tradutor pronto (prebuilt/xlate/linux-x64, feito por tools/make_release.py do mesmo
-    # commit): quem forja o jogo não precisa do .NET. Com --xlate ele é sempre recompilado.
+    # The launcher package carries the translator ready (prebuilt/xlate/linux-x64, made by tools/make_release.py from the
+    # same commit): whoever forges the game needs no .NET. With --xlate it is always rebuilt.
     pre = ROOT / "prebuilt" / "xlate" / "linux-x64"
     if not args.xlate and (pre / "aoc_xlate").is_file() and (pre / "aoc_xlate.id").is_file():
         xl.mkdir(parents=True, exist_ok=True)
         if not (xl / "aoc_xlate.id").is_file() or (xl / "aoc_xlate.id").read_bytes() != (pre / "aoc_xlate.id").read_bytes():
             shutil.copy2(pre / "aoc_xlate", xl / "aoc_xlate")
             shutil.copy2(pre / "aoc_xlate.id", xl / "aoc_xlate.id")
-            print(f"dist: tradutor de shaders pronto de {pre}")
+            print(f"dist: shader translator ready from {pre}")
     if not (xl / "aoc_xlate").is_file() or args.xlate:
         subprocess.run([sys.executable, str(ROOT / "tools" / "build_xlate.py"), "--out", str(xl),
                         "--sysroot", str(sysroot)], check=True)
     need_glibc = glibc_needed(xl / "aoc_xlate")
     if need_glibc > GLIBC_MAX:
-        sys.exit(f"ERRO: aoc_xlate pede GLIBC_{need_glibc[0]}.{need_glibc[1]}")
+        sys.exit(f"ERROR: aoc_xlate needs GLIBC_{need_glibc[0]}.{need_glibc[1]}")
     return assemble_dist(args, exe, sysroot, host, xl)
 
 
 LAUNCHER = """#!/bin/sh
-# Lançador do AoC Recomp na pasta do Deck (tools/build.py dist). Caches do driver ao lado do jogo, no cartão SD,
-# e não em ~/.cache (memória interna).
+# Age of Calamity Recomp starter in the Deck folder (tools/build.py dist). Driver caches go next to the game, on the
+# SD card, not in ~/.cache (internal storage).
 here="$(cd "$(dirname "$0")" && pwd)"
 export MESA_SHADER_CACHE_DIR="$here/mesa-cache"
 export MESA_SHADER_CACHE_MAX_SIZE=4G
 mkdir -p "$here/mesa-cache" "$here/logs"
-# o FTP a partir do Windows não leva o bit de execução: garante que o executável roda
+# FTP from Windows drops the executable bit: make sure the executables run
 [ -x "$here/aoc" ] || chmod +x "$here/aoc" 2>/dev/null
 [ -x "$here/aoc_xlate" ] || chmod +x "$here/aoc_xlate" 2>/dev/null
-# a sessão anterior vai comprimida para logs/sessoes/ (nome = hora em que ela terminou; ficam as 60 mais recentes);
-# ./aoc-logs.sh lista e resume
+# the previous session goes compressed to logs/sessions/ (named after the time it ended; the 60 newest are kept);
+# ./aoc-logs.sh lists and sums them up
 if [ -s "$here/logs/aoc.log" ]; then
-    mkdir -p "$here/logs/sessoes"
+    mkdir -p "$here/logs/sessions"
     ts=$(date -r "$here/logs/aoc.log" +%Y%m%d-%H%M%S)
-    [ -f "$here/logs/sessoes/$ts.log.gz" ] || gzip -c "$here/logs/aoc.log" > "$here/logs/sessoes/$ts.log.gz"
-    ls -1t "$here/logs/sessoes/"*.log.gz 2>/dev/null | tail -n +61 | xargs -r rm -f
+    [ -f "$here/logs/sessions/$ts.log.gz" ] || gzip -c "$here/logs/aoc.log" > "$here/logs/sessions/$ts.log.gz"
+    ls -1t "$here/logs/sessions/"*.log.gz 2>/dev/null | tail -n +61 | xargs -r rm -f
 fi
 cd "$here"
 exec "$here/aoc" "$@"
 """
 
 
-# Configuração inicial da pasta do Deck (cfg.c: "chave = valor", sem o prefixo AOC_). FPS e modo vêm do perfil "deck"
-# do runtime (30 fps, portátil); aqui só o idioma do menu.
-INI_DECK = """# Configurações do AoC Recomp. O menu (Menos+Mais) e o menu rápido (segurar L3+R3) gravam aqui.
+# First settings of the Deck folder (cfg.c: "key = value", without the AOC_ prefix). Frame rate and mode come from the
+# runtime's "deck" profile (30 fps, handheld); only the menu language is set here.
+INI_DECK = """# Age of Calamity Recomp settings. The menu (Minus+Plus) and the quick menu (hold L3+R3) write here.
 [menu]
-menu_lang = pt-BR
+menu_lang = en
 """
 
-README_DECK = """Hyrule Warriors: Age of Calamity - port nativo para o Steam Deck (AoC Recomp)
-================================================================================
+README_DECK = """Hyrule Warriors: Age of Calamity - native port for the Steam Deck (AgeOfCalamityRecomp)
+=====================================================================================
 
-Uso pessoal: esta pasta contém o jogo (do seu próprio console). Não compartilhe.
+Personal use only: this folder contains the game (from your own console). Do not share it.
 
-INSTALAR (uma vez)
-1. No Deck, em Desktop Mode, copie a pasta inteira "aoc-deck" para o cartão SD (FTP, nuvem ou cabo).
-   Exemplo: /run/media/mmcblk0p1/aoc-deck   (o romfs/romfs.bin tem 10,9 GiB)
-2. Abra o Konsole dentro da pasta e rode uma vez:   sh instalar-atalho.sh
-   (dá permissão de execução e põe o jogo no menu de aplicativos do SteamOS)
-3. Steam > Jogos > "Adicionar um jogo que não é da Steam" > marque
-   "Hyrule Warriors: Age of Calamity (AoC Recomp)" > Adicionar selecionados.
-4. Volte ao Game Mode: o jogo fica na biblioteca, em "Não Steam".
+INSTALL (once)
+1. On the Deck, in Desktop Mode, copy the whole "aoc-deck" folder to the SD card (FTP, cloud or cable).
+   Example: /run/media/mmcblk0p1/aoc-deck   (romfs/romfs.bin is 10.9 GiB)
+2. Open Konsole inside the folder and run once:   sh install-shortcut.sh
+   (it makes the files executable and puts the game in the SteamOS application menu)
+3. Steam > Games > "Add a Non-Steam Game" > tick
+   "Hyrule Warriors: Age of Calamity (AgeOfCalamityRecomp)" > Add Selected Programs.
+4. Back in Game Mode, the game is in your library under "Non-Steam".
 
-PRIMEIRO TESTE (Konsole, dentro da pasta)
-  ./aoc --selftest                         deve terminar com "selftest: passed"
-  AOC_GPU=null AOC_TRACE=perf ./aoc.sh     sem imagem; deve mostrar linhas "fps: ... (30.0 fps)" (Ctrl+C para sair)
-  ./aoc.sh                                 o jogo (a primeira vez traduz os shaders: travadas até o cache encher)
+FIRST TEST (Konsole, inside the folder)
+  ./aoc --selftest                         should end with "selftest: passed"
+  AOC_GPU=null AOC_TRACE=perf ./aoc.sh     no picture; should print "fps: ... (30.0 fps)" lines (Ctrl+C to quit)
+  ./aoc.sh                                 the game (the first time translates shaders: stutters until the cache fills)
 
-REGISTROS (consumo, temperatura, fps de cada sessão)
-  ./aoc-logs.sh lista                      uma linha por sessão jogada: data, minutos, fps, watts, temperaturas
-  ./aoc-logs.sh                            resumo da última sessão (./aoc-logs.sh resumo 2: a penúltima)
-  ./aoc-logs.sh ao-vivo                    acompanha a sessão em andamento (de outro terminal ou por SSH)
-  ./aoc-logs.sh sistema                    TDP, watts, temperaturas e clocks agora
-  ./aoc-logs.sh detalhado on|off           mais detalhes de desempenho nas próximas sessões
-  ./aoc-logs.sh desempenho                 onde a última sessão perdeu fps: engasgadas, causas, consumo, marcas
-  ./aoc-logs.sh diag                       lê os relatórios de travada e tela preta da última sessão
-  ./aoc-logs.sh pacote                     junta tudo em logs/pacote-<data>.tar.gz para mandar
+LOGS (power, temperature and fps of each session)
+  ./aoc-logs.sh list                       one line per session played: date, minutes, fps, watts, temperatures
+  ./aoc-logs.sh                            summary of the last session (./aoc-logs.sh summary 2: the one before)
+  ./aoc-logs.sh live                       follows the running session (from another terminal or over SSH)
+  ./aoc-logs.sh system                     TDP, watts, temperatures and clocks right now
+  ./aoc-logs.sh detailed on|off            more performance detail in the next sessions
+  ./aoc-logs.sh performance                where the last session lost fps: stutters, causes, power, marks
+  ./aoc-logs.sh diag                       reads the freeze and black screen reports of the last session
+  ./aoc-logs.sh bundle                     packs everything into logs/bundle-<date>.tar.gz to send
 
-REPORTAR UM PROBLEMA
-  Rode ./aoc-logs.sh pacote e anexe o arquivo criado num relato em
+REPORTING A PROBLEM
+  Run ./aoc-logs.sh bundle and attach the file it makes to a report at
   https://github.com/eliasm4r/AgeOfCalamityRecomp/issues
-  (nunca anexe arquivos do jogo, chaves ou saves)
+  (never attach game files, keys or saves)
 
-CONTROLES DO PORT
-  Segurar L3+R3 (~1,5 s)  menu rápido: taxa de quadros, resolução interna, overlay de desempenho e
-                         "Marcar este momento" (aponta uma engasgada no registro de desempenho)
-  Tocar L3+R3            liga/desliga o overlay de FPS
-  Menos + Mais juntos    menu completo
-  B                      fecha os menus
+PORT CONTROLS
+  Hold L3+R3 (~1.5 s)    quick menu: frame rate, internal resolution, performance overlay and
+                         "Mark this moment" (marks a stutter in the performance log)
+  Tap L3+R3              FPS overlay on or off
+  Minus + Plus together  full menu
+  B                      closes the menus
 
-PARA NÃO FORÇAR O DECK
-  - Padrão: 30 FPS (a taxa do próprio jogo) e resolução interna "Portátil" (a mais leve do jogo).
-  - No menu de desempenho do Steam (botão "..." > bateria) dá para limitar também o TDP e a taxa de atualização.
+GOING EASY ON THE DECK
+  - Default: 30 FPS (the game's own rate) and "Handheld" internal resolution (the game's lightest).
+  - Steam's performance menu ("..." button > battery) can also limit the TDP and the refresh rate.
 
-ARQUIVOS
-  aoc, aoc.sh, lib/            o programa
-  exefs/, romfs/, romfs-index.bin   o jogo (romfs/dlc-*.bin são os DLCs; sem eles o jogo roda sem DLC)
-  aoc.ini                      suas configurações (não é sobrescrito nas atualizações)
-  profile/, logs/, mesa-cache/ saves, registros e cache de shaders (criados ao jogar)
-  aoc-logs.sh, ferramentas/    leitura dos registros (logs/sessoes/ guarda as sessões anteriores)
-ATUALIZAR: copie por cima só "aoc" (e "lib/" se mudar). O romfs não muda.
+FILES
+  aoc, aoc.sh, lib/            the program
+  exefs/, romfs/, romfs-index.bin   the game (romfs/dlc-*.bin are the DLCs; without them the game runs without DLC)
+  aoc.ini                      your settings (never overwritten by updates)
+  profile/, logs/, mesa-cache/ saves, logs and shader cache (created while playing)
+  aoc-logs.sh, tools/          log readers (logs/sessions/ keeps the earlier sessions)
+UPDATING: copy only "aoc" over the old one (and "lib/" if it changed). The romfs does not change.
 """
 
 
-# Registra o jogo como aplicativo do desktop (~/.local/share/applications), com o caminho de onde a pasta estiver: a
-# janela "Adicionar um jogo que não é da Steam" lista esses aplicativos, e um script solto no cartão SD não aparece nela.
+# Registers the game as a desktop application (~/.local/share/applications) with the folder's current path: the
+# "Add a Non-Steam Game" window lists those applications, and a loose script on the SD card does not show in it.
 INSTALL_SH = """#!/bin/sh
-# Cria o atalho do AoC Recomp no menu de aplicativos do SteamOS. Rode uma vez (Desktop Mode, Konsole):
-#   sh instalar-atalho.sh
-# Depois: Steam > Jogos > "Adicionar um jogo que não é da Steam" > marque "Hyrule Warriors: Age of Calamity".
+# Creates the Age of Calamity Recomp shortcut in the SteamOS application menu. Run once (Desktop Mode, Konsole):
+#   sh install-shortcut.sh
+# Then: Steam > Games > "Add a Non-Steam Game" > tick "Hyrule Warriors: Age of Calamity".
 here="$(cd "$(dirname "$0")" && pwd)"
 chmod +x "$here/aoc" "$here/aoc.sh" "$here/aoc_xlate"
 mkdir -p "$HOME/.local/share/applications"
 f="$HOME/.local/share/applications/aoc-recomp.desktop"
-printf '%s\\n' '[Desktop Entry]' 'Type=Application' 'Name=Hyrule Warriors: Age of Calamity (AoC Recomp)' \\
-    'Comment=Port nativo (uso pessoal)' "Exec=$here/aoc.sh" "Path=$here" 'Terminal=false' 'Categories=Game;' \\
+printf '%s\\n' '[Desktop Entry]' 'Type=Application' 'Name=Hyrule Warriors: Age of Calamity (AgeOfCalamityRecomp)' \\
+    'Comment=Native port (personal use)' "Exec=$here/aoc.sh" "Path=$here" 'Terminal=false' 'Categories=Game;' \\
     'Icon=applications-games' > "$f"
 chmod +x "$f"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
-echo "Atalho criado: $f"
-echo "Agora: Steam > Jogos > Adicionar um jogo que nao e da Steam > marque Hyrule Warriors: Age of Calamity"
+echo "Shortcut created: $f"
+echo "Now: Steam > Games > Add a Non-Steam Game > tick Hyrule Warriors: Age of Calamity"
 """
 
 
 def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
-    """dist/aoc-deck/: aoc, aoc.sh, lib/libSDL3.so.0, exefs/, romfs-index.bin e romfs/ (o romfs.bin de 10,9 GiB só é
-    copiado com --with-romfs: no Deck basta copiá-lo uma vez; as imagens dos DLCs vão sempre). Saves, aoc.ini, logs/ e mesa-cache/ nunca são tocados."""
+    """dist/aoc-deck/: aoc, aoc.sh, lib/libSDL3.so.0, exefs/, romfs-index.bin and romfs/ (the 10.9 GiB romfs.bin is only
+    copied with --with-romfs: on the Deck copying it once is enough; the DLC images always go). Saves, aoc.ini, logs/ and mesa-cache/ are never touched."""
     dist = Path(args.dist).expanduser().resolve()
     (dist / "lib").mkdir(parents=True, exist_ok=True)
     (dist / "exefs").mkdir(exist_ok=True)
@@ -656,32 +656,32 @@ def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
     copy(host / "romfs-index.bin", dist / "romfs-index.bin")
     (dist / "aoc.sh").write_text(LAUNCHER)
     (dist / "aoc.sh").chmod(0o755)
-    (dist / "LEIA-ME.txt").write_text(README_DECK, encoding="utf-8")
-    (dist / "instalar-atalho.sh").write_text(INSTALL_SH, encoding="utf-8")
-    (dist / "instalar-atalho.sh").chmod(0o755)
-    # Registros no Deck: aoc-logs.sh (lista, resumo, acompanhamento, pacote) e o resumidor que ele usa.
-    (dist / "ferramentas").mkdir(exist_ok=True)
-    shutil.copy2(ROOT / "tools" / "deck" / "logsum.py", dist / "ferramentas" / "logsum.py")
-    shutil.copy2(ROOT / "tools" / "diag_view.py", dist / "ferramentas" / "diag_view.py")   # aoc-logs.sh diag
-    shutil.copy2(ROOT / "tools" / "perf_view.py", dist / "ferramentas" / "perf_view.py")   # aoc-logs.sh desempenho
+    (dist / "README.txt").write_text(README_DECK, encoding="utf-8")
+    (dist / "install-shortcut.sh").write_text(INSTALL_SH, encoding="utf-8")
+    (dist / "install-shortcut.sh").chmod(0o755)
+    # Deck logs: aoc-logs.sh (list, summary, live, bundle) and the readers it uses.
+    (dist / "tools").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "tools" / "deck" / "logsum.py", dist / "tools" / "logsum.py")
+    shutil.copy2(ROOT / "tools" / "diag_view.py", dist / "tools" / "diag_view.py")   # aoc-logs.sh diag
+    shutil.copy2(ROOT / "tools" / "perf_view.py", dist / "tools" / "perf_view.py")   # aoc-logs.sh performance
     shutil.copy2(ROOT / "tools" / "deck" / "aoc-logs.sh", dist / "aoc-logs.sh")
     (dist / "aoc-logs.sh").chmod(0o755)
-    if not (dist / "aoc.ini").exists():   # só na primeira vez: depois o arquivo é do jogador (o menu grava nele)
+    if not (dist / "aoc.ini").exists():   # the first time only: afterwards the file is the player's (the menu writes it)
         (dist / "aoc.ini").write_text(INI_DECK, encoding="utf-8")
     if args.with_romfs:
         dst = dist / "romfs" / "romfs.bin"
         if not (dst.exists() and dst.stat().st_size == ROMFS_IMAGE.stat().st_size):
             dst.unlink(missing_ok=True)
-            try:   # mesmo disco: um hardlink não ocupa outros 10,9 GiB
+            try:   # same disk: a hard link does not take another 10.9 GiB
                 os.link(ROMFS_IMAGE, dst)
-                print(f"dist: romfs.bin ligado (hardlink) a {ROMFS_IMAGE}")
+                print(f"dist: romfs.bin linked (hard link) to {ROMFS_IMAGE}")
             except OSError:
-                print(f"dist: copiando {ROMFS_IMAGE} ({ROMFS_IMAGE.stat().st_size / 2**30:.1f} GiB)")
+                print(f"dist: copying {ROMFS_IMAGE} ({ROMFS_IMAGE.stat().st_size / 2**30:.1f} GiB)")
                 shutil.copy2(ROMFS_IMAGE, dst)
     elif not (dist / "romfs" / "romfs.bin").exists():
-        print(f"dist: AVISO: copie {ROMFS_IMAGE} para {dist / 'romfs' / 'romfs.bin'} uma vez (ou use --with-romfs)")
-    # DLCs (tools/extract_dlc.py): as imagens que existirem ao lado do romfs.bin vão sempre (1,4 GiB no total); o
-    # runtime (runtime/dlc.c) mostra ao jogo os DLCs que achar em romfs/.
+        print(f"dist: WARNING: copy {ROMFS_IMAGE} to {dist / 'romfs' / 'romfs.bin'} once (or use --with-romfs)")
+    # DLCs (tools/extract_dlc.py): the images next to romfs.bin always go (1.4 GiB in all); the runtime
+    # (runtime/dlc.c) shows the game the DLCs it finds in romfs/.
     dlcs = sorted(ROMFS_IMAGE.parent.glob("dlc-*.bin"))
     for src in dlcs:
         dst = dist / "romfs" / src.name
@@ -692,29 +692,29 @@ def assemble_dist(args, exe: Path, sysroot: Path, host: Path, xl: Path) -> Path:
             os.link(src, dst)
         except OSError:
             shutil.copy2(src, dst)
-    print(f"dist: {len(dlcs)} DLCs em romfs/" if dlcs else
-          "dist: nenhum DLC extraído (python3 tools/extract_dlc.py); o jogo roda sem eles")
-    print(f"dist: pasta pronta em {dist}")
+    print(f"dist: {len(dlcs)} DLCs in romfs/" if dlcs else
+          "dist: no DLC extracted (python3 tools/extract_dlc.py); the game runs without them")
+    print(f"dist: folder ready in {dist}")
     return dist
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--work", type=Path, required=True, help="diretório de build no disco do Linux (ex.: ~/aoc-build)")
+    ap.add_argument("--work", type=Path, required=True, help="build folder on the Linux disk (e.g. ~/aoc-build)")
     ap.add_argument("--exefs", type=Path, default=ROOT / "build" / "v130" / "exefs")
-    ap.add_argument("--jobs", type=int, default=0, help="núcleos (padrão: todos)")
-    ap.add_argument("--regen", action="store_true", help="gerar o C de novo")
-    ap.add_argument("--big-jobs", type=int, default=0, help="funções gigantes compiladas ao mesmo tempo (padrão: pela RAM)")
-    ap.add_argument("--ninja-only", action="store_true", help="só escreve o guest.ninja, sem compilar")
-    ap.add_argument("--runtime-only", action="store_true", help="host: só compila o runtime, sem linkar")
-    ap.add_argument("--dist", default=str(ROOT / "dist" / "aoc-deck"), help="dist: pasta de saída para o Deck")
+    ap.add_argument("--jobs", type=int, default=0, help="cores (default: all)")
+    ap.add_argument("--regen", action="store_true", help="generate the C again")
+    ap.add_argument("--big-jobs", type=int, default=0, help="giant functions compiled at once (default: from free RAM)")
+    ap.add_argument("--ninja-only", action="store_true", help="only writes guest.ninja, without compiling")
+    ap.add_argument("--runtime-only", action="store_true", help="host: only compiles the runtime, without linking")
+    ap.add_argument("--dist", default=str(ROOT / "dist" / "aoc-deck"), help="dist: output folder for the Deck")
     ap.add_argument("--xlate", action="store_true", help="dist: recompila o tradutor de shaders")
-    ap.add_argument("--with-romfs", action="store_true", help="dist: põe também o romfs.bin (hardlink no mesmo disco, senão cópia)")
-    ap.add_argument("steps", nargs="*", help="gen, guest, host, dist (padrão: gen, guest, host)")
+    ap.add_argument("--with-romfs", action="store_true", help="dist: also puts romfs.bin in (hard link on the same disk, else a copy)")
+    ap.add_argument("steps", nargs="*", help="gen, guest, host, dist (default: gen, guest, host)")
     args = ap.parse_args(argv)
     args.steps = args.steps or ["gen", "guest", "host"]
     if set(args.steps) - {"gen", "guest", "host", "dist"}:
-        ap.error("passos válidos: gen, guest, host, dist")
+        ap.error("valid steps: gen, guest, host, dist")
     args.work = args.work.expanduser().resolve()
     args.work.mkdir(parents=True, exist_ok=True)
     if not (args.exefs / "main").exists():

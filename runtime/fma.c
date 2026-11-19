@@ -1,4 +1,4 @@
-// Correctly rounded fma/fmaf for x86-64 builds without FMA3: the -march=x86-64-v2 build (docs/building.md).
+// Correctly rounded fma/fmaf for x86-64 builds without FMA3: the -march=x86-64-v2 build (CONTRIBUTING.md).
 //
 // runtime/simd.h lowers AArch64 FMADD/FMSUB and the RECPS/RSQRTS helpers to __builtin_elementwise_fma, which clang
 // turns into a call to fma/fmaf when the target has no FMA instruction. The C runtime is not a substitute: on CPUs

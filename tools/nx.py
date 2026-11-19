@@ -1,11 +1,11 @@
-"""Leitura de containers do Switch direto do arquivo (NSP/XCI → NCA → seções), sem extrair o NCA inteiro.
+"""Reads Switch containers straight from the file (NSP/XCI -> NCA -> sections), without extracting the whole NCA.
 
-Adaptado de MacNativeGames `games/totk/scripts/extract_exefs.py` @ b75be8cfa704df3701e86130c8ced268e79d6b11
-(MIT, Copyright (c) 2026 MacNativeGames contributors), na forma vendorizada pelo astral-chain-pc-recomp
-(`tools/vendor/macnativegames/extract_exefs.py`). Mudanças: biblioteca em vez de script, sem IDs de jogo
-embutidos, inventário de NCAs e de tickets reutilizável, leitura de seção genérica para RomFS/BKTR depois.
+Adapted from MacNativeGames `games/totk/scripts/extract_exefs.py` @ b75be8cfa704df3701e86130c8ced268e79d6b11
+(MIT, Copyright (c) 2026 MacNativeGames contributors), as vendored by astral-chain-pc-recomp
+(`tools/vendor/macnativegames/extract_exefs.py`). Changes: a library instead of a script, no built-in game IDs, a
+reusable NCA and ticket inventory, a generic section reader for RomFS/BKTR.
 
-Formatos: switchbrew.org/wiki/NCA, /PFS0, /Ticket. As chaves ficam só em memória e nunca são impressas.
+Formats: switchbrew.org/wiki/NCA, /PFS0, /Ticket. Keys stay in memory only and are never printed.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def decrypt(key: bytes, mode, data: bytes) -> bytes:
 
 
 def read_at(f: BinaryIO, offset: int, length: int) -> bytes:
-    require(0 <= offset and 0 <= length <= MAX_READ, "Leitura inválida ou grande demais")
+    require(0 <= offset and 0 <= length <= MAX_READ, "Invalid or too large read")
     f.seek(offset)
     data = f.read(length)
     require(len(data) == length, "Arquivo truncado")
@@ -42,28 +42,28 @@ def read_at(f: BinaryIO, offset: int, length: int) -> bytes:
 
 def partition_entries(f: BinaryIO, offset: int, bound: int, magic: bytes = b"PFS0",
                       stride: int = 24) -> list[tuple[str, int, int]]:
-    """Tabela PFS0/HFS0 limitada: (nome, offset absoluto, tamanho), sem ler os dados."""
-    require(bound >= 16, "Cabeçalho de partição truncado")
+    """Bounded PFS0/HFS0 table: (name, absolute offset, size), without reading the data."""
+    require(bound >= 16, "Truncated partition header")
     hdr = read_at(f, offset, 16)
     require(hdr[:4] == magic, f"Esperado {magic.decode()}")
     count, strings_size = struct.unpack_from("<II", hdr, 4)
-    require(count <= 4096 and strings_size <= 1024 * 1024, "Tabela de partição inválida")
+    require(count <= 4096 and strings_size <= 1024 * 1024, "Invalid partition table")
     size = 16 + count * stride + strings_size
-    require(size <= bound, "Tabela de partição fora dos limites")
+    require(size <= bound, "Partition table out of bounds")
     raw = read_at(f, offset, size)
     strings = raw[16 + count * stride:]
     entries: list[tuple[str, int, int]] = []
     names: set[str] = set()
     for i in range(count):
         off, length, nameoff = struct.unpack_from("<QQI", raw, 16 + i * stride)
-        require(nameoff < len(strings), "Offset de nome inválido")
+        require(nameoff < len(strings), "Invalid name offset")
         end = strings.find(b"\0", nameoff)
         require(end >= 0, "Nome sem terminador")
         name = strings[nameoff:end].decode("utf-8")
         require(name not in ("", ".", "..") and "/" not in name and "\\" not in name, "Nome inseguro")
         require(name not in names, "Nome duplicado")
         names.add(name)
-        require(size + off + length <= bound, "Entrada fora dos limites")
+        require(size + off + length <= bound, "Entry out of bounds")
         entries.append((name, offset + size + off, length))
     return entries
 
@@ -71,11 +71,11 @@ def partition_entries(f: BinaryIO, offset: int, bound: int, magic: bytes = b"PFS
 def container_entries(f: BinaryIO, size: int) -> tuple[str, list[tuple[str, int, int]]]:
     if read_at(f, 0, 4) == b"PFS0":
         return "nsp", partition_entries(f, 0, size)
-    require(size >= 0x138 and read_at(f, 0x100, 4) == b"HEAD", "Esperado um XCI ou NSP (PFS0)")
+    require(size >= 0x138 and read_at(f, 0x100, 4) == b"HEAD", "Expected an XCI or NSP (PFS0)")
     root = struct.unpack("<Q", read_at(f, 0x130, 8))[0]
     parts = partition_entries(f, root, size - root, b"HFS0", 64)
     secure = [e for e in parts if e[0] == "secure"]
-    require(len(secure) == 1, "XCI sem partição secure")
+    require(len(secure) == 1, "XCI without a secure partition")
     return "xci", partition_entries(f, secure[0][1], secure[0][2], b"HFS0", 64)
 
 
@@ -88,12 +88,12 @@ def load_keys(path: Path) -> dict[str, bytes]:
             try:
                 keys[name.strip().lower()] = bytes.fromhex(value.strip())
             except ValueError:
-                raise ValueError(f"Chave mal formada na linha {number}") from None
+                raise ValueError(f"Malformed key on line {number}") from None
     return keys
 
 
 def common_tickets(f: BinaryIO, entries) -> dict[bytes, bytes]:
-    """Title keys (ainda cifradas) dos .tik do container: rights ID → chave."""
+    """Title keys (still encrypted) of the container's .tik files: rights ID -> key."""
     tickets: dict[bytes, bytes] = {}
     bodies = {0x10000: 0x240, 0x10001: 0x140, 0x10002: 0x80,
               0x10003: 0x240, 0x10004: 0x140, 0x10005: 0x80}
@@ -101,11 +101,11 @@ def common_tickets(f: BinaryIO, entries) -> dict[bytes, bytes]:
         if not name.lower().endswith(".tik"):
             continue
         sig = struct.unpack("<I", read_at(f, offset, 4))[0]
-        require(sig in bodies, "Tipo de assinatura de ticket não suportado")
+        require(sig in bodies, "Unsupported ticket signature type")
         body = bodies[sig]
         require(size >= body + 0x180, "Ticket truncado")
         data = read_at(f, offset + body, 0x180)
-        require(data[0x141] == 0, "Ticket personalizado não é suportado; é preciso um ticket comum")
+        require(data[0x141] == 0, "Personalized tickets are not supported; a common ticket is needed")
         rights, key = data[0x160:0x170], data[0x40:0x50]
         require(rights not in tickets or tickets[rights] == key, "Tickets conflitantes")
         tickets[rights] = key
@@ -115,7 +115,7 @@ def common_tickets(f: BinaryIO, entries) -> dict[bytes, bytes]:
 @dataclass
 class Nca:
     name: str
-    offset: int          # offset absoluto do NCA dentro do container
+    offset: int          # absolute offset of the NCA inside the container
     size: int
     header: bytes = field(repr=False)
 
@@ -162,21 +162,21 @@ class Nca:
 
 
 def read_nca_header(f: BinaryIO, offset: int, size: int, keys: dict[str, bytes]) -> bytes:
-    require(size >= 0xC00, "Cabeçalho NCA truncado")
+    require(size >= 0xC00, "Truncated NCA header")
     require("header_key" in keys, "header_key ausente no prod.keys")
     raw = read_at(f, offset, 0xC00)
     hdr = b"".join(decrypt(keys["header_key"], modes.XTS(i.to_bytes(16, "big")), raw[i * 512:(i + 1) * 512])
                    for i in range(6))
-    require(hdr[0x200:0x204] == b"NCA3", "Não é NCA3 (confira o prod.keys e o arquivo)")
-    require(struct.unpack_from("<Q", hdr, 0x208)[0] == size, "Tamanho do NCA não bate com o container")
+    require(hdr[0x200:0x204] == b"NCA3", "Not NCA3 (check prod.keys and the file)")
+    require(struct.unpack_from("<Q", hdr, 0x208)[0] == size, "NCA size does not match the container")
     for i in range(4):
         start, end = struct.unpack_from("<II", hdr, 0x240 + i * 16)
-        require((start == end == 0) or 0xC00 <= start * 512 < end * 512 <= size, "Seção NCA fora dos limites")
+        require((start == end == 0) or 0xC00 <= start * 512 < end * 512 <= size, "NCA section out of bounds")
     for i in range(4):
         start, end = struct.unpack_from("<II", hdr, 0x240 + i * 16)
         if end:
             fs = hdr[0x400 + 512 * i:0x600 + 512 * i]
-            require(hashlib.sha256(fs).digest() == hdr[0x280 + 32 * i:0x2A0 + 32 * i], "Hash do FS header não bate")
+            require(hashlib.sha256(fs).digest() == hdr[0x280 + 32 * i:0x2A0 + 32 * i], "FS header hash mismatch")
     return hdr
 
 
@@ -188,7 +188,7 @@ def nca_inventory(f: BinaryIO, entries, keys) -> list[Nca]:
 def nca_ctr_key(nca: Nca, keys: dict[str, bytes], tickets: dict[bytes, bytes]) -> bytes:
     generation = max(nca.key_generation - 1, 0)
     if nca.rights_id != bytes(16):
-        require(nca.rights_id in tickets, "NCA com rights ID sem ticket comum no container")
+        require(nca.rights_id in tickets, "NCA with a rights ID and no common ticket in the container")
         name = f"titlekek_{generation:02x}"
         require(name in keys, f"{name} ausente no prod.keys")
         return decrypt(keys[name], modes.ECB(), tickets[nca.rights_id])
@@ -199,17 +199,17 @@ def nca_ctr_key(nca: Nca, keys: dict[str, bytes], tickets: dict[bytes, bytes]) -
 
 
 class SectionReader:
-    """Leitura decifrada (AES-CTR) de uma seção de NCA, por offset relativo à seção."""
+    """Decrypted (AES-CTR) reads of an NCA section, by offset relative to the section."""
 
     def __init__(self, f: BinaryIO, nca: Nca, index: int, key: bytes):
         self.f, self.nca, self.key = f, nca, key
         self.fs = nca.fs_header(index)
         self.start, end = nca.section_bounds(index)
         self.size = end - self.start
-        require(self.fs[4] in (3, 4), "Só AES-CTR/CTR-EX é suportado")
+        require(self.fs[4] in (3, 4), "Only AES-CTR/CTR-EX is supported")
 
     def read(self, relative: int, size: int) -> bytes:
-        require(relative >= 0 and relative + size <= self.size, "Leitura fora da seção")
+        require(relative >= 0 and relative + size <= self.size, "Read outside the section")
         absolute = self.start + relative
         aligned = absolute & ~15
         iv = self.fs[0x140:0x148][::-1] + (aligned // 16).to_bytes(8, "big")
@@ -218,23 +218,23 @@ class SectionReader:
 
 
 def read_pfs0(f: BinaryIO, nca: Nca, index: int, key: bytes) -> list[tuple[str, bytes]]:
-    """Arquivos de uma seção PFS0 (tabela de hashes de 2 níveis), verificada bloco a bloco."""
+    """Files of a PFS0 section (2-level hash table), checked block by block."""
     sec = SectionReader(f, nca, index, key)
     fs = sec.fs
     blocksize, levels = struct.unpack_from("<II", fs, 0x28)
     hashoff, hashsize, pfsoff, pfssize = struct.unpack_from("<QQQQ", fs, 0x30)
-    require(levels == 2 and blocksize > 0 and pfssize <= MAX_READ, "Layout de hash do PFS0 não suportado")
+    require(levels == 2 and blocksize > 0 and pfssize <= MAX_READ, "Unsupported PFS0 hash layout")
     hashes = sec.read(hashoff, hashsize)
-    require(hashlib.sha256(hashes).digest() == fs[8:40], "Tabela de hash do PFS0 não bate")
+    require(hashlib.sha256(hashes).digest() == fs[8:40], "PFS0 hash table mismatch")
     pfs = sec.read(pfsoff, pfssize)
     for block, pos in enumerate(range(0, pfssize, blocksize)):
         require(hashlib.sha256(pfs[pos:pos + blocksize]).digest() == hashes[block * 32:(block + 1) * 32],
-                f"Hash do bloco {block} do PFS0 não bate")
+                f"PFS0 block {block} hash mismatch")
     return [(name, pfs[off:off + size]) for name, off, size in partition_entries(io.BytesIO(pfs), 0, len(pfs))]
 
 
 def read_exefs(f: BinaryIO, nca: Nca, key: bytes) -> list[tuple[str, bytes]]:
-    """ExeFS (a seção PFS0 que tem o main.npdm) verificado bloco a bloco."""
+    """ExeFS (the PFS0 section holding main.npdm) checked block by block."""
     for i in nca.sections():
         if nca.section_kind(i) != "pfs0":
             continue
@@ -245,8 +245,8 @@ def read_exefs(f: BinaryIO, nca: Nca, key: bytes) -> list[tuple[str, bytes]]:
 
 
 def package_version(f: BinaryIO, ncas: list[Nca], keys: dict[str, bytes], tickets: dict[bytes, bytes]):
-    """(title id, versão) do pacote, lidos do .cnmt do NCA Meta (switchbrew.org/wiki/CNMT: id u64, versão u32).
-    A versão de um update é o número do título (1.3.0 de Age of Calamity = 327680); None sem NCA Meta legível."""
+    """(title id, version) of the package, read from the Meta NCA's .cnmt (switchbrew.org/wiki/CNMT: id u64, version
+    u32). An update's version is the title number (Age of Calamity 1.3.0 = 327680); None without a readable Meta NCA."""
     for nca in ncas:
         if nca.content_type != 1:
             continue
@@ -262,14 +262,14 @@ def package_version(f: BinaryIO, ncas: list[Nca], keys: dict[str, bytes], ticket
 
 
 def romfs_files(sec: SectionReader) -> list[tuple[str, int, int]]:
-    """Lista do RomFS de uma seção IVFC: (caminho, offset do dado na seção, tamanho). Lê só os metadados."""
+    """RomFS listing of an IVFC section: (path, data offset in the section, size). Reads only the metadata."""
     fs = sec.fs
-    require(fs[8:12] == b"IVFC", "Seção sem IVFC")
+    require(fs[8:12] == b"IVFC", "Section without IVFC")
     level_off, level_size = struct.unpack_from("<QQ", fs, 0x18 + 0x18 * 5)
     hdr = sec.read(level_off, 0x50)
     (hsize, _dh_off, _dh_size, dm_off, dm_size, _fh_off, _fh_size, fm_off, fm_size,
      data_off) = struct.unpack_from("<10Q", hdr)
-    require(hsize == 0x50, "Cabeçalho de RomFS inesperado")
+    require(hsize == 0x50, "Unexpected RomFS header")
     dmeta = sec.read(level_off + dm_off, dm_size)
     fmeta = sec.read(level_off + fm_off, fm_size)
     out: list[tuple[str, int, int]] = []
@@ -294,16 +294,16 @@ def romfs_files(sec: SectionReader) -> list[tuple[str, int, int]]:
             cur = sibling
 
     walk_dir(0, "")
-    require(level_size >= 0x50, "Nível de RomFS vazio")
+    require(level_size >= 0x50, "Empty RomFS level")
     return out
 
 
 def romfs_image_files(f: BinaryIO, base: int = 0) -> list[tuple[str, int, int]]:
-    """Lista de uma imagem RomFS simples (ex.: build/v130/romfs.bin): (caminho, offset absoluto, tamanho)."""
+    """Listing of a plain RomFS image (e.g. build/v130/romfs.bin): (path, absolute offset, size)."""
     hdr = read_at(f, base, 0x50)
     (hsize, _dh_off, _dh_size, dm_off, dm_size, _fh_off, _fh_size, fm_off, fm_size,
      data_off) = struct.unpack_from("<10Q", hdr)
-    require(hsize == 0x50, "Não é uma imagem RomFS (cabeçalho inesperado)")
+    require(hsize == 0x50, "Not a RomFS image (unexpected header)")
     dmeta = read_at(f, base + dm_off, dm_size)
     fmeta = read_at(f, base + fm_off, fm_size)
     out: list[tuple[str, int, int]] = []
@@ -327,11 +327,11 @@ def romfs_image_files(f: BinaryIO, base: int = 0) -> list[tuple[str, int, int]]:
 
 
 class SectionFile:
-    """Arquivo somente-leitura sobre o nível RomFS (IVFC nível 5) de uma seção de NCA: permite usar
-    romfs_image_files() e as ferramentas de censo direto no NSP, sem extrair nada."""
+    """Read-only file over the RomFS level (IVFC level 5) of an NCA section: lets romfs_image_files() and the census
+    tools work straight on the NSP, without extracting anything."""
 
     def __init__(self, sec: SectionReader):
-        require(sec.fs[8:12] == b"IVFC", "Seção sem IVFC")
+        require(sec.fs[8:12] == b"IVFC", "Section without IVFC")
         self.sec = sec
         self.base, self.size = struct.unpack_from("<QQ", sec.fs, 0x18 + 0x18 * 5)
         self.pos = 0
@@ -353,7 +353,7 @@ class SectionFile:
 
 
 def dlc_romfs(game_dir: Path, keys: dict[str, bytes], prefix: str = "01002B00111A3"):
-    """(title id, SectionFile) do RomFS de cada NSP de DLC em game_dir. O NSP fica aberto enquanto o gerador vive."""
+    """(title id, SectionFile) of the RomFS of each DLC NSP in game_dir. The NSP stays open while the generator lives."""
     for path in sorted(p for p in Path(game_dir).rglob("*.nsp")):
         f = path.open("rb")
         _, entries = container_entries(f, path.stat().st_size)

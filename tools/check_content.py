@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Guarda de conteúdo: impede que dados do jogo, chaves ou arquivos gerados entrem no git.
+"""Content guard: keeps game data, keys and generated files out of git.
 
 Modos:
-    python3 tools/check_content.py --staged   # arquivos no índice (hook de pre-commit)
-    python3 tools/check_content.py --all      # todos os arquivos versionados (CI)
-    python3 tools/check_content.py ARQ...     # arquivos específicos
+    python3 tools/check_content.py --staged   # files in the index (pre-commit hook)
+    python3 tools/check_content.py --all      # every tracked file (CI)
+    python3 tools/check_content.py FILE...    # specific files
 
-Silencioso e código 0 quando está tudo certo; lista os problemas e sai com 1 caso contrário.
+Silent with code 0 when all is well; otherwise lists the problems and exits with 1.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Todo arquivo que o gerador de código emitir precisa carregar este marcador; ele nunca pode ser commitado.
+# Every file the code generator emits must carry this marker; such a file can never be committed.
 GENERATED_MARKER = "AOCRECOMP-GENERATED-DO-NOT-COMMIT"
 
-MAX_BYTES = 2 * 1024 * 1024  # acima disso, só com entrada em ALLOW_LARGE
+MAX_BYTES = 2 * 1024 * 1024  # above this, only with an entry in ALLOW_LARGE
 
 ALLOW_LARGE: set[str] = set()
 
@@ -34,16 +34,16 @@ BIN_SUFFIX = re.compile(r"\.bin\d*(_\d+)?$")
 FORBIDDEN_PARTS = ("build/", "generated/", "dist/", "refs/", "romfs/", "exefs/", "shader-cache/",
                    "pipeline-cache/", "mesa-cache/", "saves/")
 
-# Assinaturas binárias de formatos do Switch (início do arquivo)
+# Binary signatures of Switch formats (start of the file)
 MAGICS = {
-    b"NSO0": "módulo NSO",
+    b"NSO0": "NSO module",
     b"META": "NPDM",
     b"PFS0": "container PFS0/NSP",
     b"HFS0": "container HFS0/XCI",
-    b"_DRK": "índice RDB da Koei Tecmo",
+    b"_DRK": "Koei Tecmo RDB index",
     b"IDRK": "entrada RDB da Koei Tecmo",
     b"_S2G": "container de shaders G2S",
-    b"BNSH": "binário de shader",
+    b"BNSH": "shader binary",
 }
 
 # Nomes de chaves do Switch seguidos de valor hexadecimal (formato prod.keys)
@@ -64,27 +64,27 @@ def check_file(rel: str, root: Path = ROOT) -> list[str]:
     problems: list[str] = []
     low = rel.lower()
     if low.endswith(FORBIDDEN_SUFFIXES) or BIN_SUFFIX.search(low):
-        problems.append("extensão de dado do jogo ou chave")
+        problems.append("game data or key extension")
     if any(seg + "/" in FORBIDDEN_PARTS for seg in low.split("/")[:-1]):
-        problems.append("pasta de saída/extração (deve ficar fora do git)")
+        problems.append("output/extraction folder (must stay out of git)")
     if low.rsplit("/", 1)[-1] in ("prod.keys", "title.keys", "dev.keys", "config.local.toml"):
-        problems.append("arquivo local de chaves/configuração")
+        problems.append("local keys/configuration file")
 
     path = root / rel
     if not path.is_file():
         return problems
     size = path.stat().st_size
     if size > MAX_BYTES and rel not in ALLOW_LARGE:
-        problems.append(f"arquivo grande ({size} bytes); adicione a ALLOW_LARGE só se for de terceiros e licenciado")
+        problems.append(f"large file ({size} bytes); add it to ALLOW_LARGE only if it is third-party and licensed")
     with path.open("rb") as f:
         head = f.read(8)
         f.seek(0)
         data = f.read(min(size, 8 * 1024 * 1024))
     for magic, what in MAGICS.items():
         if head.startswith(magic):
-            problems.append(f"conteúdo binário do Switch ({what})")
+            problems.append(f"Switch binary content ({what})")
     if rel != "tools/check_content.py" and GENERATED_MARKER.encode() in data:
-        problems.append("arquivo gerado (contém o marcador do gerador)")
+        problems.append("generated file (contains the generator marker)")
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -107,7 +107,7 @@ def main(argv: list[str]) -> int:
             print(f"{rel}: {p}")
             bad += 1
     if bad:
-        print(f"\n{bad} problema(s). Dados do jogo, chaves e arquivos gerados ficam em build/ ou generated/.")
+        print(f"\n{bad} problem(s). Game data, keys and generated files belong in build/ or generated/.")
     return 1 if bad else 0
 
 

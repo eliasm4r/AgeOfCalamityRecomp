@@ -1,6 +1,6 @@
-# Copiado de astral-chain-pc-recomp recomp/layout.py @ 3bbaf259ac099a321c78b81f5402f6070a77874a (MIT). Mudança para
-# o AoC: sem região fixa de RomFS. O Astral Chain lê a imagem RomFS num endereço gravado no binário; o AoC monta o
-# RomFS por nn::fs::MountRom e lê os RDB por arquivo, então nada fica reservado entre main e os módulos seguintes.
+# Copied from astral-chain-pc-recomp recomp/layout.py @ 3bbaf259ac099a321c78b81f5402f6070a77874a (MIT). Change for
+# AoC: no fixed RomFS region. Astral Chain reads the RomFS image at an address written into the binary; AoC mounts the
+# RomFS through nn::fs::MountRom and reads the RDBs by file, so nothing is reserved between main and the next modules.
 """Guest address layout of the loaded modules, computed from their sizes.
 
 Guest addresses equal host addresses, and the lifter writes absolute addresses into the generated C, so the
@@ -22,12 +22,12 @@ ALIGN = 0x200000
 ADDRESS_LIMIT = 1 << 39
 ORDER = ['main'] + [f'subsdk{i}' for i in range(10)] + ['sdk']
 
-# AoC: nenhuma região fixa de RomFS (ver o comentário do topo). Mantidos como 0 para o runtime herdado compilar.
+# AoC: no fixed RomFS region (see the comment at the top). Kept as 0 so the inherited runtime compiles.
 ROMFS_BASE = 0
 
 
 def romfs_size(exefs):
-    """AoC: sempre 0 — o RomFS não é mapeado num endereço fixo."""
+    """AoC: always 0 — the RomFS is not mapped at a fixed address."""
     return 0
 
 

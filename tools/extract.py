@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Fase 0: identifica e extrai o dump de Age of Calamity para build/ (ignorado pelo git).
+"""Identifies and extracts the Age of Calamity dump into build/ (ignored by git).
 
-Subcomandos:
-    inventory  lista os pacotes (base, update, DLCs) achados em --game-dir, pelo conteúdo dos NCAs
-    romfs-list lista os arquivos do RomFS da base e dos DLCs (só metadados) e grava build/v130/romfs-*.tsv
-    romfs-index lista build/v130/romfs.bin (RomFS 1.3.0 mesclado) em romfs-v130.tsv e compara com a base
-    hactool-home  prepara build/v130/tmp/hactool-home/.switch/{prod,title}.keys para o hactool mesclar o
-               update (BKTR): title keys tiradas dos tickets dos NSPs; prod.keys sem comentários e com o
-               NUL extra do Lockpick removido. Usado por tools/windows/merge_romfs.ps1.
-    exefs      extrai o ExeFS do update 1.3.0 (ou da base, com --base-only) para build/v130/exefs/,
-               verificando cada bloco pela tabela de hashes, e grava um manifesto com SHA-256
+Subcommands:
+    inventory  lists the packages (base, update, DLCs) found in --game-dir, by the contents of their NCAs
+    romfs-list lists the RomFS files of the base and the DLCs (metadata only) and writes build/v130/romfs-*.tsv
+    romfs-index lists build/v130/romfs.bin (merged RomFS 1.3.0) into romfs-v130.tsv and compares it with the base
+    hactool-home  prepares build/v130/tmp/hactool-home/.switch/{prod,title}.keys for hactool to merge the
+               update (BKTR): title keys taken from the NSPs' tickets; prod.keys without comments and with
+               Lockpick's extra NUL removed. Used by tools/merge_romfs.py.
+    exefs      extracts the ExeFS of update 1.3.0 (or of the base, with --base-only) into build/v130/exefs/,
+               checking each block against the hash table, and writes a manifest with SHA-256
 
-Exemplo (a partir da raiz do repositório):
+Example (from the repository root):
     python3 tools/extract.py inventory --game-dir "Game Files" --keys "Game Files/prod.keys"
     python3 tools/extract.py exefs     --game-dir "Game Files" --keys "Game Files/prod.keys"
 
-Lê os arquivos no lugar (não copia o NCA de 10 GB). As chaves ficam só em memória e nunca são impressas.
-O mesclar do RomFS da base com o update (BKTR) vem num passo seguinte.
+Reads the files in place (does not copy the 10 GB NCA). Keys stay in memory only and are never printed.
+Merging the base RomFS with the update (BKTR) is tools/merge_romfs.py.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BASE_TID = "01002B00111A2000"
 UPDATE_TID = "01002B00111A2800"
 DLC_PREFIX = "01002B00111A3"
-UPDATE_VERSION = 327680   # o número de título do update 1.3.0, o único que o port aceita (tools/data/known-builds.json)
+UPDATE_VERSION = 327680   # the title number of update 1.3.0, the only one the port accepts (tools/data/known-builds.json)
 
 
 def scan(game_dir: Path, keys: dict) -> list[dict]:
@@ -53,7 +53,7 @@ def scan(game_dir: Path, keys: dict) -> list[dict]:
         if package_tid == BASE_TID:
             role = "base"
         elif package_tid == UPDATE_TID:
-            # um update de outra versão (existe o 1.4.1, v458752) não serve: o código gerado e os patches são do 1.3.0
+            # an update of another version (1.4.1 exists, v458752) does not fit: the generated code and the patches are 1.3.0's
             role = "update" if version in (None, UPDATE_VERSION) else "update-x"
         elif package_tid.startswith(DLC_PREFIX):
             role = "dlc"
@@ -71,25 +71,25 @@ def describe(pkgs: list[dict]) -> None:
         for n in p["ncas"]:
             secs = ", ".join(f"{i}:{n.section_kind(i)}" for i in n.sections())
             print(f"         {n.content_name:10s} {n.size / 2**20:10.1f} MiB  keygen 0x{n.key_generation:02x}"
-                  f"  sdk {n.sdk_version:8s} seções [{secs}]")
+                  f"  sdk {n.sdk_version:8s} sections [{secs}]")
 
 
 def cmd_inventory(args, keys) -> int:
     pkgs = scan(args.game_dir, keys)
     describe(pkgs)
     roles = [p["role"] for p in pkgs]
-    # Cada problema sai também numa linha "@@PROBLEM <código> <detalhe>", que tools/make_build.py traduz para o jogador.
+    # Each problem also goes out as a "@@PROBLEM <code> <detail>" line, which tools/make_build.py words for the player.
     problems = []
     if roles.count("base") != 1:
         problems.append(("base", roles.count("base"), f"esperada 1 base, achei {roles.count('base')}"))
     if roles.count("update") > 1:
-        problems.append(("updates", roles.count("update"), f"esperado 1 update 1.3.0, achei {roles.count('update')}"))
+        problems.append(("updates", roles.count("update"), f"expected 1 update 1.3.0, found {roles.count('update')}"))
     elif not roles.count("update"):
         other = [p for p in pkgs if p["role"] == "update-x"]
         if other:
             problems.append(("wrong_update", other[0]["version"],
-                             f"o update da pasta é a versão v{other[0]['version']} ({other[0]['path'].name}); o port "
-                             f"só aceita o update 1.3.0 (v{UPDATE_VERSION})"))
+                             f"the folder's update is version v{other[0]['version']} ({other[0]['path'].name}); the port "
+                             f"only accepts update 1.3.0 (v{UPDATE_VERSION})"))
         else:
             problems.append(("update", 0, "falta o update 1.3.0"))
     for code, detail, msg in problems:
@@ -105,14 +105,14 @@ def cmd_exefs(args, keys) -> int:
     nx.require(len(chosen) == 1, f"esperado exatamente 1 pacote '{role}' em {args.game_dir}")
     pkg = chosen[0]
     out = args.work / "exefs"
-    nx.require(not out.exists() or args.force, f"{out} já existe (use --force para refazer)")
+    nx.require(not out.exists() or args.force, f"{out} already exists (use --force to redo it)")
     with pkg["path"].open("rb") as f:
         _, entries = nx.container_entries(f, pkg["path"].stat().st_size)
         tickets = nx.common_tickets(f, entries)
         programs = [n for n in nx.nca_inventory(f, entries, keys) if n.content_type == 0]
         nx.require(len(programs) == 1, "esperado 1 NCA de programa")
         nca = programs[0]
-        nx.require(nca.title_id == BASE_TID, f"NCA de programa de outro jogo ({nca.title_id})")
+        nx.require(nca.title_id == BASE_TID, f"program NCA of another game ({nca.title_id})")
         files = nx.read_exefs(f, nca, nx.nca_ctr_key(nca, keys, tickets))
     out.mkdir(parents=True, exist_ok=True)
     listing = []
@@ -122,7 +122,7 @@ def cmd_exefs(args, keys) -> int:
         print(f"  {name:10s} {len(data):>10d} B")
     manifest = {"source": pkg["path"].name, "role": role, "program_nca": nca.name, "sdk": nca.sdk_version,
                 "key_generation": nca.key_generation,
-                "integrity": "FS header, tabela de hashes e todos os blocos do ExeFS verificados; assinaturas RSA não",
+                "integrity": "FS header, hash table and every ExeFS block verified; RSA signatures not",
                 "files": listing}
     (args.work / "exefs-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"ExeFS em {out}")
@@ -179,7 +179,7 @@ def cmd_romfs_index(args, keys) -> int:
     total = sum(new.values())
     print(f"RomFS 1.3.0: {len(files)} arquivos, {total / 2**30:.2f} GiB (imagem {image.stat().st_size / 2**30:.2f} GiB)")
     if base:
-        print(f"em relação à base 1.0.0: {len(added)} novos, {len(removed)} removidos, {len(changed)} com tamanho diferente")
+        print(f"compared with base 1.0.0: {len(added)} new, {len(removed)} removed, {len(changed)} with another size")
         for label, items in (("novo", added), ("removido", removed), ("mudou", changed)):
             for path in items[:15]:
                 print(f"   {label:8s} {path}  {base.get(path, 0) / 2**20:.1f} → {new.get(path, 0) / 2**20:.1f} MiB")
@@ -214,7 +214,7 @@ def cmd_hactool_home(args, keys) -> int:
         fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as out:
             out.write(text)
-    print(f"hactool-home pronto em {home.parent} ({len(lines)} chaves, {len(tickets)} title keys; valores não exibidos)")
+    print(f"hactool-home ready in {home.parent} ({len(lines)} keys, {len(tickets)} title keys; values not shown)")
     return 0
 
 
@@ -224,7 +224,7 @@ def main(argv=None) -> int:
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
     ap.add_argument("--keys", type=Path, default=ROOT / "Game Files" / "prod.keys")
     ap.add_argument("--work", type=Path, default=ROOT / "build" / "v130")
-    ap.add_argument("--base-only", action="store_true", help="ExeFS da base 1.0.0 em vez do update")
+    ap.add_argument("--base-only", action="store_true", help="ExeFS of base 1.0.0 instead of the update")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args(argv)
     keys = nx.load_keys(args.keys)

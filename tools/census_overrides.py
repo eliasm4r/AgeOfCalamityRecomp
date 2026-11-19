@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Cruza os imports dos módulos do AoC com as funções `nn::*` que os runtimes de referência já implementam.
+"""Matches the imports of the AoC modules against the `nn::*` functions the reference runtimes already implement.
 
-Os runtimes do Astral Chain e do TotK Recomp substituem funções do SDK por implementações do host com
-`HOST_OVERRIDE("<nome mangled>", ...)` (e observam outras com `HOST_OBSERVER`). Este censo diz, para os imports
-de `main` e `subsdk0` (build/v130/imports.json, de tools/census_imports.py):
+The Astral Chain and TotK Recomp runtimes replace SDK functions with host implementations through
+`HOST_OVERRIDE("<mangled name>", ...)` (and observe others with `HOST_OBSERVER`). This census tells, for the imports
+of `main` and `subsdk0` (build/v130/imports.json, from tools/census_imports.py):
 
-- quais já têm override num runtime de referência (reaproveitáveis);
-- quais não têm — agrupados por namespace, é a lista de trabalho da Fase 2 (muitos não precisam de override:
-  são resolvidos pelo próprio `sdk` e só viram trabalho quando chegam num serviço do sistema).
+- which already have an override in a reference runtime (reusable);
+- which do not — grouped by namespace, this is the work list (many need no override: the `sdk` itself resolves them,
+  and they only become work when they reach a system service).
 
-Só nomes de funções; nenhum dado do jogo.
+Function names only; no game data.
 
-Uso:
+Usage:
     python3 tools/census_overrides.py --runtime refs/astral-chain-pc-recomp/runtime --runtime refs/totk-pc-recomp/runtime
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--imports", type=Path, default=ROOT / "build" / "v130" / "imports.json")
     ap.add_argument("--runtime", type=Path, action="append", required=True,
-                    help="pasta runtime/ de um projeto de referência (pode repetir)")
+                    help="runtime/ folder of a reference project (can repeat)")
     ap.add_argument("--out", type=Path, default=ROOT / "build" / "v130" / "overrides.json")
     args = ap.parse_args(argv)
     imports = json.loads(args.imports.read_text(encoding="utf-8"))
@@ -66,8 +66,8 @@ def main(argv=None) -> int:
         have = [n for n in imp if covered[n]]
         missing = [n for n in imp if not covered[n]]
         by_ns_have, by_ns_missing = Counter(namespace(n) for n in have), Counter(namespace(n) for n in missing)
-        print(f"\n{mod}: {len(imp)} imports — {len(have)} com override em alguma referência, {len(missing)} sem")
-        print(f"    {'namespace':22s} {'com':>5s} {'sem':>5s}")
+        print(f"\n{mod}: {len(imp)} imports — {len(have)} with an override in some reference, {len(missing)} without")
+        print(f"    {'namespace':22s} {'with':>5s} {'w/o':>5s}")
         for ns in sorted(set(by_ns_have) | set(by_ns_missing), key=lambda k: -(by_ns_have[k] + by_ns_missing[k]))[:20]:
             print(f"    {ns:22s} {by_ns_have[ns]:5d} {by_ns_missing[ns]:5d}")
         dm = demangle(missing)
@@ -78,7 +78,7 @@ def main(argv=None) -> int:
                        "without_override": {ns: sorted(v) for ns, v in sorted(groups.items())}}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"\nrelatório: {args.out}")
+    print(f"\nreport: {args.out}")
     return 0
 
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Censo de imports e exports dos módulos NSO (Fase 0).
+"""Census of the imports and exports of the NSO modules.
 
-Descomprime os segmentos (LZ4), acha o MOD0 e a tabela .dynamic, e lista os símbolos indefinidos (imports) de
-cada módulo agrupados por namespace (`nn::fs`, `nn::os`, `nv`, libc...). Responde a duas perguntas do plano:
+Decompresses the segments (LZ4), finds MOD0 and the .dynamic table, and lists the undefined symbols (imports) of each
+module grouped by namespace (`nn::fs`, `nn::os`, `nv`, libc...). Answers two questions:
 
-- quais funções do SDK o jogo chama (a fronteira `nn::*` que o host vai implementar);
-- se há `__cxa_throw`, `_Unwind_*` ou `longjmp` (decide a otimização de registradores callee-saved do lifter).
+- which SDK functions the game calls (the `nn::*` boundary the host implements);
+- whether there is `__cxa_throw`, `_Unwind_*` or `longjmp` (decides the lifter's callee-saved register optimization).
 
-Só nomes de símbolos e contagens; nenhum código do jogo é gravado fora de build/.
+Symbol names and counts only; no game code is written outside build/.
 
-Uso:
+Usage:
     python3 tools/census_imports.py --exefs build/v130/exefs [--out build/v130/imports.json]
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ RISKY = ("__cxa_throw", "__cxa_begin_catch", "_Unwind_Resume", "_Unwind_RaiseExc
 
 def load_nso(path: Path) -> bytes:
     raw = path.read_bytes()
-    assert raw[:4] == b"NSO0", f"{path.name} não é NSO"
+    assert raw[:4] == b"NSO0", f"{path.name} is not an NSO"
     flags = struct.unpack_from("<I", raw, 0x0C)[0]
     segs = []
     for i, off in enumerate((0x10, 0x20, 0x30)):
@@ -53,7 +53,7 @@ def load_nso(path: Path) -> bytes:
 
 def dynamic(image: bytes) -> dict[int, int]:
     mod0 = struct.unpack_from("<I", image, 4)[0]
-    assert image[mod0:mod0 + 4] == b"MOD0", "MOD0 não encontrado"
+    assert image[mod0:mod0 + 4] == b"MOD0", "MOD0 not found"
     dyn = mod0 + struct.unpack_from("<i", image, mod0 + 4)[0]
     tags: dict[int, int] = {}
     pos = dyn
@@ -133,14 +133,14 @@ def main(argv=None) -> int:
         report[m] = {"imports": len(imp), "exports": len(exp), "by_namespace": dict(groups.most_common()),
                      "unresolved_by_modules": unresolved, "exceptions_or_longjmp": risky,
                      "import_names": sorted(imp)}
-        print(f"{m}: {len(imp)} imports, {len(exp)} exports; sem dono entre os módulos: {len(unresolved)};"
-              f" exceções/longjmp: {', '.join(risky) or 'nenhum'}")
+        print(f"{m}: {len(imp)} imports, {len(exp)} exports; no owner among the modules: {len(unresolved)};"
+              f" exceptions/longjmp: {', '.join(risky) or 'none'}")
         for ns, n in groups.most_common(18):
             print(f"    {ns:24s} {n}")
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
-        print(f"relatório: {args.out}")
+        print(f"report: {args.out}")
     return 0
 
 

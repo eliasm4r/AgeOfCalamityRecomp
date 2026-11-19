@@ -1,9 +1,9 @@
-# Adaptado de totk-pc-recomp tools/build_xlate.py @ c38e0ca13d2bceb0590b195f69a010315913850d (MIT): executável aoc_xlate.
+# Adapted from totk-pc-recomp tools/build_xlate.py @ c38e0ca13d2bceb0590b195f69a010315913850d (MIT): aoc_xlate executable.
 """Build the shader translator: build/xlate/aoc_xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
 
 Copies tools/vendor/ryujinx to build/xlate/ryujinx, applies tools/xlate/patches/*.patch there (tools/vendor stays
 byte-identical; 0001-0004 are MNG's, 0005-0011 are TotK Recomp's, 0012-0014 are ours (AoC)), then runs `dotnet publish`. Needs the .NET 10 SDK, the MSVC build
-tools and vswhere.exe (docs/building.md). Run with .venv. On Linux it builds build/xlate/aoc_xlate for linux-x64, which
+tools and vswhere.exe (CONTRIBUTING.md). Run with .venv. On Linux it builds build/xlate/aoc_xlate for linux-x64, which
 NativeAOT links with the system's clang (no MSVC); NativeAOT builds for the OS it runs on only.
 
 Next to the exe it writes aoc_xlate.id: the translator identity, a sha256 over everything the build reads (this script,

@@ -269,7 +269,7 @@ int cfg_load(const char *path) {
 // notebook since 2026-11-12 (minimap markers, cutscenes, menus), but not measured on the Deck yet: not the default.
 // Age of Calamity: 30 fps (the game's own rate; it steps a fixed amount per update, so a lower cap would slow it down)
 // and the Switch's handheld mode, whose render resolution is the game's lighter one: the owner wants the Deck spared.
-// Both are rows of the quick menu (L3+R3 held). Starting points to replace with measured ones (docs/steam-deck.md).
+// Both are rows of the quick menu (L3+R3 held). Starting points to replace with measured ones (docs/NOTES.md, Steam Deck).
 // REPLAY_ASYNC: the NVN->Vulkan replay off the game's main thread. In the first battle it took 21% of that thread on an
 // i5-11400H (nvnQueueSubmitCommands, 7 ms a frame; 15-20 ms on the Deck) and 1% with it on, the image the same; the
 // guest holds 3 virtual cores, so the replay gets the Deck's fourth.
