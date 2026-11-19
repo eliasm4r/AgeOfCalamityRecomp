@@ -23,6 +23,7 @@
 #include "vk_dlaa.h"
 #include "vk_exec.h"
 #include "vk_rec.h"
+#include "nvn_api.h"
 #include "dlaa_mv_spv.h"
 
 typedef int NgxResult;   // NVSDK_NGX_Result: 1 success, 0xBAD00000 | n failures
@@ -243,13 +244,19 @@ static struct {
     float jx, jy;                // the offset the next scene draws take, render pixels (window x right, y down)
     float ux, uy;                // the offset this frame's scene draws took (DLSS and the motion vectors get these)
     uint32_t jframe;
+    float cam_vp[16];            // its four columns, copied when found
+    uint64_t cam_other;          // scene draws whose view-projection differs from the camera's (sky, effects)
+    uint64_t last_eval_ns;       // kern_now_ns of the previous evaluation (FrameTimeDeltaInMsec)
     int jit_ok, jit_used, hold;  // jitter allowed this frame / a draw used it / frames left without it
     uint64_t holds;
     // camera (vk_dlaa_draw) and motion vectors (mv_pass)
-    uint64_t cam_addr;           // this frame's scene camera block (c4 of a scene draw's vertex stage), 0: none seen
-    VkBuffer camb;               // two 256-byte slots: this frame's block and last frame's
-    VmaAllocation camb_mem;
-    int cam_slot, cam_prev_ok;   // the slot this frame writes / the other slot holds last frame's camera
+    uint64_t cam_addr;           // this frame's scene view-projection (4 vec4 columns in a scene draw's c3), 0: none seen
+    VkBuffer mvm;                // MVM_SLOTS pairs of 256-byte blocks the shader reads: identity, reprojection
+    VmaAllocation mvm_mem;
+    uint8_t *mvm_map;
+    uint32_t mvm_slot;
+    int cam_prev_ok;             // cam_prev holds last frame's view-projection
+    double cam_prev[16];         // row-major
     VkDescriptorSetLayout mv_dsl;
     VkPipelineLayout mv_layout;
     VkPipeline mv_pipe;
@@ -352,11 +359,17 @@ static NgxResourceVK res_image(VkImageView v, VkImage img, VkFormat f, uint32_t 
 }
 
 // ---------------------------------------------------------------- motion vectors
-// Camera motion only (runtime/shaders/dlaa_mv.comp): this frame's scene camera block is copied out of the replay's
-// uniform snapshot (vk_usnap.c, as of the submit call) into one slot of camb, last frame's stays in the other, and the
-// compute pass reprojects every pixel's depth through both. Characters and anything else that moves on its own get
-// the camera's motion only, which DLSS mostly copes with by rejecting their history.
-#define CAM_BYTES 256u   // vec4 rows 0-15: view, view-projection (3-6), projection, inverse view
+// Camera motion only (runtime/shaders/dlaa_mv.comp). Age of Calamity has no camera block of its own: every scene draw's
+// vertex c3 holds the view-projection as four vec4 columns (measured with ACR_DUMP_UBO in the first battle; at vec4 0
+// or 1 of the block depending on the shader, the model matrix further down), and the depth is reversed. The
+// reprojection from this frame's clip space to last frame's, last * inverse(this), is made on the CPU in double
+// precision, as TotK's recomp does since its fix of the shimmer on distant surfaces (a float inverse in the shader with
+// world coordinates in the tens of thousands gave noise of a fraction of a pixel, which DLSS followed into a heat-haze
+// shimmer): the shader's "this frame" block gets the identity and its "last frame" block that matrix. Characters and
+// anything else that moves on its own get the camera's motion only, which DLSS mostly copes with by rejecting their
+// history.
+#define CAM_BYTES 256u   // a block of the shader: vec4 rows 3-6 are the matrix it applies, row-major
+#define MVM_SLOTS 16u    // frames the GPU may still be reading the reprojection blocks of
 
 static int mv_init(void) {
     if (D.mv_ok >= 0) return D.mv_ok;
@@ -379,17 +392,21 @@ static int mv_init(void) {
     VkShaderModuleCreateInfo mi = {.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, .codeSize = sizeof dlaa_mv_spv,
                                    .pCode = dlaa_mv_spv};
     VkShaderModule m = VK_NULL_HANDLE;
-    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 2 * CAM_BYTES,
-                             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT};
-    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = MVM_SLOTS * 2 * CAM_BYTES,
+                             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                                  .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                           VMA_ALLOCATION_CREATE_MAPPED_BIT};
+    VmaAllocationInfo minfo;
     if (vkCreateDescriptorSetLayout(c->device, &dci, NULL, &D.mv_dsl) != VK_SUCCESS) goto fail;
     VkPipelineLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
                                      .pSetLayouts = &D.mv_dsl, .pushConstantRangeCount = 1, .pPushConstantRanges = &pr};
     if (vkCreatePipelineLayout(c->device, &li, NULL, &D.mv_layout) != VK_SUCCESS ||
         vkCreateSampler(c->device, &si, NULL, &D.mv_samp) != VK_SUCCESS ||
         vkCreateShaderModule(c->device, &mi, NULL, &m) != VK_SUCCESS ||
-        vmaCreateBuffer(c->vma, &bi, &ai, &D.camb, &D.camb_mem, NULL) != VK_SUCCESS)
+        vmaCreateBuffer(c->vma, &bi, &ai, &D.mvm, &D.mvm_mem, &minfo) != VK_SUCCESS)
         goto fail;
+    D.mvm_map = minfo.pMappedData;
     VkComputePipelineCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
                                       .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                                                 .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = m, .pName = "main"},
@@ -403,26 +420,78 @@ fail:
     return 0;
 }
 
+static int inv4(const double m[16], double o[16]) {   // Gauss-Jordan with partial pivoting, row-major
+    double a[4][8];
+    for (int r = 0; r < 4; r++)
+        for (int k = 0; k < 8; k++) a[r][k] = k < 4 ? m[r * 4 + k] : (k - 4 == r);
+    for (int col = 0; col < 4; col++) {
+        int piv = col;
+        for (int r = col + 1; r < 4; r++)
+            if (fabs(a[r][col]) > fabs(a[piv][col])) piv = r;
+        if (fabs(a[piv][col]) < 1e-300) return 0;
+        for (int k = 0; k < 8; k++) { double t = a[col][k]; a[col][k] = a[piv][k]; a[piv][k] = t; }
+        double d = a[col][col];
+        for (int k = 0; k < 8; k++) a[col][k] /= d;
+        for (int r = 0; r < 4; r++)
+            if (r != col) {
+                double f = a[r][col];
+                for (int k = 0; k < 8; k++) a[r][k] -= f * a[col][k];
+            }
+    }
+    for (int r = 0; r < 4; r++)
+        for (int k = 0; k < 4; k++) o[r * 4 + k] = a[r][k + 4];
+    return 1;
+}
+
+static void mul4(const double a[16], const double b[16], double o[16]) {
+    for (int r = 0; r < 4; r++)
+        for (int k = 0; k < 4; k++) {
+            double v = 0;
+            for (int j = 0; j < 4; j++) v += a[r * 4 + j] * b[j * 4 + k];
+            o[r * 4 + k] = v;
+        }
+}
+
 // The pass, recorded through the recorder like the replay's own commands. 0: no camera this frame (the vectors stay
 // zero and DLSS starts a new history).
 static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, float jx, float jy) {
     uint32_t w = e->w, h = e->h;
-    VkDescriptorBufferInfo cam;
-    if (!mv_init() || !D.cam_addr || !vk_usnap_find(D.cam_addr, CAM_BYTES, 4, &cam)) {
+    const float *f = D.cam_addr && mv_init() ? D.cam_vp : NULL;
+    if (!f) {
         D.mv_none++;
         D.cam_prev_ok = 0;
         return 0;
     }
-    int s = D.cam_slot, had_prev = D.cam_prev_ok;
-    VkBufferCopy bc = {cam.offset, (VkDeviceSize)s * CAM_BYTES, CAM_BYTES};
-    vkCmdCopyBuffer(cb, cam.buffer, D.camb, 1, &bc);
-    full_barrier(cb);
-    D.cam_slot ^= 1, D.cam_prev_ok = 1;
-    if (!had_prev) return 0;   // nothing to reproject into: zero motion, new history
+    double cur_vp[16], ci[16], m[16];
+    for (int r = 0; r < 4; r++)
+        for (int k = 0; k < 4; k++) cur_vp[r * 4 + k] = f[k * 4 + r];   // column k, component r
+    int had_prev = D.cam_prev_ok, ok = inv4(cur_vp, ci);
+    if (ok && had_prev) {
+        // The shader rebuilds clip z as depth * 2 - 1 (NEAR_IS_MINUS_W); with the 0..1 depth mode the depth is clip z
+        // itself, so z' -> (z' + 1) / 2 goes in front of the inverse.
+        double t[16];
+        mul4(D.cam_prev, ci, t);
+        if (!nvn_depth_minus_w()) {
+            static const double s[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.5, 0.5, 0, 0, 0, 1};
+            mul4(t, s, m);
+        } else {
+            memcpy(m, t, sizeof m);
+        }
+    }
+    memcpy(D.cam_prev, cur_vp, sizeof cur_vp);
+    D.cam_prev_ok = ok;
+    if (!ok || !had_prev) return 0;   // nothing to reproject into: zero motion, new history
     VkDescriptorImageInfo zi = {D.mv_samp, zv, VK_IMAGE_LAYOUT_GENERAL};
     VkDescriptorImageInfo oi = {VK_NULL_HANDLE, e->mv_view, VK_IMAGE_LAYOUT_GENERAL};
-    VkDescriptorBufferInfo cur = {D.camb, (VkDeviceSize)s * CAM_BYTES, CAM_BYTES};
-    VkDescriptorBufferInfo prev = {D.camb, (VkDeviceSize)(s ^ 1) * CAM_BYTES, CAM_BYTES};
+    uint32_t ms = D.mvm_slot++ % MVM_SLOTS;
+    float *blk = (float *)(D.mvm_map + (size_t)ms * 2 * CAM_BYTES);   // rows 3-6 of each block are read
+    memset(blk, 0, 2 * CAM_BYTES);
+    for (int r = 0; r < 4; r++)
+        for (int k = 0; k < 4; k++)
+            blk[12 + r * 4 + k] = r == k ? 1.0f : 0.0f, blk[64 + 12 + r * 4 + k] = (float)m[r * 4 + k];
+    vmaFlushAllocation(vk_ctx()->vma, D.mvm_mem, (VkDeviceSize)ms * 2 * CAM_BYTES, 2 * CAM_BYTES);
+    VkDescriptorBufferInfo cur = {D.mvm, (VkDeviceSize)ms * 2 * CAM_BYTES, CAM_BYTES};
+    VkDescriptorBufferInfo prev = {D.mvm, (VkDeviceSize)ms * 2 * CAM_BYTES + CAM_BYTES, CAM_BYTES};
     VkWriteDescriptorSet wr[4] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &zi},
@@ -442,6 +511,10 @@ static int mv_pass(VkCommandBuffer cb, const struct Size *e, VkImageView zv, flo
     return 1;
 }
 
+// The scene depth: D32F in TotK, D32F with stencil in Age of Calamity (NVN d32fs8, measured with ACR_DUMP in the first
+// battle: the depth prepass, the G-buffer, the light target and the transparents all use it).
+static int scene_depth(VkFormat f) { return f == VK_FORMAT_D32_SFLOAT || f == VK_FORMAT_D32_SFLOAT_S8_UINT; }
+
 // ---------------------------------------------------------------- jitter
 // The scene's draws (every pass drawing with the scene depth, until the DLAA point) have their viewport moved by a
 // sub-pixel Halton(2,3) offset, which shifts what they rasterise as a jittered projection would; full-screen passes
@@ -459,22 +532,55 @@ void vk_dlaa_viewport(VkExec *ex, VkViewport *v) {
     D.ux = D.jx, D.uy = D.jy, D.jit_used = 1;
 }
 
+// The scene camera: the view-projection in the vertex c3 of a scene draw (one drawing with the scene depth). It is four
+// vec4 columns whose w components, the camera's forward axis, make a unit vector; the block's other matrices (the model
+// matrix and the normal matrix) do not, nor do the zero rows before it in some shaders.
+static uint64_t find_vp(uint64_t addr, uint64_t size) {
+    if (!addr || size < 64) return 0;
+    uint64_t n = size < 112 ? size : 112;   // the view-projection starts at vec4 0..3
+    const float *f = (const float *)vk_usnap_bytes(addr, n);
+    if (!f) return 0;
+    for (uint64_t k = 0; (k + 4) * 16 <= n; k++) {
+        const float *c = f + 4 * k;
+        double fw = (double)c[3] * c[3] + (double)c[7] * c[7] + (double)c[11] * c[11];
+        double x = fabs(c[0]) + fabs(c[1]) + fabs(c[2]);
+        if (fabs(fw - 1.0) < 0.01 && x > 1e-3 && fabs(c[15]) > 1e-3) return addr + 16 * k;
+    }
+    return 0;
+}
+
+// The camera is taken from the first G-buffer draw of the frame: later scene draws (the sky, effects) can carry a
+// view-projection of their own, and taking the last one gave DLSS wrong motion on some frames (flicker, resets).
 void vk_dlaa_draw(VkExec *ex) {
     if (!dl_active() || D.ended) return;
-    const p_bind_buf *b = &ex->ubo[0][1];   // constant bank c4: the replay keeps user banks from c3 on
+    const p_bind_buf *b = &ex->ubo[0][0];   // the vertex stage's c3: the replay keeps user banks from c3 on
     const VkExecTarget *z = &ex->depth;
-    if (b->size == 0x940 && b->addr && z->image && z->width >= 640 && z->format == VK_FORMAT_D32_SFLOAT &&
-        (!D.jdepth || z->image == D.jdepth))
-        D.cam_addr = b->addr;
+    if (!b->addr || !z->image || z->width < 640 || !scene_depth(z->format) || (D.jdepth && z->image != D.jdepth)) return;
+    if (!D.cam_addr) {
+        if (ex->pass_ncolor >= 3 && (D.cam_addr = find_vp(b->addr, b->size)) != 0)
+            memcpy(D.cam_vp, vk_usnap_bytes(D.cam_addr, 64), 64);   // the snapshot may be gone by the DLAA point
+        return;
+    }
+    uint64_t vp = find_vp(b->addr, b->size);
+    if (vp && vp != D.cam_addr) {
+        const void *x = vk_usnap_bytes(vp, 64), *y = vk_usnap_bytes(D.cam_addr, 64);
+        if (x && y && memcmp(x, y, 64)) D.cam_other++;
+    }
 }
 
 // The jitter moves on right after DLAA ran, not at the present: the replay can record the next frame's scene before
 // the present of this one is handled, and a step taken there landed in the middle of a frame (worse after an off/on
 // switch, which shifted that order). Jitter needs a frame DLSS ran on; a frame without the DLAA point stops it.
-static void next_jitter(void) {
+// The sequence is as long as NVIDIA asks for the upscaling ratio, 8 * (output / scene)^2 phases, at least 16 (as TotK's
+// recomp does): a shorter one leaves output pixels the jitter never samples in the upscaling modes.
+static void next_jitter(uint32_t w, uint32_t ow) {
     static int nj = -1;
     if (nj < 0) nj = !rt_knob("DLAA_JITTER", "1");   // ACR_DLAA_JITTER=0: no jitter (test)
-    uint32_t i = D.jframe++ % 16 + 1;
+    double k = w ? (double)ow / w : 1.0;
+    uint32_t phases = (uint32_t)ceil(8.0 * k * k - 1e-6);
+    if (phases < 16) phases = 16;
+    if (phases > 72) phases = 72;
+    uint32_t i = D.jframe++ % phases + 1;
     D.jx = halton(i, 2) - 0.5f, D.jy = halton(i, 3) - 0.5f;
     D.jit_ok = !D.hold && !nj;
 }
@@ -522,10 +628,18 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
         // IsHDR | MVLowRes | AutoExposure: linear scene light, motion vectors at the render size, no exposure texture
         p_seti(p, "DLSS.Feature.Create.Flags", (1 << 0) | (1 << 1) | (1 << 6));
         p_seti(p, "DLSS.Enable.Output.Subrects", 0);
+        // The model per mode as NVIDIA recommends and TotK's recomp uses (NVSDK_NGX_DLSS_Hint_Render_Preset, 1 A ... 13 M):
+        // K, the transformer model, for DLAA to Balanced; M for Performance; L for Ultra Performance.
+        p_setu(p, "DLSS.Hint.Render.Preset.DLAA", 11);
+        p_setu(p, "DLSS.Hint.Render.Preset.UltraQuality", 11);
+        p_setu(p, "DLSS.Hint.Render.Preset.Quality", 11);
+        p_setu(p, "DLSS.Hint.Render.Preset.Balanced", 11);
+        p_setu(p, "DLSS.Hint.Render.Preset.Performance", 13);
+        p_setu(p, "DLSS.Hint.Render.Preset.UltraPerformance", 12);
         NgxResult r = N.create(cb, NGX_FEATURE_SUPERSAMPLING, p, &e->feat);
         if (!NGX_OK(r) || !e->feat) return dl_fail("DLSS feature creation", r);
         D.reset = 1;
-        rt_log("dlaa: DLSS feature created at %ux%u -> %ux%u, quality value %d (scene format %d, depth format %d)", w,
+        rt_log("dlaa: DLSS feature created at %ux%u -> %ux%u, quality value %d, preset K (scene format %d, depth format %d)", w,
                h, ow, oh, perf_quality(w, ow), (int)t->format, (int)z->format);
     }
     if (D.last_color != t->image) D.reset = 1, D.why[2]++, D.last_color = t->image;
@@ -549,7 +663,12 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", h);
     p_setf(p, "DLSS.Pre.Exposure", 1.0f);
     p_setf(p, "DLSS.Exposure.Scale", 1.0f);
-    p_setf(p, "FrameTimeDeltaInMsec", 16.67f);
+    // The time since the previous evaluation, which DLSS weighs its history by (Age of Calamity runs at 30 fps, not
+    // the 60 assumed before); 60 fps before the first and after a gap (a pause, a load).
+    uint64_t now = kern_now_ns();
+    double dt = D.last_eval_ns ? (double)(now - D.last_eval_ns) / 1e6 : 0;
+    D.last_eval_ns = now;
+    p_setf(p, "FrameTimeDeltaInMsec", dt > 0 && dt < 100 ? (float)dt : 16.67f);
     NgxResult r = N.evaluate(cb, e->feat, p, NULL);
     if (!NGX_OK(r)) return dl_fail("DLSS evaluation", r);
     D.reset = 0;
@@ -566,13 +685,15 @@ static void evaluate(VkExec *ex, const VkExecTarget *dst) {
     ex->recorded += 4;
     vk_exec_draw_new_cb();   // NGX bound pipelines and descriptor sets of its own: the next draw binds everything again
     D.jdepth = z->image;
-    next_jitter();
+    next_jitter(w, ow);
     if (++D.evals == 1 || D.evals % 3600 == 0)
         rt_log("dlaa: %llu frames anti-aliased (scene %ux%u, output %ux%u; %llu frames without the DLAA point, %llu with camera "
-               "motion, %llu without a camera, %llu jitter holds; resets: %llu size, %llu camera, %llu target)",
+               "motion, %llu without a camera, %llu jitter holds; resets: %llu size, %llu camera, %llu target; %llu draws with another "
+               "camera)",
                (unsigned long long)D.evals, w, h, ow, oh, (unsigned long long)D.frames_missed,
                (unsigned long long)D.mv_frames, (unsigned long long)D.mv_none, (unsigned long long)D.holds,
-               (unsigned long long)D.why[0], (unsigned long long)D.why[1], (unsigned long long)D.why[2]);
+               (unsigned long long)D.why[0], (unsigned long long)D.why[1], (unsigned long long)D.why[2],
+               (unsigned long long)D.cam_other);
 }
 
 static int scene_color(VkFormat f) {
@@ -585,12 +706,12 @@ void vk_dlaa_pass(VkExec *ex) {
     // The G-buffer: several colour targets with a D32F depth of at least 640 wide. Only the light target drawn after it
     // arms the frame; at night the game draws into the light target alone with the scene depth before the G-buffer too,
     // and DLAA then ran at a small pass ahead of the whole scene, which reached the screen jittered.
-    if (ex->pass_ncolor >= 3 && z->image && z->format == VK_FORMAT_D32_SFLOAT && z->width >= 640) {
+    if (ex->pass_ncolor >= 3 && z->image && scene_depth(z->format) && z->width >= 640) {
         D.gbuf = 1, D.armed = 0;
         return;
     }
     // the scene depth is D32F; a D16 target of the scene size also serves one composite pass before the transparents
-    if (D.gbuf && ex->pass_ncolor == 1 && c->image && scene_color(c->format) && z->image && z->format == VK_FORMAT_D32_SFLOAT &&
+    if (D.gbuf && ex->pass_ncolor == 1 && c->image && scene_color(c->format) && z->image && scene_depth(z->format) &&
         c->width == z->width && c->height == z->height && c->width >= 640 &&
         c->samples <= 1 && !c->is3d) {
         D.color = *c, D.depth = *z, D.armed = 1;
