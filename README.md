@@ -13,7 +13,7 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 [![Latest release](https://img.shields.io/github/v/release/eliasm4r/AgeOfCalamityRecomp?include_prereleases&style=for-the-badge&label=release&color=c9a227)](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/eliasm4r/AgeOfCalamityRecomp/total?style=for-the-badge&color=2e7d32)](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-0078d4?style=for-the-badge)](#requirements)
-[![License](https://img.shields.io/badge/license-MIT-6a3d1b?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-6a3d1b?style=for-the-badge)](LICENSE)
 
 **[Download](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest)** ·
 **[Install](#install)** ·
@@ -253,4 +253,5 @@ Independent fan project, not affiliated with or endorsed by Nintendo or Koei Tec
 Zelda* and *Nintendo Switch* are trademarks of their respective owners. You must supply your own legally obtained copy
 of the game.
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [GPL-3.0-or-later](LICENSE), with an added permission to use NVIDIA's DLSS library. Code
+from other projects keeps its own licence, listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

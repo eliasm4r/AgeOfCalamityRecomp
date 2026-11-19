@@ -5,6 +5,7 @@ is used. Only MIT, BSD, ISC, zlib or Apache-2.0 code is copied, and the original
 
 | Component | Source and commit | Licence | Used in |
 |---|---|---|---|
+| AoC Recomp 0.1.5, the project this one started from (setup, build scripts, Age of Calamity patches and runtime changes) | https://github.com/Azzulin/EXCUUUUSE-ME-PRINCESS- (0.1.5), Copyright (c) 2026 Gabriel Azzulin and the AoC Recomp contributors | MIT (text below) | the whole repository, as changed since |
 | MacNativeGames extractor (PFS0/HFS0 reading, NCA header, common tickets, AES-CTR key, hashed ExeFS), as vendored by astral-chain-pc-recomp | https://github.com/ly05010419/MacNativeGames @ `b75be8cfa704df3701e86130c8ced268e79d6b11` (`games/totk/scripts/extract_exefs.py`), via https://github.com/captainj-sparrow/astral-chain-pc-recomp @ `3bbaf259ac099a321c78b81f5402f6070a77874a` (`tools/vendor/macnativegames/extract_exefs.py`), Copyright (c) 2026 MacNativeGames contributors | MIT | `tools/nx.py` |
 | nxnative: GLSLC output reading and shader key (`sph_stage`, `ctl_len`, `skey`, `check`, `glslc_stage`, `glslc_layout`, `glslc_section`, `glslc_program`, `glslc_shaders`) and IDRK entry decompression (`idrk_data`) | https://github.com/seedds/nxnative @ `3ace3df33b81681cdc9d17bfa48eadaccd446b5c` (`dm/gfx/tools/shader_split.py`), Copyright (c) 2026 seedds | MIT | `tools/census_shaders.py` |
 | Astral Chain Recomp: ARM64 to C lifter, generator, jump tables, flags and local registers, NSO, patches, FP/SIMD lowering to C (themselves adapted from LAS Recomp, MIT, Copyright (c) 2026 Peiikai, headers kept) | https://github.com/captainj-sparrow/astral-chain-pc-recomp @ `3bbaf259ac099a321c78b81f5402f6070a77874a` (`recomp/*.py`), Copyright (c) 2026 the Astral Chain Recomp / TotK Recomp contributors | MIT | `recomp/flags.py`, `recomp/gen.py`, `recomp/jumptables.py`, `recomp/lifter.py`, `recomp/module.py`, `recomp/nso.py`, `recomp/patches.py`, `recomp/regs.py`, `recomp/simd_c.py` (unmodified); `recomp/layout.py` (no fixed RomFS region) |
@@ -75,5 +76,32 @@ Besides the repository, the release packages (`tools/make_release.py`) carry the
 
 Not in any package: on Windows with an NVIDIA RTX card the build (`tools/make_build.py`, step `dlss`) downloads NVIDIA's DLSS library `nvngx_dlss.dll` 310.9.1, unmodified, from https://github.com/NVIDIA/DLSS (tag `v310.9.1`, SHA-256 checked) into the player's game folder, under the NVIDIA RTX SDK licence (https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt).
 
-The project's own code is under the [MIT License](LICENSE). The licence grants nothing over the game, which belongs to
+## AoC Recomp licence
+
+```
+MIT License
+
+Copyright (c) 2026 Gabriel Azzulin and the AoC Recomp contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The project as a whole is under the [GPL-3.0-or-later](LICENSE), with an added permission to combine it with NVIDIA's
+DLSS library; the code listed above keeps its own licence. None of it grants anything over the game, which belongs to
 Nintendo and Koei Tecmo.
