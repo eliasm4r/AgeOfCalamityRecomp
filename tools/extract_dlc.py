@@ -139,8 +139,8 @@ def main(argv=None) -> int:
                     found.append({"title_id": nca.title_id, "index": tid - AOC_BASE, "file": dst.name, "size": size,
                                   "mtime_ns": dst.stat().st_mtime_ns, "sha256": sha, "files": len(files),
                                   "source": path.name})
-                    print(f"DLC {tid - AOC_BASE} ({nca.title_id}): {len(files)} arquivos, {size / 2**20:.1f} MiB, "
-                          f"IVFC conferido, {time.monotonic() - t0:.1f} s  → {dst.name}")
+                    print(f"DLC {tid - AOC_BASE} ({nca.title_id}): {len(files)} files, {size / 2**20:.1f} MiB, "
+                          f"IVFC checked, {time.monotonic() - t0:.1f} s  → {dst.name}")
     found.sort(key=lambda e: e["index"])
     manifest_path.write_text(json.dumps({"dlc": found}, indent=1) + "\n", encoding="utf-8")
     if not found:
@@ -154,5 +154,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except ValueError as e:
-        print("ERRO:", e)
+        print("ERROR:", e)
         sys.exit(1)

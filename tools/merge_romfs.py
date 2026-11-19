@@ -32,7 +32,7 @@ WIN = os.name == "nt"
 
 
 def fail(msg: str) -> None:
-    print(f"ERRO: {msg}", flush=True)
+    print(f"ERROR: {msg}", flush=True)
     sys.exit(1)
 
 
@@ -58,10 +58,10 @@ def find_nsps(game_dir: Path, keys: Path) -> tuple[Path, Path]:
     import nx
     pkgs = [p for p in extract.scan(game_dir, nx.load_keys(keys)) if p["container"] == "nsp"]
     out = []
-    for role, what in (("base", "do jogo base (01002B00111A2000)"), ("update", "do update 1.3.0 (01002B00111A2800)")):
+    for role, what in (("base", "of the base game (01002B00111A2000)"), ("update", "of update 1.3.0 (01002B00111A2800)")):
         found = [p["path"] for p in pkgs if p["role"] == role]
         if len(found) != 1:
-            fail(f"esperado 1 NSP {what} em {game_dir}, achei {len(found)}")
+            fail(f"expected 1 NSP {what} in {game_dir}, found {len(found)}")
         out.append(found[0])
     return out[0], out[1]
 
@@ -77,7 +77,7 @@ def link_or_copy(src: Path, dst: Path) -> None:
     if not WIN:   # another disk (e.g. the dump in /mnt/c under WSL): the Linux hactool opens any path
         os.symlink(src, dst)
         return
-    print(f"hardlink falhou; copiando {dst.name} (pode demorar)...", flush=True)
+    print(f"hard link failed; copying {dst.name} (this can take a while)...", flush=True)
     shutil.copyfile(src, dst)
 
 
@@ -104,7 +104,7 @@ def main() -> int:
     if not (HAC_HOME / ".switch" / "title.keys").is_file():
         fail("extract.py hactool-home did not create the keys")
 
-    # 2. NSPs com nomes ASCII
+    # 2. the NSPs under ASCII names
     inp = TMP / "in"
     inp.mkdir(parents=True, exist_ok=True)
     base_nsp, update_nsp = find_nsps(args.game_dir, keys)
@@ -115,17 +115,17 @@ def main() -> int:
     for name in ("base", "update"):
         d = TMP / name
         if not d.is_dir():
-            print(f"Extraindo {name}.nsp ...", flush=True)
+            print(f"Extracting {name}.nsp ...", flush=True)
             if run_hactool(["-t", "pfs0", f"--outdir={d}", str(inp / f"{name}.nsp")]):
-                fail(f"hactool falhou ao abrir {name}.nsp")
+                fail(f"hactool could not open {name}.nsp")
     base_nca = max((TMP / "base").glob("*.nca"), key=lambda p: p.stat().st_size)
     upd_nca = max((TMP / "update").glob("*.nca"), key=lambda p: p.stat().st_size)
     print(f"base program NCA:   {base_nca.name}")
-    print(f"NCA de programa do update: {upd_nca.name}", flush=True)
+    print(f"update program NCA: {upd_nca.name}", flush=True)
 
     # For a BKTR section hactool ignores --romfs; only --section1 writes the image (the final RomFS level, without the
     # hash levels). -y checks the six IVFC levels.
-    print("Mesclando o RomFS (base + 1.3.0); leva alguns minutos ...", flush=True)
+    print("Merging the RomFS (base + 1.3.0); this takes a few minutes ...", flush=True)
     env = dict(os.environ, HOME=str(HAC_HOME), USERPROFILE=str(HAC_HOME))
     with open(LOG, "wb") as log:
         code = run_hactool(["-x", "-y", "--disablekeywarns", "--suppresskeys", "-k",

@@ -10,10 +10,9 @@
 // Play screen: once the game for this PC is there (dist/aoc-windows on Windows, dist/aoc-deck on Linux), the window
 // turns into the game's launcher: the main settings of that folder's aoc.ini (the keys runtime/cfg.c reads, edited in
 // place the way cfg_save does: the line of a key keeps its spelling, a missing key goes into its section, the rest of
-// the file is untouched), Play, Report (tools/make_report.py), the game folder and Forge again.
+// the file is untouched), Play, Report (tools/make_report.py), the game folder and Rebuild.
 //
-// The interface speaks Portuguese and English (the system's language first, a toggle at the top right). Launcher
-// settings live in launcher.ini beside the executable.
+// The interface is in English. Launcher settings live in launcher.ini beside the executable.
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #ifdef _WIN32
@@ -71,107 +70,121 @@ enum Str {
     T_GUIDE, T_NEED_WSL, T_NEED_WSL2, T_INSTALL_WSL, T_WSL_RUNNING, T_WSL_DONE, T_WSL_FAIL, T_CANCELLED_LOG,
     T_NO_PYTHON, T_UPDATE_NOTE, T_GRAPHICS, T_CONTROLS, T_GFX_NOTE, T_CTL_NOTE, T_PLAY, T_PLAYING, T_REPORT,
     T_REPORTING, T_REPORT_DONE, T_REPORT_FAIL, T_GAME_FOLDER, T_LOGS_FOLDER, T_FORGE_AGAIN, T_BACK_TO_GAME, T_SAVE,
-    T_SAVED, T_SAVE_FAIL, T_CLOSE, T_FRAMERATE, T_FRAMERATE_VAL, T_FRAMERATE_DESC, T_UNSAVED, T_PLAY_FAIL, T_UNNAMED, T_COUNT
+    T_SAVED, T_SAVE_FAIL, T_CLOSE, T_FRAMERATE, T_FRAMERATE_VAL, T_FRAMERATE_DESC, T_UNSAVED, T_PLAY_FAIL, T_UNNAMED,
+    // the setup wizard and the play screen
+    T_STEP1, T_STEP2, T_STEP3, T_S1_TITLE, T_S1_HINT, T_S1_NOTE, T_KEYS, T_OPTIONAL, T_S2_TITLE, T_S2_HINT, T_WIN_DESC,
+    T_DECK_DESC, T_DECK_DESC_LINUX, T_S3_TITLE, T_S3_FOR, T_BACK, T_NEXT, T_DETAILS, T_NEED_FILES, T_NEED_TARGET,
+    T_READY, T_READY_FOR, T_COUNT
 };
-static const char *STR[T_COUNT][2] = {
-    {"HYRULE WARRIORS  ·  RECOMPILADO", "HYRULE WARRIORS  ·  RECOMPILED"},
-    {"SUA CÓPIA", "YOUR COPY"},
-    {"Pasta com os NSPs (base, update 1.3.0, DLCs) e o prod.keys", "Folder with the NSPs (base, update 1.3.0, DLCs) and prod.keys"},
-    {"Procurar...", "Browse..."},
-    {"pasta não encontrada", "folder not found"},
-    {"Jogo base", "Base game"},
-    {"Update 1.3.0", "Update 1.3.0"},
-    {"DLCs", "DLCs"},
-    {"%d encontrado(s)", "%d found"},
-    {"(conteúdo nunca exibido)", "(contents never shown)"},
-    {"(faltando)", "(missing)"},
-    {"ONDE VAI JOGAR", "WHERE YOU WILL PLAY"},
-    {"Steam Deck / Linux", "Steam Deck / Linux"},
-    {"Steam Deck / Linux (este PC)", "Steam Deck / Linux (this PC)"},
-    {"incluir o romfs.bin (primeira instalação, 10,9 GiB)", "include romfs.bin (first install, 10.9 GiB)"},
-    {"enviar ao Deck por SSH no fim", "send to the Deck over SSH at the end"},
-    {"usuário@endereço", "user@address"},
-    {"Windows (este PC)", "Windows (this PC)"},
-    {"Avançado", "Advanced"},
-    {"distro do WSL", "WSL distro"},
-    {"AoC-Recomp (automática)", "AoC-Recomp (automatic)"},
-    {"pasta de trabalho (Windows)", "work folder (Windows)"},
-    {"padrão", "default"},
-    {"FORJAR", "FORGE"},
-    {"FORJANDO...", "FORGING..."},
-    {"Só conferir", "Only check"},
-    {"Cancelar", "Cancel"},
-    {"PROGRESSO", "PROGRESS"},
-    {"1. Escolha a pasta com a sua cópia do jogo (NSPs e prod.keys).", "1. Pick the folder with your copy of the game (NSPs and prod.keys)."},
-    {"2. Marque onde vai jogar: Steam Deck / Linux, Windows ou os dois.", "2. Tick where you will play: Steam Deck / Linux, Windows or both."},
-    {"2. Deixe marcado Steam Deck / Linux (a pasta serve para este PC e para o Deck).",
-     "2. Keep Steam Deck / Linux ticked (the folder works on this PC and on the Deck)."},
-    {"3. Clique em FORJAR e deixe o PC trabalhar.", "3. Click FORGE and let the PC work."},
-    {"A primeira vez leva de 1 a 2 horas (baixa ~2 GB de ferramentas e compila tudo).\nDepois, só o que mudou: minutos.",
-     "The first time takes 1 to 2 hours (downloads ~2 GB of tools and compiles everything).\nAfter that, only what changed: minutes."},
-    {"(já feito)", "(already done)"},
-    {"Arquivos conferidos: tudo certo.", "Files checked: all good."},
-    {"Pronto. O port foi forjado.", "Done. The port is forged."},
-    {"Pronto. Copie a pasta do Deck para o Steam Deck (veja o guia).", "Done. Copy the Deck folder to the Steam Deck (see the guide)."},
-    {"Falhou. Veja o registro abaixo.", "Failed. See the log below."},
-    {"Cancelado.", "Cancelled."},
-    {"Registro", "Log"},
-    {"acompanhar", "follow"},
-    {"Pasta do Deck", "Deck folder"},
-    {"Use somente a sua cópia, extraída do seu console. Nada do jogo é distribuído: tudo é gerado neste PC.",
-     "Use only your own copy, dumped from your console. Nothing from the game is distributed: it is all made on this PC."},
-    {"Guia", "Guide"},
-    {"O WSL (Linux dentro do Windows) é necessário para a versão do Steam Deck.",
-     "WSL (Linux inside Windows) is needed for the Steam Deck version."},
-    {"Instale com o botão abaixo (o Windows pede permissão de administrador) e depois reinicie o PC.",
-     "Install it with the button below (Windows asks for administrator permission), then restart the PC."},
-    {"Instalar o WSL", "Install WSL"},
-    {"Instalando o WSL... siga a janela do Windows.", "Installing WSL... follow the Windows window."},
-    {"WSL instalado. Reinicie o PC e abra o launcher de novo.", "WSL installed. Restart the PC and open the launcher again."},
-    {"A instalação do WSL não terminou (código %d). Tente de novo ou veja o guia.",
-     "The WSL install did not finish (code %d). Try again or see the guide."},
-    {"cancelado pelo usuário", "cancelled by the user"},
-    {"não consegui iniciar o Python: ", "could not start Python: "},
-    {"Versão nova do AgeOfCalamityRecomp: forje de novo para atualizar o jogo (só o que mudou é refeito).",
-     "New AgeOfCalamityRecomp version: forge again to update the game (only what changed is redone)."},
-    {"GRÁFICOS", "GRAPHICS"},
-    {"CONTROLE E SOM", "CONTROLS AND SOUND"},
-    {"Valem na próxima vez que o jogo abrir. Mais opções no jogo: F1.",
-     "They apply the next time the game starts. More options in the game: F1."},
-    {"Em jogo, F1 (ou Menos + Mais no controle) abre o menu completo: remapear botões, cores, HDR.",
-     "In the game, F1 (or Minus + Plus on a controller) opens the full menu: remap buttons, colours, HDR."},
-    {"JOGAR", "PLAY"},
-    {"JOGANDO", "PLAYING"},
-    {"Reportar problema...", "Report a problem..."},
-    {"Gerando o relatório...", "Making the report..."},
-    {"aoc-report.zip criado (registros e dados do PC, nada do jogo). Arraste-o para a página que abriu no navegador.",
-     "aoc-report.zip made (logs and PC details, nothing of the game). Drag it into the page that opened in your browser."},
-    {"O relatório não foi criado.", "The report could not be made."},
-    {"Pasta do jogo", "Game folder"},
-    {"Registros", "Logs"},
-    {"Forjar de novo", "Forge again"},
-    {"Voltar ao jogo", "Back to the game"},
-    {"Salvar", "Save"},
-    {"Configurações salvas.", "Settings saved."},
-    {"Não consegui gravar o aoc.ini.", "Could not write aoc.ini."},
-    {"Fechar", "Close"},
-    {"Taxa de quadros", "Frame rate"},
-    {"30 fps (a do jogo)", "30 fps (the game's own)"},
-    {"30 FPS é a taxa do próprio jogo: ele anda um passo fixo por quadro. 60 FPS precisa de um patch que ainda não foi portado.",
-     "30 FPS is the game's own rate: it moves a fixed step per frame. 60 FPS needs a patch that is not ported yet."},
-    {"alterações não salvas", "unsaved changes"},
-    {"Não consegui abrir o jogo.", "Could not start the game."},
-    {"(nome sem o ID; conferido ao forjar)", "(no ID in the name; checked when forging)"},
+static const char *STR[T_COUNT] = {
+    "HYRULE WARRIORS  ·  RECOMPILED",
+    "YOUR COPY",
+    "Folder with the NSPs (base, update 1.3.0, DLC) and prod.keys",
+    "Browse...",
+    "folder not found",
+    "Base game",
+    "Update 1.3.0",
+    "DLCs",
+    "%d found",
+    "found (contents never shown)",
+    "(missing)",
+    "WHERE YOU WILL PLAY",
+    "Steam Deck / Linux",
+    "Steam Deck / Linux (this PC)",
+    "Include the game data (10.9 GB): needed the first time you copy the folder",
+    "Send the folder to the Deck over the network (SSH) when done",
+    "Deck address (user@ip)",
+    "Windows (this PC)",
+    "Advanced",
+    "WSL distro",
+    "AoC-Recomp (automatic)",
+    "Windows build folder",
+    "default",
+    "BUILD",
+    "BUILDING...",
+    "Check files only",
+    "Cancel",
+    "PROGRESS",
+    "1. Pick the folder with your copy of the game (NSPs and prod.keys).",
+    "2. Tick where you will play: Steam Deck / Linux, Windows or both.",
+    "2. Keep Steam Deck / Linux ticked (the folder works on this PC and on the Deck).",
+    "3. Click BUILD and let the PC work.",
+    "The first build takes 1 to 2 hours (it downloads ~2 GB of tools and compiles everything).\nLater builds only redo what changed: a few minutes.",
+    "(already done)",
+    "Files checked: all good.",
+    "Done. The game is built and ready to play.",
+    "Done. Copy the Deck folder to your Steam Deck (see the README).",
+    "The build failed. Open Technical details below to see why.",
+    "Cancelled.",
+    "Log",
+    "follow",
+    "Deck folder",
+    "Use only your own copy, dumped from your console. Nothing from the game is distributed: it is all made on this PC.",
+    "README",
+    "WSL (Linux inside Windows) is needed for the Steam Deck version.",
+    "Install it with the button below (Windows asks for administrator permission), then restart the PC.",
+    "Install WSL",
+    "Installing WSL... follow the Windows window.",
+    "WSL installed. Restart the PC and open the launcher again.",
+    "The WSL install did not finish (code %d). Try again or see the guide.",
+    "cancelled by the user",
+    "could not start Python: ",
+    "A new AgeOfCalamityRecomp version is here: build again to update the game (only what changed is redone).",
+    "DISPLAY AND GRAPHICS",
+    "CONTROLS AND SOUND",
+    "Changes apply the next time the game starts. More options in the game: press F1.",
+    "In the game, F1 (or Minus + Plus on a controller) opens the full menu: button remapping, colours, HDR.",
+    "PLAY",
+    "PLAYING",
+    "Report a problem...",
+    "Making the report...",
+    "aoc-report.zip made (logs and PC details, nothing of the game). Drag it into the page that opened in your browser.",
+    "The report could not be made.",
+    "Game folder",
+    "Logs",
+    "Rebuild...",
+    "Back to the game",
+    "Save",
+    "Settings saved.",
+    "Could not write aoc.ini.",
+    "Close",
+    "Frame rate",
+    "30 fps (the game's own)",
+    "30 FPS is the game's own rate: it moves a fixed step per frame. 60 FPS needs a patch that is not ported yet.",
+    "unsaved changes",
+    "Could not start the game.",
+    "(no ID in the name; checked when building)",
+    "Game files",
+    "Platforms",
+    "Build",
+    "STEP 1 · YOUR GAME FILES",
+    "Pick the folder with the NSPs dumped from your console (base game, update 1.3.0, DLC) and your prod.keys.",
+    "Nothing is uploaded anywhere: the game is built on this PC from your own files.",
+    "prod.keys (your console's keys)",
+    "optional",
+    "STEP 2 · WHERE WILL YOU PLAY?",
+    "Tick one or both.",
+    "Builds the game for this Windows PC.",
+    "Builds a folder to copy to a Steam Deck or a Linux PC (uses WSL, the Linux inside Windows).",
+    "Builds the game for this PC; the same folder also runs on a Steam Deck.",
+    "STEP 3 · BUILD THE GAME",
+    "For: ",
+    "Back",
+    "Next",
+    "Technical details",
+    "Something is missing in the chosen folder.",
+    "Tick at least one platform.",
+    "READY TO PLAY",
+    "Version %s · built for this PC",
 };
-static int g_lang = 1;   // 0 Portuguese, 1 English (the default)
-static const char *tr(Str s) { return STR[s][g_lang]; }
-// A label whose text changes with the language but keeps its ImGui id.
+static const char *tr(Str s) { return STR[s]; }
+// A label with its own ImGui id.
 static std::string lab(Str s, const char *id) { return std::string(tr(s)) + "###" + id; }
 
 // ---- paths and settings
 static fs::path g_exe_dir, g_root;
 struct Settings {
-    std::string game_dir, deck_host = "deck@steamdeck", win_work, wsl_distro, lang;
+    std::string game_dir, deck_host = "deck@steamdeck", win_work, wsl_distro;
     bool deck = true, windows = false, send = false, with_romfs = false;
 };
 static Settings S;
@@ -211,7 +224,6 @@ static void settings_load() {
         else if (k == "deck_host") S.deck_host = v;
         else if (k == "win_work") S.win_work = v;
         else if (k == "wsl_distro") S.wsl_distro = v;
-        else if (k == "lang") S.lang = v;
         else if (k == "deck") S.deck = v == "1";
         else if (k == "windows") S.windows = v == "1";
         else if (k == "send") S.send = v == "1";
@@ -221,7 +233,7 @@ static void settings_load() {
 static void settings_save() {
     std::ofstream f(g_exe_dir / "launcher.ini");
     f << "game_dir=" << S.game_dir << "\ndeck_host=" << S.deck_host << "\nwin_work=" << S.win_work
-      << "\nwsl_distro=" << S.wsl_distro << "\nlang=" << (g_lang ? "en" : "pt") << "\ndeck=" << S.deck
+      << "\nwsl_distro=" << S.wsl_distro << "\ndeck=" << S.deck
       << "\nwindows=" << S.windows << "\nsend=" << S.send << "\nwith_romfs=" << S.with_romfs << "\n";
 }
 
@@ -386,83 +398,68 @@ struct Opt {
     const char *key, *section, *def;
     int kind;   // 0 choice, 1 slider (integer), 2 toggle
     std::vector<const char *> vals;
-    std::vector<std::array<const char *, 2>> names;
+    std::vector<const char *> names;
     int lo, hi, step;
-    const char *label[2], *desc[2];
+    const char *label, *desc;
     const char *needs_off;   // shown disabled while this toggle key is "1"
 };
 static const std::vector<Opt> GFX = {
-    {"FULLSCREEN", "display", "0", 0, {"0", "1"}, {{{"Janela", "Windowed"}}, {{"Tela cheia", "Fullscreen"}}}, 0, 0, 0,
-     {"Modo da janela", "Window mode"},
-     {"Tela cheia ocupa a tela inteira; F11 alterna durante o jogo.", "Fullscreen fills the screen; F11 toggles it while playing."}, nullptr},
+    {"FULLSCREEN", "display", "0", 0, {"0", "1"}, {"Windowed", "Fullscreen"}, 0, 0, 0,
+     "Window mode",
+     "Fullscreen fills the screen; F11 toggles it while playing.", nullptr},
     {"WINDOW_SIZE", "display", "1920x1080", 0, {"1280x720", "1600x900", "1920x1080", "2560x1440"},
-     {{{"1280 × 720", "1280 × 720"}}, {{"1600 × 900", "1600 × 900"}}, {{"1920 × 1080", "1920 × 1080"}}, {{"2560 × 1440", "2560 × 1440"}}},
-     0, 0, 0, {"Tamanho da janela", "Window size"},
-     {"Tamanho da janela do jogo fora da tela cheia.", "Size of the game window when not fullscreen."}, "FULLSCREEN"},
+     {"1280 × 720", "1600 × 900", "1920 × 1080", "2560 × 1440"},
+     0, 0, 0, "Window size",
+     "Size of the game window when not fullscreen.", "FULLSCREEN"},
     {"VK_PRESENT", "display", "mailbox", 0, {"mailbox", "fifo", "immediate"},
-     {{{"Mailbox (recomendado)", "Mailbox (recommended)"}}, {{"VSync", "VSync"}}, {{"Imediato", "Immediate"}}}, 0, 0, 0,
-     {"Apresentação", "Presentation"},
-     {"Como os quadros prontos chegam à tela. Mailbox: sem rasgos e com pouca espera. VSync: espera a tela. Imediato: a menor espera, pode rasgar a imagem.",
-      "How finished frames reach the screen. Mailbox: no tearing and little waiting. VSync: waits for the screen. Immediate: the least waiting, may tear."}, nullptr},
+     {"Mailbox (recommended)", "VSync", "Immediate"}, 0, 0, 0,
+     "Presentation",
+     "How finished frames reach the screen. Mailbox: no tearing and little waiting. VSync: waits for the screen. Immediate: the least waiting, may tear.", nullptr},
     {"OUTPUT_RES", "display", "1920x1080", 0, {"1920x1080", "1280x720"},
-     {{{"1920 × 1080 (a do jogo)", "1920 × 1080 (the game's)"}}, {{"1280 × 720 (mais leve)", "1280 × 720 (lighter)"}}}, 0, 0, 0,
-     {"Resolução do jogo", "Game resolution"},
-     {"O tamanho em que a imagem e a interface são desenhadas. 1920 × 1080 é o do jogo; 1280 × 720 é o da tela do Steam Deck e poupa a placa de vídeo.",
-      "The size the picture and interface are drawn in. 1920 × 1080 is the game's own; 1280 × 720 matches the Steam Deck's screen and spares the GPU."}, nullptr},
+     {"1920 × 1080 (the game's)", "1280 × 720 (lighter)"}, 0, 0, 0,
+     "Game resolution",
+     "The size the picture and interface are drawn in. 1920 × 1080 is the game's own; 1280 × 720 matches the Steam Deck's screen and spares the GPU.", nullptr},
     {"OPERATION_MODE", "language", "docked", 0, {"docked", "handheld"},
-     {{{"TV (mais nítida)", "TV (sharper)"}}, {{"Portátil (mais leve)", "Handheld (lighter)"}}}, 0, 0, 0,
-     {"Resolução interna", "Internal resolution"},
-     {"TV: o jogo desenha na resolução do modo TV, mais nítida e mais pesada. Portátil: a do modo portátil, mais leve para a placa de vídeo e a bateria.",
-      "TV: the game draws at its docked resolution, sharper and heavier. Handheld: its handheld resolution, lighter on the GPU and the battery."}, nullptr},
+     {"TV (sharper)", "Handheld (lighter)"}, 0, 0, 0,
+     "Internal resolution",
+     "TV: the game draws at its docked resolution, sharper and heavier. Handheld: its handheld resolution, lighter on the GPU and the battery.", nullptr},
     {"RENDER_SCALE", "display", "game", 0, {"game", "50", "60", "67", "85", "100"},
-     {{{"Do jogo (75 %)", "Game (75 %)"}}, {{"50 %", "50 %"}}, {{"60 %", "60 %"}}, {{"67 %", "67 %"}}, {{"85 %", "85 %"}}, {{"100 %", "100 %"}}},
-     0, 0, 0, {"Escala 3D", "3D render scale"},
-     {"Tamanho da cena 3D em relação à resolução do jogo; o FSR do jogo a amplia até esse tamanho. Mais alto: mais nítido e mais pesado.",
-      "Size of the 3D scene relative to the game resolution; the game's FSR scales it up. Higher: sharper and heavier."}, nullptr},
-    {"ASPECT", "display", "fit", 0, {"fit", "stretch"}, {{{"Barras pretas", "Black bars"}}, {{"Esticar", "Stretch"}}}, 0, 0, 0,
-     {"Formato da imagem", "Picture shape"},
-     {"Numa tela de outro formato (uma imagem 16:9 numa tela 21:9): manter o formato com barras pretas ou esticar.",
-      "On a screen of another shape (a 16:9 picture on a 21:9 screen): keep the shape with black bars, or stretch it."}, nullptr},
+     {"Game (75 %)", "50 %", "60 %", "67 %", "85 %", "100 %"},
+     0, 0, 0, "3D render scale",
+     "Size of the 3D scene relative to the game resolution; the game's FSR scales it up. Higher: sharper and heavier.", nullptr},
+    {"ASPECT", "display", "fit", 0, {"fit", "stretch"}, {"Black bars", "Stretch"}, 0, 0, 0,
+     "Picture shape",
+     "On a screen of another shape (a 16:9 picture on a 21:9 screen): keep the shape with black bars, or stretch it.", nullptr},
     {"ANISO", "display", "game", 0, {"game", "2", "4", "8", "16"},
-     {{{"Do jogo", "Game"}}, {{"2x", "2x"}}, {{"4x", "4x"}}, {{"8x", "8x"}}, {{"16x", "16x"}}}, 0, 0, 0,
-     {"Filtragem de texturas", "Texture filtering"},
-     {"Chão, estradas e paredes vistos de lado continuam nítidos na distância. Do jogo: o nível que o jogo pede, como no Switch.",
-      "Ground, roads and walls seen at a shallow angle stay sharp into the distance. Game: the level the game asks for, as on the Switch."}, nullptr},
+     {"Game", "2x", "4x", "8x", "16x"}, 0, 0, 0,
+     "Texture filtering",
+     "Ground, roads and walls seen at a shallow angle stay sharp into the distance. Game: the level the game asks for, as on the Switch.", nullptr},
     {"SHADOW_RES", "display", "game", 0, {"game", "1024", "1536", "2048"},
-     {{{"Do jogo (varia)", "Game (changes)"}}, {{"1024", "1024"}}, {{"1536", "1536"}}, {{"2048", "2048"}}}, 0, 0, 0,
-     {"Sombras", "Shadows"},
-     {"Tamanho do mapa de sombras do sol. Um tamanho fixo deixa as sombras mais firmes e nítidas; acima de 1024 custa mais da placa de vídeo.",
-      "Size of the sun's shadow map. A fixed size keeps shadows steadier and sharper; above 1024 it costs more GPU time."}, nullptr},
+     {"Game (changes)", "1024", "1536", "2048"}, 0, 0, 0,
+     "Shadows",
+     "Size of the sun's shadow map. A fixed size keeps shadows steadier and sharper; above 1024 it costs more GPU time.", nullptr},
     {"PERF_OVERLAY", "display", "off", 0, {"off", "fps", "full"},
-     {{{"Desligado", "Off"}}, {{"FPS", "FPS"}}, {{"Completo", "Full"}}}, 0, 0, 0,
-     {"Indicador de desempenho", "Performance overlay"},
-     {"Taxa de quadros no canto da tela. Completo mostra também tempos de quadro, CPU, GPU e memória. F10 alterna.",
-      "Frame rate in the corner of the screen. Full adds frame times, CPU, GPU and memory. F10 cycles it."}, nullptr},
+     {"Off", "FPS", "Full"}, 0, 0, 0,
+     "Performance overlay",
+     "Frame rate in the corner of the screen. Full adds frame times, CPU, GPU and memory. F10 cycles it.", nullptr},
 };
 static const std::vector<Opt> CTL = {
     {"PAD_LAYOUT", "input", "auto", 0, {"auto", "nintendo", "xbox"},
-     {{{"Automático", "Automatic"}}, {{"Nintendo (A à direita)", "Nintendo (A right)"}}, {{"Xbox (A embaixo)", "Xbox (A bottom)"}}},
-     0, 0, 0, {"Layout dos botões", "Button layout"},
-     {"Qual botão é o A. Nintendo: o da direita, como no Switch. Xbox: o de baixo. Automático escolhe pelo controle.",
-      "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one. Automatic picks by controller."}, nullptr},
-    {"RUMBLE_STRENGTH", "input", "130", 1, {}, {}, 0, 300, 10, {"Vibração", "Vibration"},
-     {"Quão forte o controle vibra. 0 desliga.", "How strong the controller vibrates. 0 turns it off."}, nullptr},
-    {"STICK_DEADZONE", "input", "8", 1, {}, {}, 0, 50, 1, {"Zona morta dos analógicos", "Stick dead zone"},
-     {"Quanto o analógico precisa se mover antes de o jogo perceber. Aumente se o personagem ou a câmera andam sozinhos.",
-      "How far a stick must move before the game notices. Raise it if the character or the camera drifts."}, nullptr},
-    {"INVERT_RX", "input", "0", 2, {}, {}, 0, 0, 0, {"Inverter câmera (horizontal)", "Invert camera (horizontal)"},
-     {"Espelha o eixo horizontal do analógico direito.", "Mirrors the right stick's horizontal axis."}, nullptr},
-    {"INVERT_RY", "input", "0", 2, {}, {}, 0, 0, 0, {"Inverter câmera (vertical)", "Invert camera (vertical)"},
-     {"Espelha o eixo vertical do analógico direito.", "Mirrors the right stick's vertical axis."}, nullptr},
-    {"VOLUME", "audio", "100", 1, {}, {}, 0, 100, 5, {"Volume", "Volume"},
-     {"Volume geral do jogo.", "Master volume of the game."}, nullptr},
-    {"MUTE_BACKGROUND", "audio", "0", 2, {}, {}, 0, 0, 0, {"Mudo em segundo plano", "Mute in the background"},
-     {"Silencia o jogo enquanto outra janela estiver ativa.", "Silences the game while another window is active."}, nullptr},
-    {"MENU_LANG", "language", "", 0, {"", "pt-BR", "en"},
-     {{{"Automático", "Automatic"}}, {{"Português (Brasil)", "Português (Brasil)"}}, {{"English", "English"}}}, 0, 0, 0,
-     {"Idioma do menu do jogo", "In-game menu language"},
-     {"Idioma do menu do port (F1) e do indicador de desempenho. O idioma do jogo em si segue o do sistema.",
-      "Language of the port's menu (F1) and the performance overlay. The game's own language follows the system."}, nullptr},
+     {"Automatic", "Nintendo (A right)", "Xbox (A bottom)"},
+     0, 0, 0, "Button layout",
+     "Which button is A. Nintendo: the right one, as on a Switch. Xbox: the bottom one. Automatic picks by controller.", nullptr},
+    {"RUMBLE_STRENGTH", "input", "130", 1, {}, {}, 0, 300, 10, "Vibration",
+     "How strong the controller vibrates. 0 turns it off.", nullptr},
+    {"STICK_DEADZONE", "input", "8", 1, {}, {}, 0, 50, 1, "Stick dead zone",
+     "How far a stick must move before the game notices. Raise it if the character or the camera drifts.", nullptr},
+    {"INVERT_RX", "input", "0", 2, {}, {}, 0, 0, 0, "Invert camera (horizontal)",
+     "Mirrors the right stick's horizontal axis.", nullptr},
+    {"INVERT_RY", "input", "0", 2, {}, {}, 0, 0, 0, "Invert camera (vertical)",
+     "Mirrors the right stick's vertical axis.", nullptr},
+    {"VOLUME", "audio", "100", 1, {}, {}, 0, 100, 5, "Volume",
+     "Master volume of the game.", nullptr},
+    {"MUTE_BACKGROUND", "audio", "0", 2, {}, {}, 0, 0, 0, "Mute in the background",
+     "Silences the game while another window is active.", nullptr},
 };
 
 static GameIni g_ini;
@@ -567,7 +564,7 @@ static void finish_run() {   // the child ended
 // make_build.py's arguments (UTF-8).
 static std::vector<std::string> build_args(bool check_only) {
     std::vector<std::string> a = {"-u", u8(g_root / "tools" / "make_build.py"), "--game-dir", S.game_dir,
-                                  "--lang", g_lang ? "en" : "pt"};
+                                  "--lang", "en"};
     if (S.deck) a.push_back("--deck");
     if (S.windows && IS_WINDOWS) a.push_back("--windows");
     if (S.deck && S.with_romfs) a.push_back("--with-romfs");
@@ -996,16 +993,14 @@ static void tooltip(const char *text) {
     ImGui::EndTooltip();
 }
 
-// Small two-state toggle for the language, top right.
-static bool lang_chip(const char *label, bool on) {
-    ImGui::PushStyleColor(ImGuiCol_Button, on ? ImVec4(C_CYAN_DIM.x, C_CYAN_DIM.y, C_CYAN_DIM.z, 0.9f) : ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Text, on ? C_TEXT : C_MUTED);
-    bool r = ImGui::Button(label, ImVec2(40 * g_scale, 0));
-    ImGui::PopStyleColor(2);
-    return r;
+// The first sentence of a description (up to ". " or the end), shown under an option's label.
+static std::string first_sentence(const char *d) {
+    const char *e = strstr(d, ". ");
+    return e ? std::string(d, (size_t)(e - d + 1)) : std::string(d);
 }
 
-// One settings row: the label on the left, the control on the right, the description as a tooltip on both.
+// One settings row: the label on the left with the first sentence of its description under it, the control on the
+// right; the whole description as a tooltip on both.
 static void opt_row(const Opt &o, std::string &v, const std::vector<std::string> &all, const std::vector<Opt> &opts) {
     bool disabled = false;
     if (o.needs_off)
@@ -1014,8 +1009,14 @@ static void opt_row(const Opt &o, std::string &v, const std::vector<std::string>
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(disabled ? C_MUTED : C_TEXT, "%s", o.label[g_lang]);
-    tooltip(o.desc[g_lang]);
+    ImGui::TextColored(disabled ? C_MUTED : C_TEXT, "%s", o.label);
+    tooltip(o.desc);
+    ImGui::PushFont(F_SMALL);
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextColored(C_MUTED, "%s", first_sentence(o.desc).c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    tooltip(o.desc);
     ImGui::TableSetColumnIndex(1);
     ImGui::SetNextItemWidth(-1);
     ImGui::BeginDisabled(disabled);
@@ -1024,10 +1025,10 @@ static void opt_row(const Opt &o, std::string &v, const std::vector<std::string>
         int cur = -1;
         for (size_t i = 0; i < o.vals.size(); i++)
             if (v == o.vals[i]) cur = (int)i;
-        std::string shown = cur >= 0 ? o.names[(size_t)cur][g_lang] : v;   // a value set elsewhere stays visible
+        std::string shown = cur >= 0 ? o.names[(size_t)cur] : v;   // a value set elsewhere stays visible
         if (ImGui::BeginCombo("##c", shown.c_str())) {
             for (size_t i = 0; i < o.vals.size(); i++)
-                if (ImGui::Selectable(o.names[i][g_lang], (int)i == cur)) v = o.vals[i];
+                if (ImGui::Selectable(o.names[i], (int)i == cur)) v = o.vals[i];
             ImGui::EndCombo();
         }
     } else if (o.kind == 1) {
@@ -1038,16 +1039,16 @@ static void opt_row(const Opt &o, std::string &v, const std::vector<std::string>
         }
     } else {
         bool on = v == "1";
-        if (ImGui::Checkbox(on ? (g_lang ? "On" : "Ligado") : (g_lang ? "Off" : "Desligado"), &on)) v = on ? "1" : "0";
+        if (ImGui::Checkbox(on ? "On" : "Off", &on)) v = on ? "1" : "0";
     }
     ImGui::PopID();
     ImGui::EndDisabled();
-    tooltip(o.desc[g_lang]);
+    tooltip(o.desc);
 }
 
 static void opt_table(const char *id, const std::vector<Opt> &opts, std::vector<std::string> &vals) {
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(6 * g_scale, 4 * g_scale));
-    if (ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(6 * g_scale, 7 * g_scale));
+    if (ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
         ImGui::TableSetupColumn("l", ImGuiTableColumnFlags_WidthStretch, 0.46f);
         ImGui::TableSetupColumn("v", ImGuiTableColumnFlags_WidthStretch, 0.54f);
         for (size_t i = 0; i < opts.size(); i++) opt_row(opts[i], vals[i], vals, opts);
@@ -1105,16 +1106,6 @@ static fs::path exe_dir() {
 #endif
 }
 
-// Portuguese when the system's first language is Portuguese, else English.
-static int system_lang() {
-    int n = 0;
-    SDL_Locale **loc = SDL_GetPreferredLocales(&n);
-    int r = 1;
-    if (loc && n > 0 && loc[0] && loc[0]->language && !strncmp(loc[0]->language, "pt", 2)) r = 0;
-    SDL_free(loc);
-    return r;
-}
-
 // ---- the two screens
 enum Screen { SCR_BUILD, SCR_PLAY };
 static Screen g_screen;
@@ -1124,16 +1115,11 @@ static double g_status_t;
 
 static void set_status(const char *msg, const ImVec4 &c) { g_status = msg, g_status_col = c, g_status_t = now_s(); }
 
-// Header: a kicker line, the title with a soft glow, a line with diamonds; guide and language at the top right.
+// Header: a kicker line, the title with a soft glow, a line with diamonds; the README button at the top right.
 static void draw_header(ImGuiIO &io, float pad) {
     float s = g_scale;
-    ImGui::SetCursorPos(ImVec2(io.DisplaySize.x - pad - 40 * s * 2 - 90 * s - 20 * s, pad * 0.55f));
-    const fs::path guide = g_root / "README.md";
-    if (ImGui::Button(lab(T_GUIDE, "guide").c_str(), ImVec2(90 * s, 0))) open_path(guide);
-    ImGui::SameLine(0, 20 * s);
-    if (lang_chip("PT", g_lang == 0) && g_lang != 0) g_lang = 0, settings_save();
-    ImGui::SameLine(0, 4);
-    if (lang_chip("EN", g_lang == 1) && g_lang != 1) g_lang = 1, settings_save();
+    ImGui::SetCursorPos(ImVec2(io.DisplaySize.x - pad - 100 * s, pad * 0.55f));
+    if (ImGui::Button(lab(T_GUIDE, "guide").c_str(), ImVec2(100 * s, 0))) open_path(g_root / "README.md");
 
     ImGui::SetCursorPos(ImVec2(pad, pad * 0.7f));
     ImGui::PushFont(F_SMALL);
@@ -1203,8 +1189,17 @@ static void screen_play(ImGuiIO &io, float pad, float t, bool &quit) {
     float s = g_scale;
     float total_w = io.DisplaySize.x - 2 * pad, gap = 16 * s;
     float bar_h = 44 * s + 26 * s;
-    float body_h = io.DisplaySize.y - ImGui::GetCursorPosY() - bar_h - 12 * s;
     float half = (total_w - gap) * 0.5f;
+
+    ImGui::SetCursorPosX(pad);
+    ImGui::PushFont(F_HEAD);
+    ImGui::TextColored(C_OK, "%s", tr(T_READY));
+    ImGui::PopFont();
+    ImGui::SameLine(0, 14 * s);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(C_MUTED, tr(T_READY_FOR), package_version().c_str());
+    ImGui::Dummy(ImVec2(0, 4 * s));
+    float body_h = io.DisplaySize.y - ImGui::GetCursorPosY() - bar_h - 12 * s;
 
     ImGui::SetCursorPosX(pad);
     panel_begin("gfx", tr(T_GRAPHICS), ImVec2(half, body_h));
@@ -1218,6 +1213,11 @@ static void screen_play(ImGuiIO &io, float pad, float t, bool &quit) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(C_TEXT, "%s", tr(T_FRAMERATE));
         tooltip(tr(T_FRAMERATE_DESC));
+        ImGui::PushFont(F_SMALL);
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextColored(C_MUTED, "%s", first_sentence(tr(T_FRAMERATE_DESC)).c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
         ImGui::TableSetColumnIndex(1);
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(C_ORANGE, "%s", tr(T_FRAMERATE_VAL));
@@ -1244,7 +1244,7 @@ static void screen_play(ImGuiIO &io, float pad, float t, bool &quit) {
     ImGui::PopFont();
     panel_end();
 
-    // ---- bottom bar: Report, game folder, forge again, save, close ... PLAY
+    // ---- bottom bar: Report, game folder, rebuild, save, close ... PLAY
     ImGui::SetCursorPos(ImVec2(pad, io.DisplaySize.y - bar_h));
     ImGui::BeginDisabled(g_job_state == 1);
     if (bar_button(T_REPORT, "report")) start_report();
@@ -1276,177 +1276,285 @@ static void screen_play(ImGuiIO &io, float pad, float t, bool &quit) {
     ImGui::PopFont();
 }
 
+// ---- the setup wizard: 1 game files, 2 platforms, 3 build. A run in progress (or finished) keeps it on step 3.
+static int g_step;   // 0, 1, 2
+
+// The step bar: three numbered circles joined by a line, the current one lit; a done step can be clicked to go back.
+static void step_bar(float w, bool locked) {
+    float s = g_scale;
+    const Str names[3] = {T_STEP1, T_STEP2, T_STEP3};
+    ImDrawList *dl = ImGui::GetWindowDrawList();
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float seg = w / 3, r = 13 * s, cy = p.y + r + 2 * s;
+    for (int i = 0; i < 3; i++) {
+        float cx = p.x + seg * i + r + 2 * s;
+        if (i < 2) dl->AddLine(ImVec2(cx + r + 6 * s, cy), ImVec2(p.x + seg * (i + 1) - 6 * s, cy),
+                               col(i < g_step ? C_CYAN : C_MUTED, i < g_step ? 0.8f : 0.3f), 2);
+        bool cur = i == g_step, done = i < g_step;
+        if (cur) dl->AddCircleFilled(ImVec2(cx, cy), r, col(C_CYAN, 0.9f));
+        else dl->AddCircle(ImVec2(cx, cy), r, col(done ? C_CYAN : C_MUTED, done ? 0.9f : 0.5f), 0, 2);
+        char n[2] = {(char)('1' + i), 0};
+        ImVec2 ts = ImGui::CalcTextSize(n);
+        dl->AddText(ImVec2(cx - ts.x * 0.5f, cy - ts.y * 0.5f), col(cur ? C_BG0 : done ? C_CYAN : C_MUTED), n);
+        dl->AddText(ImVec2(cx + r + 8 * s, cy - ts.y * 0.5f), col(cur ? C_TEXT : C_MUTED), tr(names[i]));
+        ImGui::SetCursorScreenPos(ImVec2(cx - r, cy - r));
+        ImGui::PushID(i);
+        if (ImGui::InvisibleButton("st", ImVec2(r * 2 + 8 * s + ImGui::CalcTextSize(tr(names[i])).x, r * 2)) && done && !locked)
+            g_step = i;
+        ImGui::PopID();
+    }
+    ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + 2 * r + 14 * s));
+}
+
+// A platform choice: a checkbox with a muted line of explanation under it.
+static void platform_choice(Str label, const char *id, bool *v, Str desc) {
+    ImGui::PushFont(F_HEAD);
+    ImGui::Checkbox(lab(label, id).c_str(), v);
+    ImGui::PopFont();
+    ImGui::Indent(34 * g_scale);
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextColored(C_MUTED, "%s", tr(desc));
+    ImGui::PopTextWrapPos();
+    ImGui::Unindent(34 * g_scale);
+    ImGui::Dummy(ImVec2(0, 8 * g_scale));
+}
+
 static void screen_build(ImGuiIO &io, float pad, float t, DumpScan &scan, char *path_buf, size_t path_n, char *host_buf,
                          size_t host_n, char *work_buf, size_t work_n, char *distro_buf, size_t distro_n,
                          bool &autoscroll, bool &quit, SDL_Window *win) {
     float s = g_scale;
     bool running = g_running.load() != 0;
-    float total_w = io.DisplaySize.x - 2 * pad, gap = 16 * s;
+    float total_w = io.DisplaySize.x - 2 * pad;
     float bar_h = 44 * s + 26 * s;
-    float left_w = total_w * 0.42f, right_w = total_w - left_w - gap;
-    float body_h = io.DisplaySize.y - ImGui::GetCursorPosY() - bar_h - 12 * s;
-
-    bool update = game_ready() && forged_version() != package_version();
-    if (update) {
-        ImGui::SetCursorPosX(pad);
-        ImGui::TextColored(C_ORANGE, "%s", tr(T_UPDATE_NOTE));
-        body_h -= ImGui::GetTextLineHeightWithSpacing();
-    }
-    float files_h = 236 * s;
-    ImGui::SetCursorPosX(pad);
-    ImGui::BeginGroup();
-    // ---- your copy
-    panel_begin("files", tr(T_FILES), ImVec2(left_w, files_h));
-    ImGui::TextColored(C_MUTED, "%s", tr(T_FILES_HINT));
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110 * s);
-    ImGui::BeginDisabled(running);
-    ImGui::InputText("##dir", path_buf, path_n);
-    ImGui::SameLine();
-    if (ImGui::Button(lab(T_BROWSE, "browse").c_str(), ImVec2(100 * s, 0)))
-        SDL_ShowOpenFolderDialog(on_folder, nullptr, win, S.game_dir.empty() ? nullptr : S.game_dir.c_str(), false);
-    ImGui::EndDisabled();
-    ImGui::Dummy(ImVec2(0, 2));
-    if (!scan.exists) {
-        status_dot(false, tr(T_NO_FOLDER));
-    } else {
-        // The names are only a hint: with two or more NSPs whose names carry no title id, the forge's check step
-        // identifies the base and the update by their contents (tools/extract.py inventory).
-        bool unnamed = scan.nsp >= 2;
-        status_dot(scan.base || unnamed, tr(T_BASE), scan.base ? "01002B00111A2000" : tr(unnamed ? T_UNNAMED : T_MISSING));
-        status_dot(scan.update || unnamed, tr(T_UPDATE),
-                   scan.update ? "01002B00111A2800" : tr(unnamed ? T_UNNAMED : T_MISSING));
-        char d[48];
-        snprintf(d, sizeof d, tr(T_DLC_N), scan.dlc);
-        status_dot(scan.dlc > 0, tr(T_DLC), d);
-        status_dot(scan.keys, "prod.keys", scan.keys ? tr(T_KEYS_OK) : tr(T_MISSING));
-    }
-    panel_end();
-    ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
-    // ---- where you will play
-    panel_begin("targets", tr(T_TARGET), ImVec2(left_w, body_h - files_h - gap + ImGui::GetStyle().ItemSpacing.y));
-    ImGui::BeginDisabled(running);
-    ImGui::Checkbox(lab(IS_WINDOWS ? T_DECK : T_DECK_LINUX, "deck").c_str(), &S.deck);
-    if (S.deck) {
-        ImGui::Indent(26 * s);
-        ImGui::Checkbox(lab(T_ROMFS, "romfs").c_str(), &S.with_romfs);
-        ImGui::Checkbox(lab(T_SEND, "send").c_str(), &S.send);
-        if (S.send) {
-            ImGui::SetNextItemWidth(220 * s);
-            ImGui::InputText(lab(T_HOST, "host").c_str(), host_buf, host_n);
-        }
-        ImGui::Unindent(26 * s);
-    }
-    if (IS_WINDOWS) {
-        ImGui::Checkbox(lab(T_WINDOWS, "windows").c_str(), &S.windows);
-        ImGui::Dummy(ImVec2(0, 2 * s));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
-        if (ImGui::CollapsingHeader(lab(T_ADVANCED, "adv").c_str())) {
-            ImGui::SetNextItemWidth(190 * s);
-            ImGui::InputTextWithHint(lab(T_DISTRO, "distro").c_str(), tr(T_DISTRO_HINT), distro_buf, distro_n);
-            ImGui::SetNextItemWidth(190 * s);
-            ImGui::InputTextWithHint(lab(T_WORK, "work").c_str(), tr(T_WORK_HINT), work_buf, work_n);
-        }
-        ImGui::PopStyleColor();
-    }
-    ImGui::EndDisabled();
-    panel_end();
-    ImGui::EndGroup();
-
-    // ---- progress and log
-    ImGui::SameLine(0, gap);
-    panel_begin("progress", tr(T_PROGRESS), ImVec2(right_w, body_h));
+    bool files_ok = ((scan.base && scan.update) || scan.nsp >= 2) && scan.keys;
+    bool target_ok = S.deck || S.windows;
+    bool started;
     {
         std::lock_guard<std::mutex> g(g_lock);
-        int done = 0;
-        for (auto &st : g_steps) done += st.state == "ok" || st.state == "skip";
-        float frac = g_steps.empty() ? 0.0f : (float)done / g_steps.size();
-        ImDrawList *dl = ImGui::GetWindowDrawList();
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        float w = ImGui::GetContentRegionAvail().x, h = 8 * s;
-        dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), col(C_CYAN, 0.10f), 3);
-        if (frac > 0) dl->AddRectFilledMultiColor(p, ImVec2(p.x + w * frac, p.y + h), col(C_CYAN_DIM), col(C_CYAN),
-                                                  col(C_CYAN), col(C_CYAN_DIM));
-        if (g_running) {
-            float x = p.x + fmodf(t * 160 * s, w);
-            dl->AddRectFilled(ImVec2(x, p.y), ImVec2(fminf(x + 40 * s, p.x + w), p.y + h), col(C_ORANGE, 0.5f), 3);
+        started = !g_steps.empty();
+    }
+    if (running || started) g_step = 2;   // a run shows its progress until the next one
+
+    bool update = game_ready() && forged_version() != package_version();
+    ImGui::SetCursorPosX(pad);
+    if (update) ImGui::TextColored(C_ORANGE, "%s", tr(T_UPDATE_NOTE));
+    ImGui::SetCursorPosX(pad + 6 * s);
+    step_bar(total_w - 12 * s, running);
+    float body_h = io.DisplaySize.y - ImGui::GetCursorPosY() - bar_h - 12 * s;
+    float nav_h = 44 * s;
+
+    ImGui::SetCursorPosX(pad);
+    if (g_step == 0) {
+        // ---- step 1: the folder and what was found in it
+        panel_begin("s1", tr(T_S1_TITLE), ImVec2(total_w, body_h));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextColored(C_TEXT, "%s", tr(T_S1_HINT));
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 120 * s);
+        ImGui::InputText("##dir", path_buf, path_n);
+        ImGui::SameLine();
+        if (ImGui::Button(lab(T_BROWSE, "browse").c_str(), ImVec2(110 * s, 0)))
+            SDL_ShowOpenFolderDialog(on_folder, nullptr, win, S.game_dir.empty() ? nullptr : S.game_dir.c_str(), false);
+        ImGui::Dummy(ImVec2(0, 10 * s));
+        if (!scan.exists) {
+            status_dot(false, tr(T_NO_FOLDER));
+        } else {
+            // The names are only a hint: with two or more NSPs whose names carry no title id, the build's check step
+            // identifies the base and the update by their contents (tools/extract.py inventory).
+            bool unnamed = scan.nsp >= 2;
+            status_dot(scan.base || unnamed, tr(T_BASE), scan.base ? "1.0.0" : tr(unnamed ? T_UNNAMED : T_MISSING));
+            ImGui::Dummy(ImVec2(0, 2 * s));
+            status_dot(scan.update || unnamed, tr(T_UPDATE), scan.update ? "" : tr(unnamed ? T_UNNAMED : T_MISSING));
+            ImGui::Dummy(ImVec2(0, 2 * s));
+            char d[64];
+            snprintf(d, sizeof d, tr(T_DLC_N), scan.dlc);
+            std::string dl = std::string(d) + " (" + tr(T_OPTIONAL) + ")";
+            status_dot(scan.dlc > 0, tr(T_DLC), dl.c_str());
+            ImGui::Dummy(ImVec2(0, 2 * s));
+            status_dot(scan.keys, tr(T_KEYS), scan.keys ? tr(T_KEYS_OK) : tr(T_MISSING));
         }
-        ImGui::Dummy(ImVec2(w, h + 6));
-        if (g_steps.empty()) {   // the how-to, before the first run
-            ImGui::TextColored(C_TEXT, "%s", tr(T_HOW1));
-            ImGui::TextColored(C_TEXT, "%s", tr(IS_WINDOWS ? T_HOW2 : T_HOW2_LINUX));
-            ImGui::TextColored(C_TEXT, "%s", tr(T_HOW3));
-            ImGui::Dummy(ImVec2(0, 4));
-            ImGui::TextColored(C_MUTED, "%s", tr(T_HOW4));
-        }
-        for (auto &st : g_steps) {
-            step_marker(st.state, t);
-            ImGui::SameLine();
-            ImGui::TextColored(st.state == "pending" ? C_MUTED : C_TEXT, "%s", st.title.c_str());
-            if (st.t0 > 0) {
-                double el = (st.t1 > 0 ? st.t1 : now_s()) - st.t0;
-                ImGui::SameLine();
-                if (st.state == "skip") ImGui::TextColored(C_MUTED, "%s", tr(T_DONE_SKIP));
-                else ImGui::TextColored(C_MUTED, "%dm%02ds", (int)el / 60, (int)el % 60);
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - nav_h - 30 * s);
+        ImGui::PushFont(F_SMALL);
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - 150 * s);
+        ImGui::TextColored(files_ok ? C_MUTED : C_ORANGE, "%s", tr(files_ok ? T_FOOTER : T_NEED_FILES));
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - 18 * s - 140 * s, ImGui::GetWindowHeight() - nav_h - 14 * s));
+        ImGui::BeginDisabled(!files_ok);
+        if (ImGui::Button(lab(T_NEXT, "next1").c_str(), ImVec2(140 * s, nav_h))) g_step = 1;
+        ImGui::EndDisabled();
+        panel_end();
+    } else if (g_step == 1) {
+        // ---- step 2: where the game will run
+        panel_begin("s2", tr(T_S2_TITLE), ImVec2(total_w, body_h));
+        ImGui::TextColored(C_MUTED, "%s", tr(T_S2_HINT));
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        if (IS_WINDOWS) platform_choice(T_WINDOWS, "windows", &S.windows, T_WIN_DESC);
+        platform_choice(IS_WINDOWS ? T_DECK : T_DECK_LINUX, "deck", &S.deck, IS_WINDOWS ? T_DECK_DESC : T_DECK_DESC_LINUX);
+        if (S.deck) {
+            ImGui::Indent(34 * s);
+            ImGui::Checkbox(lab(T_ROMFS, "romfs").c_str(), &S.with_romfs);
+            ImGui::Checkbox(lab(T_SEND, "send").c_str(), &S.send);
+            if (S.send) {
+                ImGui::SetNextItemWidth(260 * s);
+                ImGui::InputText(lab(T_HOST, "host").c_str(), host_buf, host_n);
             }
-            if (!st.note.empty()) {
-                ImGui::PushFont(F_SMALL);
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 34 * s);
+            ImGui::Unindent(34 * s);
+            ImGui::Dummy(ImVec2(0, 6 * s));
+        }
+        if (IS_WINDOWS) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
+            if (ImGui::CollapsingHeader(lab(T_ADVANCED, "adv").c_str())) {
+                ImGui::SetNextItemWidth(260 * s);
+                ImGui::InputTextWithHint(lab(T_DISTRO, "distro").c_str(), tr(T_DISTRO_HINT), distro_buf, distro_n);
+                ImGui::SetNextItemWidth(260 * s);
+                ImGui::InputTextWithHint(lab(T_WORK, "work").c_str(), tr(T_WORK_HINT), work_buf, work_n);
+            }
+            ImGui::PopStyleColor();
+        }
+        if (!target_ok) {
+            ImGui::SetCursorPosY(ImGui::GetWindowHeight() - nav_h - 30 * s);
+            ImGui::TextColored(C_ORANGE, "%s", tr(T_NEED_TARGET));
+        }
+        ImGui::SetCursorPos(ImVec2(18 * s, ImGui::GetWindowHeight() - nav_h - 14 * s));
+        if (ImGui::Button(lab(T_BACK, "back2").c_str(), ImVec2(140 * s, nav_h))) g_step = 0;
+        ImGui::SameLine(ImGui::GetWindowWidth() - 18 * s - 140 * s);
+        ImGui::BeginDisabled(!target_ok);
+        if (ImGui::Button(lab(T_NEXT, "next2").c_str(), ImVec2(140 * s, nav_h))) settings_save(), g_step = 2;
+        ImGui::EndDisabled();
+        panel_end();
+    } else {
+        // ---- step 3: what will be built, the button, progress, and the log behind "Technical details"
+        panel_begin("s3", tr(T_S3_TITLE), ImVec2(total_w, body_h));
+        std::string targets;
+        if (IS_WINDOWS && S.windows) targets = tr(T_WINDOWS);
+        if (S.deck) targets += (targets.empty() ? "" : "  +  ") + std::string(tr(IS_WINDOWS ? T_DECK : T_DECK_LINUX));
+        ImGui::TextColored(C_MUTED, "%s", tr(T_S3_FOR));
+        ImGui::SameLine(0, 0);
+        ImGui::TextColored(C_TEXT, "%s", targets.c_str());
+        ImGui::PushFont(F_SMALL);
+        ImGui::TextColored(C_MUTED, "%s", tr(T_HOW4));
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        {
+            std::lock_guard<std::mutex> g(g_lock);
+            int done = 0;
+            for (auto &st : g_steps) done += st.state == "ok" || st.state == "skip";
+            float frac = g_steps.empty() ? 0.0f : (float)done / g_steps.size();
+            ImDrawList *dl = ImGui::GetWindowDrawList();
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            float w = ImGui::GetContentRegionAvail().x, h = 8 * s;
+            dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), col(C_CYAN, 0.10f), 3);
+            if (frac > 0) dl->AddRectFilledMultiColor(p, ImVec2(p.x + w * frac, p.y + h), col(C_CYAN_DIM), col(C_CYAN),
+                                                      col(C_CYAN), col(C_CYAN_DIM));
+            if (g_running) {
+                float x = p.x + fmodf(t * 160 * s, w);
+                dl->AddRectFilled(ImVec2(x, p.y), ImVec2(fminf(x + 40 * s, p.x + w), p.y + h), col(C_ORANGE, 0.5f), 3);
+            }
+            ImGui::Dummy(ImVec2(w, h + 8 * s));
+            for (auto &st : g_steps) {
+                step_marker(st.state, t);
+                ImGui::SameLine();
+                ImGui::TextColored(st.state == "pending" ? C_MUTED : C_TEXT, "%s", st.title.c_str());
+                if (st.t0 > 0) {
+                    double el = (st.t1 > 0 ? st.t1 : now_s()) - st.t0;
+                    ImGui::SameLine();
+                    if (st.state == "skip") ImGui::TextColored(C_MUTED, "%s", tr(T_DONE_SKIP));
+                    else ImGui::TextColored(C_MUTED, "%dm%02ds", (int)el / 60, (int)el % 60);
+                }
+                if (!st.note.empty()) {
+                    ImGui::PushFont(F_SMALL);
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 34 * s);
+                    ImGui::PushTextWrapPos(0);
+                    ImGui::TextColored(C_RED, "%s", st.note.c_str());
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopFont();
+                }
+            }
+            if (g_done == "ok") {
+                Str msg = g_check_only ? T_CHECKED : (S.deck && !(IS_WINDOWS && S.windows) && IS_WINDOWS) ? T_FORGED_DECK : T_FORGED;
+                ImGui::TextColored(C_OK, "%s", tr(msg));
+            } else if (g_done == "fail") {
+                ImGui::TextColored(C_RED, "%s", tr(T_FAILED));
+            } else if (g_done == "cancel") {
+                ImGui::TextColored(C_ORANGE, "%s", tr(T_CANCELED));
+            }
+#ifdef _WIN32
+            // WSL missing: offer the elevated install
+            if (g_need_wsl || g_wsl_inst) {
+                ImGui::Dummy(ImVec2(0, 4));
                 ImGui::PushTextWrapPos(0);
-                ImGui::TextColored(C_RED, "%s", st.note.c_str());
+                if (g_wsl_inst == 2) {
+                    ImGui::TextColored(C_OK, "%s", tr(T_WSL_DONE));
+                } else {
+                    ImGui::TextColored(C_ORANGE, "%s", tr(T_NEED_WSL));
+                    ImGui::TextColored(C_TEXT, "%s", tr(T_NEED_WSL2));
+                    if (g_wsl_inst == 1) {
+                        ImGui::TextColored(C_MUTED, "%s", tr(T_WSL_RUNNING));
+                    } else {
+                        if (g_wsl_inst == 3) ImGui::TextColored(C_RED, tr(T_WSL_FAIL), g_wsl_code.load());
+                        if (ImGui::Button(lab(T_INSTALL_WSL, "wslinst").c_str())) install_wsl();
+                    }
+                }
                 ImGui::PopTextWrapPos();
+            }
+#endif
+            // the raw log, folded away unless asked for (or opened by itself when a run fails)
+            ImGui::Dummy(ImVec2(0, 4 * s));
+            float log_h = ImGui::GetWindowHeight() - ImGui::GetCursorPosY() - nav_h - 34 * s;
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));
+            if (g_done == "fail") ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+            bool open = ImGui::CollapsingHeader(lab(T_DETAILS, "details").c_str());
+            ImGui::PopStyleColor();
+            if (open && log_h > 60 * s) {
+                ImGui::PushFont(F_SMALL);
+                ImGui::Checkbox(lab(T_FOLLOW, "follow").c_str(), &autoscroll);
+                ImGui::BeginChild("log", ImVec2(0, log_h - ImGui::GetFrameHeightWithSpacing()), ImGuiChildFlags_Borders,
+                                  ImGuiWindowFlags_HorizontalScrollbar);
+                ImGuiListClipper clip;
+                clip.Begin((int)g_log.size());
+                while (clip.Step())
+                    for (int i = clip.DisplayStart; i < clip.DisplayEnd; i++) {
+                        const std::string &l = g_log[i];
+                        bool err = l.rfind("ERROR", 0) == 0 || l.find("FAILED") != std::string::npos ||
+                                   l.find("error:") != std::string::npos;
+                        ImGui::TextColored(err ? C_RED : C_MUTED, "%s", l.c_str());
+                    }
+                if (autoscroll && g_running) ImGui::SetScrollHereY(1.0f);
+                ImGui::EndChild();
                 ImGui::PopFont();
             }
         }
-        if (g_done == "ok") {
-            Str msg = g_check_only ? T_CHECKED : (S.deck && !(IS_WINDOWS && S.windows) && IS_WINDOWS) ? T_FORGED_DECK : T_FORGED;
-            ImGui::TextColored(C_OK, "%s", tr(msg));
-        } else if (g_done == "fail") {
-            ImGui::TextColored(C_RED, "%s", tr(T_FAILED));
-        } else if (g_done == "cancel") {
-            ImGui::TextColored(C_ORANGE, "%s", tr(T_CANCELED));
+        // navigation: Back, then Check files only + BUILD (or Cancel + BUILDING...)
+        float check_w = 170 * s, forge_w = 220 * s;
+        ImGui::SetCursorPos(ImVec2(18 * s, ImGui::GetWindowHeight() - nav_h - 14 * s));
+        ImGui::BeginDisabled(running);
+        if (ImGui::Button(lab(T_BACK, "back3").c_str(), ImVec2(140 * s, nav_h))) {
+            std::lock_guard<std::mutex> g(g_lock);
+            g_steps.clear(), g_done.clear();   // back to the choices: the last run's list goes away
+            g_step = 1;
         }
-#ifdef _WIN32
-        // WSL missing: offer the elevated install
-        if (g_need_wsl || g_wsl_inst) {
-            ImGui::Dummy(ImVec2(0, 4));
-            ImGui::PushTextWrapPos(0);
-            if (g_wsl_inst == 2) {
-                ImGui::TextColored(C_OK, "%s", tr(T_WSL_DONE));
-            } else {
-                ImGui::TextColored(C_ORANGE, "%s", tr(T_NEED_WSL));
-                ImGui::TextColored(C_TEXT, "%s", tr(T_NEED_WSL2));
-                if (g_wsl_inst == 1) {
-                    ImGui::TextColored(C_MUTED, "%s", tr(T_WSL_RUNNING));
-                } else {
-                    if (g_wsl_inst == 3) ImGui::TextColored(C_RED, tr(T_WSL_FAIL), g_wsl_code.load());
-                    if (ImGui::Button(lab(T_INSTALL_WSL, "wslinst").c_str())) install_wsl();
-                }
+        ImGui::EndDisabled();
+        ImGui::SameLine(ImGui::GetWindowWidth() - 18 * s - forge_w - check_w - 10 * s);
+        if (!running) {
+            ImGui::BeginDisabled(!scan.exists || !target_ok);
+            if (ImGui::Button(lab(T_CHECK, "check").c_str(), ImVec2(check_w, nav_h))) start_build(true);
+            ImGui::EndDisabled();
+            ImGui::SameLine(0, 10 * s);
+            if (big_button("forge", tr(T_FORGE), ImVec2(forge_w, nav_h), files_ok && target_ok && !g_root.empty(), t)) {
+                settings_save();
+                start_build(false);
             }
-            ImGui::PopTextWrapPos();
+        } else {
+            if (ImGui::Button(lab(T_CANCEL, "cancel").c_str(), ImVec2(check_w, nav_h))) cancel_build();
+            ImGui::SameLine(0, 10 * s);
+            big_button("forge", tr(T_FORGING), ImVec2(forge_w, nav_h), false, t);
         }
-#endif
-        ImGui::Separator();
-        ImGui::PushFont(F_SMALL);
-        ImGui::TextColored(C_MUTED, "%s", tr(T_LOG));
-        ImGui::SameLine();
-        ImGui::Checkbox(lab(T_FOLLOW, "follow").c_str(), &autoscroll);
-        ImGui::BeginChild("log", ImVec2(0, ImGui::GetContentRegionAvail().y), ImGuiChildFlags_Borders,
-                          ImGuiWindowFlags_HorizontalScrollbar);
-        ImGuiListClipper clip;
-        clip.Begin((int)g_log.size());
-        while (clip.Step())
-            for (int i = clip.DisplayStart; i < clip.DisplayEnd; i++) {
-                const std::string &l = g_log[i];
-                bool err = l.rfind("ERRO", 0) == 0 || l.find("FAILED") != std::string::npos || l.find("error:") != std::string::npos;
-                ImGui::TextColored(err ? C_RED : C_MUTED, "%s", l.c_str());
-            }
-        if (autoscroll && g_running) ImGui::SetScrollHereY(1.0f);
-        ImGui::EndChild();
-        ImGui::PopFont();
+        panel_end();
     }
-    panel_end();
 
-    // ---- bottom bar: Report, logs, Deck folder, back to the game, close ... FORGE (or Cancel)
+    // ---- bottom bar: Report, logs, Deck folder, back to the game, close
     ImGui::SetCursorPos(ImVec2(pad, io.DisplaySize.y - bar_h));
     ImGui::BeginDisabled(g_job_state == 1);
     if (bar_button(T_REPORT, "report")) start_report();
@@ -1469,27 +1577,10 @@ static void screen_build(ImGuiIO &io, float pad, float t, DumpScan &scan, char *
         ImGui::SameLine();
     }
     if (bar_button(T_CLOSE, "close")) quit = true;
-    bool ready = ((scan.base && scan.update) || scan.nsp >= 2) && scan.keys && (S.deck || S.windows) && !g_root.empty();
-    float check_w = 120 * s, forge_w = 200 * s;
-    ImGui::SameLine(io.DisplaySize.x - pad - forge_w - check_w - 10 * s);
-    if (!running) {
-        ImGui::BeginDisabled(!scan.exists || !(S.deck || S.windows));
-        if (ImGui::Button(lab(T_CHECK, "check").c_str(), ImVec2(check_w, 44 * s))) start_build(true);
-        ImGui::EndDisabled();
-        ImGui::SameLine(0, 10 * s);
-        if (big_button("forge", tr(T_FORGE), ImVec2(forge_w, 44 * s), ready, t)) {
-            settings_save();
-            start_build(false);
-        }
-    } else {
-        if (ImGui::Button(lab(T_CANCEL, "cancel").c_str(), ImVec2(check_w, 44 * s))) cancel_build();
-        ImGui::SameLine(0, 10 * s);
-        big_button("forge", tr(T_FORGING), ImVec2(forge_w, 44 * s), false, t);
-    }
     ImGui::SetCursorPos(ImVec2(pad, io.DisplaySize.y - 22 * s));
     ImGui::PushFont(F_SMALL);
     if (!g_status.empty() && now_s() - g_status_t < 8) ImGui::TextColored(g_status_col, "%s", g_status.c_str());
-    else ImGui::TextColored(C_MUTED, "%s", tr(T_FOOTER));
+    else ImGui::TextColored(C_MUTED, "%s", tr(T_S1_NOTE));
     ImGui::PopFont();
 }
 
@@ -1501,7 +1592,6 @@ int main(int argc, char **argv) {
     if (!IS_WINDOWS) S.windows = false;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) return 1;
-    g_lang = S.lang == "pt" ? 0 : S.lang == "en" ? 1 : system_lang();
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     if (scale <= 0) scale = 1;
     g_scale = scale;

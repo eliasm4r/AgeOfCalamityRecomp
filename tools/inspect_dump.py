@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     extra = sorted(x.name for x in args.exefs.iterdir()
                    if x.is_file() and x.name not in (*MODULES, "rtld", "main.npdm"))
     if extra:
-        report["problems"].append(f"arquivos inesperados no ExeFS: {', '.join(extra)}")
+        report["problems"].append(f"unexpected files in the ExeFS: {', '.join(extra)}")
 
     npdm = args.exefs / "main.npdm"
     if npdm.exists():
@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     # Readable output
     print(f"Version found: {report['version'] or 'UNKNOWN'}")
     for m, h in report["modules"].items():
-        print(f"  {m:8s} build {h['build_id_prefix']}  imagem {human(h['image_size'])}"
+        print(f"  {m:8s} build {h['build_id_prefix']}  image {human(h['image_size'])}"
               f"  (text {human(h['text']['size'])}, ro {human(h['rodata']['size'])},"
               f" data {human(h['data']['size'])}, bss {human(h['bss'])})")
     print(f"  modules in total: {human(total)}  ({total / 1e6:.1f} MB)")
@@ -191,11 +191,11 @@ def main(argv: list[str] | None = None) -> int:
               f" pilha 0x{n['main_thread_stack_size']:x}, system resource 0x{n['system_resource_size']:x}")
     if "romfs" in report:
         r = report["romfs"]
-        print(f"  RomFS: {r['files']} arquivos, {human(r['bytes'])}")
+        print(f"  RomFS: {r['files']} files, {human(r['bytes'])}")
         for k, v in list(r["by_kind"].items())[:12]:
-            print(f"    {k:16s} {v['files']:7d} arquivos  {human(v['bytes'])}")
+            print(f"    {k:16s} {v['files']:7d} files  {human(v['bytes'])}")
     for p in report["problems"]:
-        print(f"PROBLEMA: {p}")
+        print(f"PROBLEM: {p}")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

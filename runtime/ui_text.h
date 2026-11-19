@@ -249,7 +249,5 @@ int ui_text_defined(const char *lang, UiTextId id);
 // The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
 
-// Menu text: ui_text_in(menu language, id). The menu language is AOC_MENU_LANG ("en", "ru", "pt-BR", "zh-Hans");
-// unset, the system UI language when the catalog has menu text for it (English, Russian, Brazilian Portuguese,
-// Simplified Chinese), else English. Follows a live change of the setting.
+// Menu text: the port's menu and overlay are English (ui_text_in("en", id)).
 const char *menu_text(UiTextId id);

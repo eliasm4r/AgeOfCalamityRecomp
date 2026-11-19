@@ -47,13 +47,13 @@ This repository is public-ready: game data lives outside it and everything deriv
 Everything compiles on a PC: WSL2 or Linux builds the Steam Deck / Linux folder (`dist/aoc-deck/`), MSYS2 builds the
 Windows one (`dist/aoc-windows/`). The Deck compiles nothing.
 
-### The forge (what the launcher runs)
+### The build tool (what the launcher runs)
 
 ```sh
 python tools/make_build.py --game-dir "D:/dump" --deck --windows [--with-romfs] [--send] [--check-only]
 ```
 
-Finished steps are skipped, so forging again is incremental:
+Finished steps are skipped, so building again is incremental:
 
 | Step | What it does |
 |---|---|

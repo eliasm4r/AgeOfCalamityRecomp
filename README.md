@@ -49,7 +49,6 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 - **All four DLCs** mounted from your own files, including *Pulse of the Ancients* and *Guardian of Remembrance*.
 - **Options menu on F1** with graphics, sound, controls, amiibo, mods and cheats, and a **performance overlay on F10**.
 - **Built-in problem reports**: one button makes a zip with the logs and your PC's details, nothing of the game.
-- Menu in **English, Brazilian Portuguese, Russian and Simplified Chinese**.
 
 The game runs at its own **30 fps**. A 60 fps mode needs three of the game's clocks patched together and is in the
 works.
@@ -62,11 +61,13 @@ works.
    [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it to a folder with
    room, for example `C:\Games`.
 2. Start **`AoC-Launcher.exe`** (or `./aoc-launcher` on Linux).
-3. Under **YOUR COPY**, pick the folder holding your NSPs and `prod.keys`. Four green dots mean everything was found.
-   The files can have any name: they are identified by their contents.
-4. Under **WHERE YOU WILL PLAY**, tick **Windows (this PC)**, **Steam Deck / Linux**, or both.
-5. Press **FORGE** and let the PC work. The first time takes **1 to 2 hours**; each step shows with its time.
-6. When it is done the window turns into the game's launcher: pick your settings and press **PLAY**.
+3. The setup has three steps:
+   1. **Game files**: pick the folder holding your NSPs and `prod.keys`. Four green dots mean everything was found.
+      The files can have any name: they are identified by their contents.
+   2. **Platforms**: tick **Windows (this PC)**, **Steam Deck / Linux**, or both.
+   3. **Build**: press **BUILD** and let the PC work. The first time takes **1 to 2 hours**; each step shows with its
+      time, and **Technical details** shows the full log.
+4. When it is done the window turns into the game's launcher: pick your settings and press **PLAY**.
 
 The launcher downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
 the Steam Deck version), extracts the game code from your files, translates it and compiles it.
@@ -75,13 +76,13 @@ the Steam Deck version), extracts the game code from your files, translates it a
 > **Windows says it "protected your PC"?** The launcher is not signed: click *More info*, then *Run anyway*.
 >
 > **"WSL is not installed"?** Only the Steam Deck version needs it. Click **Install WSL**, accept the administrator
-> prompt, restart the PC and press **FORGE** again: it continues where it stopped.
+> prompt, restart the PC and press **BUILD** again: it continues where it stopped.
 
 <details>
 <summary><b>Updating to a new version</b></summary>
 <br>
 
-Extract the new package **over the old folder** and forge again. Your `build` and `dist` folders stay, so only what
+Extract the new package **over the old folder** and build again (**Rebuild...** in the launcher). Your `build` and `dist` folders stay, so only what
 changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/aoc.ini`) are never overwritten.
 With **RecompLauncher**, the game is built again by itself after an update.
 </details>
@@ -116,7 +117,7 @@ To remove everything, delete the install folder; on Windows also run `wsl --unre
 
 The Deck does not compile anything: it receives the folder built on your PC.
 
-1. The first time, tick **include romfs.bin** before forging so the game data (10.9 GiB) goes into the folder.
+1. The first time, tick **Include the game data** in the Platforms step so the game data (10.9 GiB) goes into the folder.
 2. Copy the whole `dist/aoc-deck` folder to the Deck (USB stick, SD card, network share or `scp`).
 3. On the Deck, in **Desktop Mode**, open a terminal in that folder and run `sh install-shortcut.sh` once.
 4. In Steam: *Games*, *Add a Non-Steam Game*, tick **Hyrule Warriors: Age of Calamity** and add it. It is now in your

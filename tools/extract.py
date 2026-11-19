@@ -91,9 +91,9 @@ def cmd_inventory(args, keys) -> int:
                              f"the folder's update is version v{other[0]['version']} ({other[0]['path'].name}); the port "
                              f"only accepts update 1.3.0 (v{UPDATE_VERSION})"))
         else:
-            problems.append(("update", 0, "falta o update 1.3.0"))
+            problems.append(("update", 0, "update 1.3.0 is missing"))
     for code, detail, msg in problems:
-        print("PROBLEMA:", msg)
+        print("PROBLEM:", msg)
         print(f"@@PROBLEM {code} {detail}")
     return 1 if problems else 0
 
@@ -102,7 +102,7 @@ def cmd_exefs(args, keys) -> int:
     pkgs = scan(args.game_dir, keys)
     role = "base" if args.base_only else "update"
     chosen = [p for p in pkgs if p["role"] == role]
-    nx.require(len(chosen) == 1, f"esperado exatamente 1 pacote '{role}' em {args.game_dir}")
+    nx.require(len(chosen) == 1, f"expected exactly 1 '{role}' package in {args.game_dir}")
     pkg = chosen[0]
     out = args.work / "exefs"
     nx.require(not out.exists() or args.force, f"{out} already exists (use --force to redo it)")
@@ -110,7 +110,7 @@ def cmd_exefs(args, keys) -> int:
         _, entries = nx.container_entries(f, pkg["path"].stat().st_size)
         tickets = nx.common_tickets(f, entries)
         programs = [n for n in nx.nca_inventory(f, entries, keys) if n.content_type == 0]
-        nx.require(len(programs) == 1, "esperado 1 NCA de programa")
+        nx.require(len(programs) == 1, "expected 1 program NCA")
         nca = programs[0]
         nx.require(nca.title_id == BASE_TID, f"program NCA of another game ({nca.title_id})")
         files = nx.read_exefs(f, nca, nx.nca_ctr_key(nca, keys, tickets))
@@ -155,7 +155,7 @@ def cmd_romfs_list(args, keys) -> int:
                              else "rdb-data" if ".rdb.bin" in base else "rdb-file" if base.endswith(".file")
                              else base.rsplit(".", 1)[-1] if "." in base else "(sem ext)")
                         kinds[k] += size
-                    print(f"[{pkg['role']}] {nca.title_id}: {len(files)} arquivos, {total / 2**30:.2f} GiB  → {tsv.name}")
+                    print(f"[{pkg['role']}] {nca.title_id}: {len(files)} files, {total / 2**30:.2f} GiB  → {tsv.name}")
                     for k, v in kinds.most_common(8):
                         print(f"      {k:12s} {v / 2**20:10.1f} MiB")
     return 0
@@ -177,7 +177,7 @@ def cmd_romfs_index(args, keys) -> int:
     removed = sorted(set(base) - set(new))
     changed = sorted(p for p in set(new) & set(base) if new[p] != base[p])
     total = sum(new.values())
-    print(f"RomFS 1.3.0: {len(files)} arquivos, {total / 2**30:.2f} GiB (imagem {image.stat().st_size / 2**30:.2f} GiB)")
+    print(f"RomFS 1.3.0: {len(files)} files, {total / 2**30:.2f} GiB (image {image.stat().st_size / 2**30:.2f} GiB)")
     if base:
         print(f"compared with base 1.0.0: {len(added)} new, {len(removed)} removed, {len(changed)} with another size")
         for label, items in (("novo", added), ("removido", removed), ("mudou", changed)):
@@ -243,5 +243,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except ValueError as e:
-        print("ERRO:", e)
+        print("ERROR:", e)
         sys.exit(1)

@@ -268,7 +268,7 @@ def main(argv=None) -> int:
     print("containers read:", dict(state["containers"]), " with shaders:", dict(state["containers_with_shaders"]))
     print("unique by source:", dict(by_source), " control sizes:", dict(ctl_sizes))
     inv = args.work / "shader-inventory.tsv"
-    inv.write_text("chave\testagio\tocorrencias\tbytes_codigo\torigens\n" + "".join(
+    inv.write_text("key\tstage\tcount\tcode_bytes\tsources\n" + "".join(
         f"{k}\t{STAGE_NAME[st]}\t{n}\t{ncode}\t{','.join(sorted(src))}\n"
         for k, (st, n, ncode, _c, src) in sorted(keys.items())), encoding="utf-8")
     summary = {"unique": len(keys), "occurrences": total_occ, "by_stage_unique": dict(by_stage),

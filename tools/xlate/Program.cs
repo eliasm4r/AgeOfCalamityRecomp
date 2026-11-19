@@ -27,17 +27,20 @@ using System.Text.Json.Nodes;
 
 static class SwshXlate
 {
-    const int TexBase = 0x168, SampBase = 0x568;   // NVN 分离贴图 / 采样器句柄在 c[2] 的字节基址（每槽 8 字节；dm/gfx/tools/maxwell_refs.py 全量实测） | byte base of NVN separate texture / sampler handles in c[2] (8 bytes per slot; full measurement in dm/gfx/tools/maxwell_refs.py)
+    const int TexBase = 0x168, SampBase = 0x568;   // byte base of NVN separate texture / sampler handles in c[2] (8 bytes per slot; full measurement in dm/gfx/tools/maxwell_refs.py)
 
     sealed class Accessor : IGpuAccessor
     {
         readonly byte[] _code; readonly JsonObject _job; int _binding = 1; public readonly List<string> Notes = new(); public readonly SortedSet<int> TexQueried = new(), ImgQueried = new();
         readonly byte[] _c1;
         public Accessor(byte[] code, JsonObject job) { _code = code; _job = job; _c1 = job["c1"] is JsonNode h ? Convert.FromHexString((string)h) : Array.Empty<byte>(); }
-        // c1 常数段（着色器包控制段前 0x100 字节）：间接跳转 BRX 的跳转表在这里（LDC c[1]）；不提供时翻译器解不出跳转目标、控制流出错（粒子着色器死循环）
+        // c1 constant segment (the first 0x100 bytes of the shader package's control section): the jump tables of indirect
+        // BRX jumps live here (LDC c[1]); without it the translator cannot resolve the targets and the control flow breaks
+        // (particle shaders loop forever)
         // c1 constant segment (the 0x100 bytes before the control segment in the shader package): the jump table of indirect jump BRX lives here (LDC c[1]); without it the translator cannot resolve jump targets and control flow goes wrong (particle shaders loop forever)
-        public uint ConstantBuffer1Read(int offset) { if (offset >= 0 && offset + 4 <= _c1.Length) return BitConverter.ToUInt32(_c1, offset); Notes.Add($"c1 读越界 +{offset:X}（c1 长 {_c1.Length}）"); return 0; }
-        // 全部资源放进第 0 组，各占不同绑定号（spirv-cross 出成一个参数缓冲）；常量段号 index 的缓冲由翻译器给 binding = index+1 的惯例不依赖
+        public uint ConstantBuffer1Read(int offset) { if (offset >= 0 && offset + 4 <= _c1.Length) return BitConverter.ToUInt32(_c1, offset); Notes.Add($"c1 read out of bounds +{offset:X} (c1 is {_c1.Length} bytes)"); return 0; }
+        // every resource goes in set 0, each with its own binding (spirv-cross turns it into one argument buffer); nothing
+        // relies on the translator's convention of binding = index + 1 for constant buffer number index
         // All resources go into set 0, each with a distinct binding number (spirv-cross emits them as one argument buffer); the translator's convention of giving the buffer of constant segment number index binding = index+1 is not relied on
         public SetBindingPair CreateConstantBufferBinding(int index) => new(0, _binding++);
         public SetBindingPair CreateImageBinding(int count, bool isBuffer) { int b = _binding; _binding += count; return new(0, b); }
@@ -68,7 +71,7 @@ static class SwshXlate
             int slot = TexSlot(handle, cbufSlot, out bool image);
             if (slot >= 0) { if (image) ImgQueried.Add(slot); else TexQueried.Add(slot); }
             string t = slot < 0 ? null : image ? Get("img", slot) : Get("tex", slot) ?? Get("img", slot);
-            if (t == null) { Notes.Add($"贴图句柄 {handle:X}（常量段 {cbufSlot}，槽 {slot}）无 PC 类型，按 2D"); return SamplerType.Texture2D; }
+            if (t == null) { Notes.Add($"texture handle {handle:X} (constant buffer {cbufSlot}, slot {slot}) has no PC type, using 2D"); return SamplerType.Texture2D; }
             if (t.EndsWith("_depth")) t = t.Substring(0, t.Length - 6);   // depth-format texture: same sampler type here; the host binds a depth view
             return t switch
             {
@@ -84,14 +87,14 @@ static class SwshXlate
             int slot = TexSlot(handle, cbufSlot);
             if (slot >= 0) ImgQueried.Add(slot);
             string f = _job["img"] is JsonObject t && slot >= 0 && t[slot.ToString()] is JsonObject o ? (string)o["fmt"] : null;
-            if (f == null) { Notes.Add($"图像句柄 {handle:X} 槽 {slot} 无 PC 格式，按 R8G8B8A8Unorm"); return TextureFormat.R8G8B8A8Unorm; }
+            if (f == null) { Notes.Add($"image handle {handle:X} slot {slot} has no PC format, using R8G8B8A8Unorm"); return TextureFormat.R8G8B8A8Unorm; }
             return Enum.TryParse(f, true, out TextureFormat tf) ? tf : TextureFormat.R8G8B8A8Unorm;
         }
         int Local(int i) => _job["local"] is JsonArray a && a.Count > i ? (int)a[i] : 1;
         public int QueryComputeLocalSizeX() => Local(0);
         public int QueryComputeLocalSizeY() => Local(1);
         public int QueryComputeLocalSizeZ() => Local(2);
-        public int QueryComputeSharedMemorySize() => _job["shared"] is JsonNode n ? (int)n : 0;   // 配对 PC 的 groupshared 声明之和 | sum of the paired PC shader's groupshared declarations
+        public int QueryComputeSharedMemorySize() => _job["shared"] is JsonNode n ? (int)n : 0;   // sum of the paired PC shader's groupshared declarations
         static AttributeType Attr(string s) => s switch { "sint" => AttributeType.Sint, "uint" => AttributeType.Uint, _ => AttributeType.Float };
         public GpuGraphicsState QueryGraphicsState()
         {
@@ -105,7 +108,7 @@ static class SwshXlate
             bool earlyZ = _job["early_fragment_tests"] is JsonValue ez && ez.TryGetValue<bool>(out bool eb) && eb;
             return new GpuGraphicsState(earlyZ, InputTopology.Triangles, false, TessPatchType.Triangles, TessSpacing.EqualSpacing,
                 false, false, false, depthMinusW, false, 1f, AlphaTestOp.Always, 0f, attr, false, fout, false,
-                false /* 不做 Y 取反 | no Y flip */, true /* 原点左上 | origin upper-left */, false);
+                false /* no Y flip */, true /* origin upper-left */, false);
         }
         public bool QueryHostSupportsDepthClipControl() => true;
         // Vulkan: the ConstOffset / ConstOffsets image operands Ryujinx emits must be constants. A TLD4.PTP whose offsets
@@ -118,7 +121,9 @@ static class SwshXlate
         // Sub-texel precision bits of a host whose gathers round differently from Maxwell (AMD, Intel): Ryujinx then
         // biases gather coordinates so the same texels are picked (TexturePass.InsertCoordGatherBias). 0: no bias.
         public int QueryHostGatherBiasPrecision() => _job["gather_bias"] is JsonNode n ? (int)n : 0;
-        // 作业 reduced = true：放宽精度——翻译器只给强制精确的运算打 NoContraction（缺省全部打：保持 Maxwell 分开舍入的逐位结果，代价是 MSL 里大量禁优化的 spvFMul 等）
+        // job reduced = true: relaxed precision, the translator marks NoContraction only on operations that must be exact (by
+        // default it marks all of them: keeps Maxwell's separately rounded bit-exact results, at the cost of many
+        // unoptimisable spvFMul and the like in MSL)
         // Job reduced = true: relaxed precision - the translator marks NoContraction only on operations that must be exact (the default marks all: keeps the bit-exact results of Maxwell's separate rounding, at the cost of many optimization-disabled spvFMul etc. in the MSL)
         public bool QueryHostReducedPrecision() => _job["reduced"] is JsonNode n && (bool)n;
         // Host answers for GPUs other than the RX 9070 (runtime/vk_caps.c); absent from the job they keep Ryujinx's defaults.
@@ -138,7 +143,8 @@ static class SwshXlate
             {
                 byte[] code = File.ReadAllBytes((string)job["code"]);
                 var acc = new Accessor(code, job);
-                // 作业 debug = false：关 DebugMode（DebugMode 会跳过 AST 优化器，产物满是临时变量；不改语义）
+                // job debug = false: DebugMode off (DebugMode skips the AST optimiser and the output is full of temporaries;
+                // the meaning does not change)
                 // Job debug = false: turn off DebugMode (DebugMode skips the AST optimizer and the output is full of temporaries; semantics unchanged)
                 var flags = (job["debug"] is JsonNode dbg && !(bool)dbg ? 0 : TranslationFlags.DebugMode) | ((string)job["stage"] == "cs" ? TranslationFlags.Compute : 0);
                 var ctx = Translator.CreateContext(0, acc, new TranslationOptions(TargetLanguage.Spirv, TargetApi.Vulkan, flags));
@@ -189,9 +195,9 @@ static class SwshXlate
         foreach (JsonObject job in jobs)
         {
             string err = Translate(job, outDir);
-            if (err == null) ok++; else { bad++; Console.Error.WriteLine($"【红】{(string)job["key"]}：{err}"); }
+            if (err == null) ok++; else { bad++; Console.Error.WriteLine($"[FAIL] {(string)job["key"]}: {err}"); }
         }
-        Console.WriteLine($"翻译 {ok} 成功，{bad} 失败");
+        Console.WriteLine($"translated {ok} ok, {bad} failed");
         return bad == 0 ? 0 : 1;
     }
 }

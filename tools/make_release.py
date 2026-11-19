@@ -152,7 +152,7 @@ def main() -> int:
                             f"cd '{wsl_path(ROOT)}' && python3 -c 'import sys; sys.path.insert(0, \"tools\"); "
                             f"import build_xlate; print(build_xlate.identity())'"],
                            check=True, capture_output=True, text=True).stdout.strip().splitlines()[-1]
-    print(f"identidade do tradutor: {ident[:16]}")
+    print(f"translator identity: {ident[:16]}")
 
     # Linux parts, made in WSL: the launcher, hactool, the Linux translator, and the Windows wheels (pip download)
     s = wsl_path(stage)
@@ -205,7 +205,7 @@ def main() -> int:
         writer(path, files)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         path.with_name(path.name + ".sha256").write_text(f"{digest}  {path.name}\n")
-        print(f"{path.name}: {path.stat().st_size / 1e6:.1f} MB, {len(files)} arquivos, sha256 {digest}")
+        print(f"{path.name}: {path.stat().st_size / 1e6:.1f} MB, {len(files)} files, sha256 {digest}")
     return 0
 
 

@@ -41,12 +41,12 @@ MAGICS = {
     b"PFS0": "container PFS0/NSP",
     b"HFS0": "container HFS0/XCI",
     b"_DRK": "Koei Tecmo RDB index",
-    b"IDRK": "entrada RDB da Koei Tecmo",
-    b"_S2G": "container de shaders G2S",
+    b"IDRK": "Koei Tecmo RDB entry",
+    b"_S2G": "G2S shader container",
     b"BNSH": "shader binary",
 }
 
-# Nomes de chaves do Switch seguidos de valor hexadecimal (formato prod.keys)
+# Switch key names followed by a hex value (prod.keys format)
 KEY_LINE = re.compile(
     r"^\s*(header_key|key_area_key_\w+|titlekek_\w+|master_key_\w+|package2_key_\w+|"
     r"aes_kek_generation_source|aes_key_generation_source|sd_card_\w+_key\w*)\s*=\s*[0-9a-fA-F]{32,}",
@@ -90,7 +90,7 @@ def check_file(rel: str, root: Path = ROOT) -> list[str]:
     except UnicodeDecodeError:
         text = ""
     if text and (KEY_LINE.search(text) or TITLE_KEY_LINE.search(text)):
-        problems.append("parece conter chaves do console")
+        problems.append("looks like it contains console keys")
     return problems
 
 

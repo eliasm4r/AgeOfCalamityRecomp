@@ -460,7 +460,7 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
     deps = dist_deps(args.work, cc)
     out = args.work / "dist"
     out.mkdir(parents=True, exist_ok=True)
-    host = args.work / "host"   # modules.c e romfs_config.h do passo host
+    host = args.work / "host"   # modules.c and romfs_config.h of the host step
     host.mkdir(parents=True, exist_ok=True)
     write_if_changed(host / "modules.c", module_glue(gen, args.exefs))
     sys.path.insert(0, str(ROOT / "tools"))
@@ -551,10 +551,8 @@ exec "$here/aoc" "$@"
 
 
 # First settings of the Deck folder (cfg.c: "key = value", without the AOC_ prefix). Frame rate and mode come from the
-# runtime's "deck" profile (30 fps, handheld); only the menu language is set here.
+# runtime's "deck" profile (30 fps, handheld).
 INI_DECK = """# Age of Calamity Recomp settings. The menu (Minus+Plus) and the quick menu (hold L3+R3) write here.
-[menu]
-menu_lang = en
 """
 
 README_DECK = """Hyrule Warriors: Age of Calamity - native port for the Steam Deck (AgeOfCalamityRecomp)

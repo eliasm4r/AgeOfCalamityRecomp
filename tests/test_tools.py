@@ -233,14 +233,14 @@ class MakeBuildTest(unittest.TestCase):
         found = []
         with redirect_stdout(io.StringIO()), self.assertRaises(make_build.StepFailed):
             make_build.run([sys.executable, "-c",
-                            "import sys; print('@@PROBLEM wrong_update 458752'); print('texto'); sys.exit(1)"],
+                            "import sys; print('@@PROBLEM wrong_update 458752'); print('text'); sys.exit(1)"],
                            problems=found)
         self.assertEqual(found, [("wrong_update", "458752")])
 
-    def test_messages_have_both_languages(self):
-        for key, pair in make_build.TEXT.items():
-            self.assertEqual(len(pair), 2, key)
-            self.assertTrue(all(pair), key)
+    def test_messages_are_english_text(self):
+        for key, text in make_build.TEXT.items():
+            self.assertIsInstance(text, str, key)
+            self.assertTrue(text, key)
 
     def test_known_romfs_size(self):
         self.assertEqual(make_build.romfs_size(), 11719230892)

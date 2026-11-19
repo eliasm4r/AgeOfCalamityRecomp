@@ -28,7 +28,7 @@ Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is 
 
 Nothing here reads or prints key values: the key file's path goes to the tools that need it.
 
-  python tools/make_build.py --game-dir "D:/dump" --deck --windows [--send] [--with-romfs] [--lang en]
+  python tools/make_build.py --game-dir "D:/dump" --deck --windows [--send] [--with-romfs]
 """
 import argparse
 import hashlib
@@ -56,84 +56,62 @@ MSYS2_PKGS = ["clang", "lld", "llvm", "ninja", "sdl3", "opus", "libvpx", "zstd",
               "vulkan-memory-allocator", "python", "python-cryptography", "python-lz4"]
 GIB = 2**30
 
-LANG = "en"
 TEXT = {
     # step titles
-    "t_check": ("Conferir os arquivos", "Check your files"),
-    "t_tools": ("Preparar as ferramentas", "Set up the build tools"),
-    "t_extract": ("Extrair o código do jogo", "Extract the game code"),
-    "t_romfs": ("Montar o RomFS 1.3.0", "Build the 1.3.0 RomFS"),
-    "t_dlc": ("Extrair os DLCs", "Extract the DLCs"),
-    "t_deck": ("Compilar para Steam Deck / Linux", "Compile for Steam Deck / Linux"),
-    "t_wingen": ("Gerar o código para o Windows", "Generate the code for Windows"),
-    "t_winxlate": ("Tradutor de shaders do Windows", "Windows shader translator"),
-    "t_winbuild": ("Compilar para o Windows", "Compile for Windows"),
-    "t_windist": ("Montar a pasta do Windows", "Assemble the Windows folder"),
-    "t_send": ("Enviar ao Steam Deck", "Send to the Steam Deck"),
+    "t_check": "Check your game files",
+    "t_tools": "Install the build tools",
+    "t_extract": "Unpack the game code",
+    "t_romfs": "Unpack the game data (RomFS 1.3.0)",
+    "t_dlc": "Unpack the DLC",
+    "t_deck": "Build for Steam Deck / Linux",
+    "t_wingen": "Translate the game code for Windows",
+    "t_winxlate": "Prepare the shader translator",
+    "t_winbuild": "Build for Windows",
+    "t_windist": "Put the Windows game folder together",
+    "t_send": "Send to the Steam Deck",
     # messages
-    "no_dir": ("a pasta do jogo não existe: {0}", "the game folder does not exist: {0}"),
-    "missing": ("faltam na pasta escolhida: {0}", "missing from the chosen folder: {0}"),
-    "base": ("o jogo base (01002B00111A2000)", "the base game (01002B00111A2000)"),
-    "update": ("o update 1.3.0 (01002B00111A2800)", "update 1.3.0 (01002B00111A2800)"),
-    "disk": ("pouco espaço livre em {0}: {1:.0f} GB livres, a forja precisa de ~{2:.0f} GB",
-             "not enough free space on {0}: {1:.0f} GB free, the build needs about {2:.0f} GB"),
-    "ram": ("AVISO: {0:.0f} GB de RAM; com menos de 8 GB a compilação pode falhar ou levar horas",
-            "WARNING: {0:.0f} GB of RAM; with less than 8 GB the build may fail or take hours"),
-    "send_deck": ("enviar ao Deck pede a pasta do Deck", "sending to the Deck needs the Deck folder"),
-    "need_wsl": ("o WSL não está instalado: clique em \"Instalar o WSL\" (pede administrador) e reinicie o PC",
-                 "WSL is not installed: click \"Install WSL\" (asks for administrator) and restart the PC"),
-    "wsl_install": ("criando a distro Linux privada {0} (Arch Linux, ~1 GB, só na primeira vez)...",
-                    "creating the private Linux distro {0} (Arch Linux, ~1 GB, first time only)..."),
-    "wsl_old": ("o WSL não criou a distro: atualize-o (num terminal como administrador: wsl --update) e forje de novo",
-                "WSL could not create the distro: update it (in an administrator terminal: wsl --update) and forge again"),
-    "no_distro": ("a distro do WSL \"{0}\" não existe (wsl -l -v)", "the WSL distro \"{0}\" does not exist (wsl -l -v)"),
-    "msys_get": ("baixando o MSYS2 ({0:.0f} MB, só na primeira vez)...", "downloading MSYS2 ({0:.0f} MB, first time only)..."),
-    "msys_hash": ("o download do MSYS2 não bate com o hash fixado", "the MSYS2 download does not match the pinned hash"),
-    "msys_pkgs": ("instalando o compilador e as bibliotecas no MSYS2 (~1,5 GB, só na primeira vez)...",
-                  "installing the compiler and libraries into MSYS2 (~1.5 GB, first time only)..."),
-    "tools_ok": ("ferramentas prontas", "tools ready"),
-    "exit": ("o comando terminou com o código {0}", "the command ended with code {0}"),
-    "no_win_linux": ("a versão Windows só é compilada no Windows", "the Windows version can only be built on Windows"),
-    "missing_file": ("falta {0}", "missing {0}"),
-    "folder_ok": ("pasta pronta: {0}", "folder ready: {0}"),
-    "no_xlate": ("falta o tradutor de shaders do Windows (prebuilt/xlate/win-x64) e não há .NET para compilá-lo",
-                 "the Windows shader translator is missing (prebuilt/xlate/win-x64) and there is no .NET to build it"),
-    "no_bash": ("o Git Bash não está em C:/Program Files/Git (o envio usa ssh e scp dele)",
-                "Git Bash is not in C:/Program Files/Git (sending uses its ssh and scp)"),
-    "unexpected": ("ERRO inesperado: {0}", "Unexpected ERROR: {0}"),
+    "no_dir": "the game folder does not exist: {0}",
+    "missing": "missing from the chosen folder: {0}",
+    "base": "the base game (01002B00111A2000)",
+    "update": "update 1.3.0 (01002B00111A2800)",
+    "disk": "not enough free space on {0}: {1:.0f} GB free, the build needs about {2:.0f} GB",
+    "ram": "WARNING: {0:.0f} GB of RAM; with less than 8 GB the build may fail or take hours",
+    "send_deck": "sending to the Deck needs the Deck folder",
+    "need_wsl": "WSL is not installed: click \"Install WSL\" (asks for administrator) and restart the PC",
+    "wsl_install": "creating the private Linux distro {0} (Arch Linux, ~1 GB, first time only)...",
+    "wsl_old": "WSL could not create the distro: update it (in an administrator terminal: wsl --update) and build again",
+    "no_distro": "the WSL distro \"{0}\" does not exist (wsl -l -v)",
+    "msys_get": "downloading MSYS2 ({0:.0f} MB, first time only)...",
+    "msys_hash": "the MSYS2 download does not match the pinned hash",
+    "msys_pkgs": "installing the compiler and libraries into MSYS2 (~1.5 GB, first time only)...",
+    "tools_ok": "tools ready",
+    "exit": "the command ended with code {0}",
+    "no_win_linux": "the Windows version can only be built on Windows",
+    "missing_file": "missing {0}",
+    "folder_ok": "folder ready: {0}",
+    "no_xlate": "the Windows shader translator is missing (prebuilt/xlate/win-x64) and there is no .NET to build it",
+    "no_bash": "Git Bash is not in C:/Program Files/Git (sending uses its ssh and scp)",
+    "unexpected": "Unexpected ERROR: {0}",
     # what tools/extract.py inventory found wrong in the dump ("@@PROBLEM <code> <detail>")
-    "p_base": ("não achei o jogo base (01002B00111A2000) entre os NSPs da pasta (ou há mais de um)",
-               "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)"),
-    "p_update": ("não achei o update 1.3.0 (01002B00111A2800) entre os NSPs da pasta",
-                 "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder"),
-    "p_updates": ("há mais de um update 1.3.0 na pasta; deixe só um", "there is more than one update 1.3.0 in the folder; keep one"),
-    "p_wrong_update": ("o update da sua pasta é de outra versão (v{0}; o 1.4.1 é o v458752). O AgeOfCalamityRecomp só funciona "
-                       "com o update 1.3.0 (v327680): troque o NSP do update pelo da 1.3.0 e forje de novo",
-                       "the update in your folder is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
-                       "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and forge again"),
-    "no_nsp": ("não há arquivos .nsp na pasta escolhida", "there are no .nsp files in the chosen folder"),
-    "wrong_build": ("o código do jogo extraído não é o da versão 1.3.0. O AgeOfCalamityRecomp só funciona com o update 1.3.0 "
-                    "(v327680); o 1.4.1 ainda não é aceito. Troque o NSP do update e forje de novo",
-                    "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
-                    "1.4.1 is not accepted yet. Replace the update NSP and forge again"),
-    "stale_exefs": ("o código extraído numa tentativa anterior não é o da versão 1.3.0: extraindo de novo",
-                    "the game code extracted by an earlier attempt is not version 1.3.0: extracting again"),
-    "stale_romfs": ("o romfs.bin de uma tentativa anterior não é o da versão 1.3.0 ({0} bytes): montando de novo",
-                    "the romfs.bin of an earlier attempt is not the 1.3.0 one ({0} bytes): building it again"),
-    "romfs_size": ("o RomFS montado tem {0} bytes, o da versão 1.3.0 tem {1}: confira se o jogo base e o update são os "
-                   "certos (base v0 e update 1.3.0)",
-                   "the merged RomFS has {0} bytes, the 1.3.0 one has {1}: check that the base game and the update are "
-                   "the right ones (base v0 and update 1.3.0)"),
-    "steamos": ("o SteamOS não deixa instalar as ferramentas de compilação (o sistema é somente leitura). Forje num PC "
-                "com Windows ou Linux e copie a pasta dist/aoc-deck para cá (README, seção Steam Deck)",
-                "SteamOS does not let the build tools be installed (the system is read-only). Forge on a Windows or "
-                "Linux PC and copy the dist/aoc-deck folder here (README, Steam Deck section)"),
+    "p_base": "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)",
+    "p_update": "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder",
+    "p_updates": "there is more than one update 1.3.0 in the folder; keep one",
+    "p_wrong_update": "the update in your folder is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
+                       "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and build again",
+    "no_nsp": "there are no .nsp files in the chosen folder",
+    "wrong_build": "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
+                    "1.4.1 is not accepted yet. Replace the update NSP and build again",
+    "stale_exefs": "the game code extracted by an earlier attempt is not version 1.3.0: extracting again",
+    "stale_romfs": "the romfs.bin of an earlier attempt is not the 1.3.0 one ({0} bytes): building it again",
+    "romfs_size": "the merged RomFS has {0} bytes, the 1.3.0 one has {1}: check that the base game and the update are "
+                   "the right ones (base v0 and update 1.3.0)",
+    "steamos": "SteamOS does not let the build tools be installed (the system is read-only). Build on a Windows or "
+                "Linux PC and copy the dist/aoc-deck folder here (README, Steam Deck section)",
 }
 
 
 def tr(key: str, *a) -> str:
-    pt, en = TEXT[key]
-    return (en if LANG == "en" else pt).format(*a)
+    return TEXT[key].format(*a)
 
 
 LOG = None   # build/logs/forge-<time>.log: everything printed, for the launcher's Report button
@@ -465,7 +443,7 @@ def s_wingen(args) -> str:
     w = wsl_path(gen)
     wsl(args, "cd ~/aoc-build/generated && n=0 && while IFS= read -r -d '' f; do d=" + sh_quote(w) + "\"/$f\"; "
               "if ! cmp -s \"$f\" \"$d\"; then mkdir -p \"$(dirname \"$d\")\"; cp \"$f\" \"$d\"; n=$((n+1)); fi; "
-              "done < <(find . -type f -print0) && echo \"$n arquivos gerados copiados\"", root=distro(args) == DISTRO)
+              "done < <(find . -type f -print0) && echo \"$n generated files copied\"", root=distro(args) == DISTRO)
     return "ok"
 
 
@@ -540,8 +518,7 @@ def s_windist(args) -> str:
     shutil.copy2(ROOT / "tools/windows/monitor.bat", dist / "monitor.bat")
     ini = dist / "aoc.ini"
     if not ini.exists():
-        lang = "en" if LANG == "en" else "pt-BR"
-        ini.write_text(f"# Age of Calamity Recomp settings. The menu (F1) writes here.\n[menu]\nmenu_lang = {lang}\n", encoding="utf-8")
+        ini.write_text("# Age of Calamity Recomp settings. The menu (F1) writes here.\n", encoding="utf-8")
     out(tr("folder_ok", dist))
     return "ok"
 
@@ -558,7 +535,6 @@ def s_send(args) -> str:
 
 
 def main() -> int:
-    global LANG
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")   # the launcher reads UTF-8
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files", help="folder with the NSPs and prod.keys")
@@ -572,12 +548,11 @@ def main() -> int:
     ap.add_argument("--wsl-distro", default=os.environ.get("AOC_WSL_DISTRO", ""),
                     help=f"WSL distro (default: {DISTRO}, made by the tools step)")
     ap.add_argument("--msys2", default="", help="MSYS2 folder (default: C:/msys64, installed there if missing)")
-    ap.add_argument("--lang", choices=("pt", "en"), default="en")
+    ap.add_argument("--lang", default="en", help=argparse.SUPPRESS)   # kept so older launchers still work; English only
     ap.add_argument("--check-only", action="store_true", help="only the check step")
     ap.add_argument("--prepare", action="store_true",
                     help="setup for a launcher: build for this PC (Windows or Linux), print 'progress <0-1> <text>' lines")
     args = ap.parse_args()
-    LANG = args.lang
     args.game_dir = args.game_dir.expanduser()
     args.keys = (args.keys or args.game_dir / "prod.keys").expanduser()
     if args.win_work is None:
@@ -613,7 +588,7 @@ def main() -> int:
             r = fn(args)
             step(sid, r or "ok", title)
         except StepFailed as e:
-            out(f"ERROR: {e}" if LANG == "en" else f"ERRO: {e}")
+            out(f"ERROR: {e}")
             step(sid, "fail", str(e))
             out("@@DONE fail")
             if args.prepare:

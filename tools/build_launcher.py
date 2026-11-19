@@ -80,7 +80,7 @@ def main() -> int:
     args = ap.parse_args()
     out = (args.out or ROOT / "build" / ("launcher-linux" if args.linux else "launcher")).resolve()
     exe = build_linux(args.sysroot, out) if args.linux else build_windows(out)
-    print(f"pronto: {exe} ({exe.stat().st_size / 2**20:.1f} MiB)")
+    print(f"done: {exe} ({exe.stat().st_size / 2**20:.1f} MiB)")
     return 0
 
 

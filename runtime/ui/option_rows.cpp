@@ -374,7 +374,7 @@ bool opt_slider(const char *key, UiTextId label, float lo, float hi, UiTextId de
 // ---- binding rows (the remapping rows of the Controls tab): a label and three cells, each its own nav item
 
 // Text centred (left-aligned when centred is false) in [x0, x1] on a row from y to y + h, at the font size or smaller so
-// a long name ("Нажатие правого стика", "Стрелка вправо") fits; under 65 % it is clipped instead.
+// a long name ("Right stick press", "Right arrow") fits; under 65 % it is clipped instead.
 static void fit_text(ImDrawList *dl, float x0, float x1, float y, float h, ImU32 col, const char *t, bool centred) {
     ImFont *font = ImGui::GetFont();
     float fs = ImGui::GetFontSize(), room = x1 - x0, tw = font->CalcTextSizeA(fs, FLT_MAX, 0, t).x;

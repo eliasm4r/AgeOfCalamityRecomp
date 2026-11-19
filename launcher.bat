@@ -1,6 +1,6 @@
 @echo off
 setlocal
-rem Opens the launcher (launcher\launcher.cpp): pick the folder with your copy of the game and forge the port for the
+rem Opens the launcher (launcher\launcher.cpp): pick the folder with your copy of the game and build the port for the
 rem Deck and/or Windows. In the release package AoC-Launcher.exe comes ready next to this file; in a copy of the
 rem repository the launcher is compiled the first time in MSYS2 UCRT64 (tools\build_launcher.py, CONTRIBUTING.md).
 cd /d "%~dp0"

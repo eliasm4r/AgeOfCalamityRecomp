@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nx  # noqa: E402
 from check_content import GENERATED_MARKER  # noqa: E402
 
-MAGIC = b'ACRFS1'   # o formato que runtime/romfs.c confere
+MAGIC = b'ACRFS1'   # the format runtime/romfs.c checks
 HEADER = struct.Struct('<8sQQ')
 ROW = struct.Struct('<QQII')
 
@@ -46,9 +46,9 @@ def build_index(files, image_size):
     for path, offset, size in files:
         name = path.encode()
         if not name or name.startswith(b'/') or b'\\' in name or b'\0' in name:
-            sys.exit(f'romfs_index: caminho malformado no RomFS (entrada {len(rows) // ROW.size})')
+            sys.exit(f'romfs_index: malformed path in the RomFS (entry {len(rows) // ROW.size})')
         if name == previous:
-            sys.exit(f'romfs_index: caminho repetido no RomFS: {path}')
+            sys.exit(f'romfs_index: repeated path in the RomFS: {path}')
         previous = name
         if offset < 0 or size < 0 or offset + size > image_size:
             sys.exit(f'romfs_index: {path} lies outside the image')
@@ -118,11 +118,11 @@ def write_placeholder(out: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--image', type=Path, required=True, help='romfs.bin mesclado')
+    ap.add_argument('--image', type=Path, required=True, help='merged romfs.bin')
     ap.add_argument('--out', type=Path, required=True, help='build folder')
     args = ap.parse_args()
     count, size, dt = write(args.image.resolve(), args.out.expanduser().resolve())
-    print(f'romfs index: {count} arquivos, {size:,} bytes, {dt:.1f} s')
+    print(f'romfs index: {count} files, {size:,} bytes, {dt:.1f} s')
     return 0
 
 
