@@ -1,13 +1,13 @@
 """Makes aoc-report.zip for asking for help: the logs and this PC's details, nothing of the game.
 
-The launcher's "Report a problem..." button runs it (Windows: the launcher's Python; Linux: python3). Only the standard library.
+The setup's "Report a problem..." button runs it (Windows: the release's Python; Linux: python3). Only the standard library.
 
   python tools/make_report.py   ->   <repository>/aoc-report.zip
 
-Inside: system.txt (system, processor, memory, graphics cards and driver, free disk, launcher version), the last forge
+Inside: system.txt (system, processor, memory, graphics cards and driver, free disk, version), the last forge
 logs (build/logs/), and each game folder's logs/ (texts, and the picture copies of the newest state-recorder reports)
 and aoc.ini (dist/aoc-windows, dist/aoc-deck). No game files, no
-keys, no saves. The zip is attached to a public issue (the launcher opens the form), so this PC's user name is taken
+keys, no saves. The zip is attached to a public issue (the setup opens the form), so this PC's user name is taken
 out of every text in it: the logs carry paths, and a home folder's name is often a person's name (scrub).
 """
 import getpass

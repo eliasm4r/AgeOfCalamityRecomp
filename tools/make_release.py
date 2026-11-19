@@ -1,21 +1,22 @@
-"""Builds the downloadable launcher packages for a GitHub release: one for Windows, one for Linux.
+"""Builds the downloadable packages for a GitHub release: one for Windows, one for Linux.
 
-Each package is the repository at HEAD (git archive: our code, no game data) plus what a player's PC cannot be asked
-to build before the launcher runs:
+Each package is the repository at HEAD (git archive: our code, the setup in setup/, no game data) plus what a player's
+PC cannot be asked to build before the setup runs:
 
   Windows  AoC-Recomp-<v>-Windows.zip
-             AoC-Launcher.exe + SDL3.dll       the launcher (tools/build_launcher.py) and upstream SDL 3.4.18
-             python/                           Python 3.13 embeddable + cryptography, lz4, numpy (runs make_build.py,
-                                               the dump extraction and the C generator)
+             AgeOfCalamityRecomp.exe           the setup: python/pythonw.exe under another name (its signature kept),
+                                               with AgeOfCalamityRecomp._pth and the Python DLLs beside it; the name
+                                               makes setup/sitecustomize.py open setup/setup.py
+             python/                           Python 3.13 embeddable + Tcl/Tk (tcltk.msi) + cryptography, lz4, numpy
+                                               (runs the setup, make_build.py, the dump extraction, the C generator)
              prebuilt/hactool/win-x64/         hactool 1.4.0 (ISC) for the RomFS merge
              prebuilt/xlate/{win,linux}-x64/   the shader translator (Ryujinx 1.3.2 + our patches, MIT), so nobody
                                                needs .NET: win-x64 for aoc.exe, linux-x64 for the Deck build in WSL
   Linux    AoC-Recomp-<v>-Linux.tar.gz
-             aoc-launcher + libSDL3.so.0       the launcher, built against the Steam Runtime sniper sysroot
-             prebuilt/hactool/linux-x64/, prebuilt/xlate/linux-x64/
+             prebuilt/hactool/linux-x64/, prebuilt/xlate/linux-x64/ (the setup is setup.sh, with the system python3)
 
 Run on Windows in MSYS2 UCRT64, from a clean commit, with the development WSL distro set up (its ~/aoc-build has the
-sniper sysroot and the Linux translator, its venv has pip):
+Linux translator, its venv has pip):
 
   python3 tools/make_release.py [--wsl-distro archlinux] [--win-xlate C:/aoc-win/host] [--allow-dirty]
 
@@ -39,14 +40,19 @@ DL = OUT / "dl"
 TOP = "AoC-Recomp"   # the folder each package unpacks into
 PY_EMBED = ("https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-amd64.zip",
             "9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38")
-SDL_WIN = ("https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18-win32-x64.zip",
-           "75c2c0fc74e7d1206aaedc22893a35887332f4f85f5c8b74fddc10d177985f2c")
+# Tcl/Tk for tkinter (the setup window), from the same Python release; unpacked with msiexec /a, never installed.
+TCLTK = ("https://www.python.org/ftp/python/3.13.17/amd64/tcltk.msi",
+         "ae3e5f9dd998b36d14655cd3444d0af906c1849c60aee40994eeb1e460a3cabf")
 WHEELS = ["cryptography", "lz4", "numpy"]
 # MSYS2 has no git of its own by default: Git for Windows, else the one on PATH.
 GIT = next((g for g in ("C:/Program Files/Git/cmd/git.exe",) if Path(g).is_file()), None) or shutil.which("git") or "git"
-# Python's own search path for the launcher's make_build.py and the tools it starts: with a ._pth file the embeddable
-# Python ignores the script's folder, so tools/ and recomp/ are listed (no module name is in both).
-PTH = "python313.zip\n.\nLib\\site-packages\n..\\tools\n..\\recomp\nimport site\n"
+# Python's own search path for make_build.py and the tools it starts: with a ._pth file the embeddable Python ignores
+# the script's folder, so tools/ and recomp/ are listed (no module name is in both).
+PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\tools\n..\\recomp\nimport site\n"
+# The same for AgeOfCalamityRecomp.exe at the top of the folder, plus setup/ (its sitecustomize.py opens the setup).
+SETUP_EXE = "AgeOfCalamityRecomp"
+SETUP_PTH = "python\\python313.zip\npython\npython\\Lib\npython\\Lib\\site-packages\nsetup\ntools\nrecomp\nimport site\n"
+SETUP_DLLS = ("python313.dll", "python3.dll", "vcruntime140.dll", "vcruntime140_1.dll")
 
 
 def sh(cmd, **kw):
@@ -67,7 +73,7 @@ def fetch(url: str, sha: str) -> bytes:
     dst = DL / url.rsplit("/", 1)[1]
     if not dst.is_file() or hashlib.sha256(dst.read_bytes()).hexdigest() != sha:
         DL.mkdir(parents=True, exist_ok=True)
-        print(f"baixando {url}", flush=True)
+        print(f"downloading {url}", flush=True)
         data = urllib.request.urlopen(url, timeout=120).read()
         if hashlib.sha256(data).hexdigest() != sha:
             sys.exit(f"ERROR: {url} does not match the pinned hash")
@@ -87,14 +93,38 @@ def git_tree() -> list:
     return files
 
 
-def python_embed(wheel_dir: Path) -> list:
-    """(path, mode, bytes) of python/: the embeddable zip, our ._pth, and the wheels unpacked into Lib/site-packages."""
+def tcltk(stage: Path) -> list:
+    """(path, mode, bytes) of Tcl/Tk for python/: _tkinter.pyd and its DLLs, Lib/tkinter and tcl/ (tcltk.msi)."""
+    fetch(*TCLTK)
+    out = (stage / "tcltk").resolve()
+    shutil.rmtree(out, ignore_errors=True)
+    msi = (DL / TCLTK[0].rsplit("/", 1)[1]).resolve()
+    subprocess.run(["msiexec", "/a", str(msi), "/qn", f"TARGETDIR={out}"], check=True)
+    files = [(f"python/{f.name}", 0o644, f.read_bytes()) for f in sorted((out / "DLLs").iterdir()) if f.is_file()]
+    for top in ("Lib/tkinter", "tcl/tcl8", "tcl/tcl8.6", "tcl/tk8.6"):
+        for f in sorted((out / top).rglob("*")):
+            if f.is_file() and "__pycache__" not in f.parts and "demos" not in f.parts:
+                files.append((f"python/{f.relative_to(out).as_posix()}", 0o644, f.read_bytes()))
+    return files
+
+
+def setup_exe(python: list) -> list:
+    """AgeOfCalamityRecomp.exe and what it needs beside it: pythonw.exe renamed (Windows sees the same signature), its
+    ._pth and the DLLs python313.dll loads."""
+    by_name = {n: d for n, _, d in python}
+    files = [(f"{SETUP_EXE}.exe", 0o755, by_name["python/pythonw.exe"]), (f"{SETUP_EXE}._pth", 0o644, SETUP_PTH.encode())]
+    return files + [(dll, 0o644, by_name[f"python/{dll}"]) for dll in SETUP_DLLS]
+
+
+def python_embed(wheel_dir: Path, stage: Path) -> list:
+    """(path, mode, bytes) of python/: the embeddable zip, Tcl/Tk, our ._pth, and the wheels in Lib/site-packages."""
     files = []
     with zipfile.ZipFile(io.BytesIO(fetch(*PY_EMBED))) as z:
         for n in z.namelist():
             if not n.endswith("/") and not n.endswith("._pth"):
                 files.append((f"python/{n}", 0o644, z.read(n)))
     files.append(("python/python313._pth", 0o644, PTH.encode()))
+    files += tcltk(stage)
     wheels = sorted(wheel_dir.glob("*.whl"))
     names = {w.name.split("-")[0].lower() for w in wheels}
     for need in WHEELS:
@@ -154,10 +184,10 @@ def main() -> int:
                            check=True, capture_output=True, text=True).stdout.strip().splitlines()[-1]
     print(f"translator identity: {ident[:16]}")
 
-    # Linux parts, made in WSL: the launcher, hactool, the Linux translator, and the Windows wheels (pip download)
+    # Linux parts, made in WSL: hactool, the Linux translator, and the Windows wheels (pip download)
     s = wsl_path(stage)
     hsrc = wsl_path(ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0")
-    wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && python3 tools/build_launcher.py --linux && "
+    wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && "
                          f"bash tools/build_hactool_linux.sh '{hsrc}' '{s}/hactool-linux' && "
                          f"mkdir -p '{s}/xlate-linux' && cp ~/aoc-build/xlate/aoc_xlate ~/aoc-build/xlate/aoc_xlate.id "
                          f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/aoc/bin/python -m pip download -q "
@@ -167,22 +197,16 @@ def main() -> int:
         got = idf.read_text().strip()
         if got != ident:
             sys.exit(f"ERROR: {idf} is {got[:16]}, the translator sources at HEAD give {ident[:16]}; rebuild the translator")
-    # The Windows launcher (MSYS2: this Python)
-    sh([sys.executable, ROOT / "tools/build_launcher.py", "--out", stage / "launcher-win"])   # not the one in use
-
     tree = git_tree()
-    if not any(n == "recomplauncher.json" for n, _, _ in tree):   # RecompLauncher's file, next to the launcher
+    if not any(n == "recomplauncher.json" for n, _, _ in tree):   # RecompLauncher's file
         tree.append(("recomplauncher.json", 0o644, (ROOT / "recomplauncher.json").read_bytes()))
     print(f"repository at HEAD: {len(tree)} files, {sum(len(d) for _, _, d in tree) / 1e6:.1f} MB")
     lic = (ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0/LICENSE").read_bytes()
 
     # ---- Windows
-    with zipfile.ZipFile(io.BytesIO(fetch(*SDL_WIN))) as z:
-        sdl_dll = z.read("SDL3.dll")
     win = list(tree)
-    win.append(("AoC-Launcher.exe", 0o755, (stage / "launcher-win/aoc-launcher.exe").read_bytes()))
-    win.append(("SDL3.dll", 0o644, sdl_dll))
-    win += python_embed(stage / "wheels")
+    python = python_embed(stage / "wheels", stage)
+    win += python + setup_exe(python)
     win.append(("prebuilt/hactool/win-x64/hactool.exe", 0o755, (ROOT / "toolchain/hactool-1.4.0-win/hactool.exe").read_bytes()))
     win.append(("prebuilt/hactool/LICENSE", 0o644, lic))
     for f in ("aoc_xlate.exe", "aoc_xlate.id"):
@@ -192,8 +216,6 @@ def main() -> int:
 
     # ---- Linux
     lin = list(tree)
-    lin.append(("aoc-launcher", 0o755, (ROOT / "build/launcher-linux/aoc-launcher").read_bytes()))
-    lin.append(("libSDL3.so.0", 0o644, (ROOT / "build/launcher-linux/libSDL3.so.0").read_bytes()))
     lin.append(("prebuilt/hactool/linux-x64/hactool", 0o755, (stage / "hactool-linux/hactool").read_bytes()))
     lin.append(("prebuilt/hactool/LICENSE", 0o644, lic))
     for f in ("aoc_xlate", "aoc_xlate.id"):

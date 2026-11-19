@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/key-art.jpg" alt="Hyrule Warriors: Age of Calamity" width="100%">
+
 # AgeOfCalamityRecomp
 
 ### Hyrule Warriors: Age of Calamity, running natively on PC and Steam Deck
@@ -24,7 +26,7 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 
 > [!IMPORTANT]
 > **No game files are included.** You need your own copy of the game, dumped from your own Switch: the base game,
-> **update 1.3.0** and, if you have them, the DLCs, plus your console's `prod.keys`. The launcher builds the game from
+> **update 1.3.0** and, if you have them, the DLCs, plus your console's `prod.keys`. The setup builds the game from
 > those files on your PC.
 >
 > **Only update 1.3.0 works** (v327680). Other updates are refused by the setup.
@@ -60,29 +62,30 @@ works.
 1. Download **`AoC-Recomp-<version>-Windows.zip`** (or **`-Linux.tar.gz`**) from the
    [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it to a folder with
    room, for example `C:\Games`.
-2. Start **`AoC-Launcher.exe`** (or `./aoc-launcher` on Linux).
-3. The setup has three steps:
-   1. **Game files**: pick the folder holding your NSPs and `prod.keys`. Four green dots mean everything was found.
-      The files can have any name: they are identified by their contents.
-   2. **Platforms**: tick **Windows (this PC)**, **Steam Deck / Linux**, or both.
-   3. **Build**: press **BUILD** and let the PC work. The first time takes **1 to 2 hours**; each step shows with its
-      time, and **Technical details** shows the full log.
-4. When it is done the window turns into the game's launcher: pick your settings and press **PLAY**.
+2. Start **`AgeOfCalamityRecomp.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
+3. In the setup window:
+   - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
+     update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
+     identifies them by their contents;
+   - tick **Windows (this PC)**, **Steam Deck / Linux**, or both;
+   - press **Build** and let the PC work. The first time takes **1 to 2 hours**; **Show details** shows the full log.
+4. When it is done the same window shows the game's settings: pick yours and press **Play**. Start
+   `AgeOfCalamityRecomp.exe` again to play later.
 
-The launcher downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
+The setup downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
 the Steam Deck version), extracts the game code from your files, translates it and compiles it.
 
 > [!TIP]
-> **Windows says it "protected your PC"?** The launcher is not signed: click *More info*, then *Run anyway*.
+> **Windows says it "protected your PC"?** The setup is not signed: click *More info*, then *Run anyway*.
 >
-> **"WSL is not installed"?** Only the Steam Deck version needs it. Click **Install WSL**, accept the administrator
-> prompt, restart the PC and press **BUILD** again: it continues where it stopped.
+> **"WSL is not installed"?** Only the Steam Deck version needs it. Answer **Yes** when the setup offers to install it,
+> accept the administrator prompt, restart the PC and press **Build** again: it continues where it stopped.
 
 <details>
 <summary><b>Updating to a new version</b></summary>
 <br>
 
-Extract the new package **over the old folder** and build again (**Rebuild...** in the launcher). Your `build` and `dist` folders stay, so only what
+Extract the new package **over the old folder** and build again (the setup offers it by itself). Your `build` and `dist` folders stay, so only what
 changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/aoc.ini`) are never overwritten.
 With **RecompLauncher**, the game is built again by itself after an update.
 </details>
@@ -93,13 +96,13 @@ With **RecompLauncher**, the game is built again by itself after an update.
 
 | What | Where | Size |
 |---|---|---|
-| The launcher, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 25 GB |
+| The setup, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 25 GB |
 | Linux for Windows (Steam Deck version only) | WSL distro **AoC-Recomp**, in `%LOCALAPPDATA%\AoC-Recomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
 | Linux: build folder and Python packages | `~/aoc-build`, `~/.venvs/aoc` | about 6 GB |
 
 To remove everything, delete the install folder; on Windows also run `wsl --unregister AoC-Recomp` and delete
-`C:\msys64` if the launcher installed it; on Linux delete `~/aoc-build` and `~/.venvs/aoc`.
+`C:\msys64` if the setup installed it; on Linux delete `~/aoc-build` and `~/.venvs/aoc`.
 </details>
 
 ### Requirements
@@ -168,7 +171,7 @@ help to find them.
 </details>
 
 <details>
-<summary><b>Why does the launcher build the game instead of shipping it?</b></summary>
+<summary><b>Why does the setup build the game instead of shipping it?</b></summary>
 <br>
 
 The finished program is made from the game's code, which belongs to its owners and cannot be shared. So the package
@@ -194,9 +197,9 @@ It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `aoc.exe`. Put
 <summary><b>The game crashed, froze or looks wrong. What do I send?</b></summary>
 <br>
 
-In the launcher, press **Report a problem...**: it makes `aoc-report.zip` (logs and your PC's details, nothing of the
+In the setup window, press **Report a problem...**: it makes `aoc-report.zip` (logs and your PC's details, nothing of the
 game, your user name replaced by `user`) and opens the [issue form](https://github.com/eliasm4r/AgeOfCalamityRecomp/issues).
-Press <kbd>F8</kbd> when you see a glitch so the logs mark the moment. On a Steam Deck without the launcher,
+Press <kbd>F8</kbd> when you see a glitch so the logs mark the moment. On a Steam Deck without the setup,
 `./aoc-logs.sh bundle` makes the archive. Never attach game files, `prod.keys` or saves.
 </details>
 

@@ -40,14 +40,14 @@ This repository is public-ready: game data lives outside it and everything deriv
 - Comments say what the code does and why. Cite our code by file and function, external code by project, file and
   function.
 - Everything is written in English: docs, comments, messages and commits. Commit messages are plain sentences without
-  type prefixes. The in-game menu and the launcher keep their translations.
+  type prefixes. Only the game's own name-entry keyboard follows the game language.
 
 ## Building from source
 
 Everything compiles on a PC: WSL2 or Linux builds the Steam Deck / Linux folder (`dist/aoc-deck/`), MSYS2 builds the
 Windows one (`dist/aoc-windows/`). The Deck compiles nothing.
 
-### The build tool (what the launcher runs)
+### The build tool (what the setup runs)
 
 ```sh
 python tools/make_build.py --game-dir "D:/dump" --deck --windows [--with-romfs] [--send] [--check-only]
@@ -69,10 +69,14 @@ Finished steps are skipped, so building again is incremental:
 | `windist` | `dist/aoc-windows` (exe, DLLs, translator, ExeFS, RomFS by hard link, index, `aoc.ini`) |
 | `send` | `tools/deck/deploy.sh --no-build` |
 
-The launcher (`launcher/launcher.cpp`, Dear ImGui + SDL3) runs this script and reads its `@@PLAN`, `@@STEP`, `@@NEED`
-and `@@DONE` lines. `launcher.bat` builds it the first time (`tools/build_launcher.py`). Release packages come from
-`tools/make_release.py`: the repository at HEAD plus the launcher, an embeddable Python, hactool and the prebuilt
-translator, and nothing of the game.
+The setup (`setup/setup.py`, tkinter) runs this script and reads its `@@PLAN`, `@@STEP`, `@@NEED` and `@@DONE`
+lines. In a copy of the repository open it with `setup.bat` (any Python 3 with tkinter) or `sh setup.sh`. Release
+packages come from `tools/make_release.py`: the repository at HEAD plus an embeddable Python with Tcl/Tk,
+`AgeOfCalamityRecomp.exe` (its `pythonw.exe` renamed, which `setup/sitecustomize.py` turns into the setup), hactool and
+the prebuilt translator, and nothing of the game.
+
+The icon (`assets/icon.ico` for `aoc.exe` and the setup, `assets/icon.png` on Linux) is cut from
+`assets/key-art.jpg` by `tools/make_icon.py` (Pillow); `--list` shows the other crops kept aside.
 
 ### By hand in WSL or Linux
 
@@ -118,6 +122,6 @@ Test dependencies: `pip install numpy lz4 capstone unicorn`.
 
 ## Reporting a problem
 
-In the launcher, **Report a problem...** builds `aoc-report.zip` (logs and PC details, nothing of the game, the user
+In the setup window, **Report a problem...** builds `aoc-report.zip` (logs and PC details, nothing of the game, the user
 name replaced by `user`) and opens the [issue form](https://github.com/eliasm4r/AgeOfCalamityRecomp/issues). On a
-Steam Deck without the launcher, `./aoc-logs.sh bundle` makes the same archive.
+Steam Deck without the setup, `./aoc-logs.sh bundle` makes the same archive.

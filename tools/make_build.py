@@ -1,10 +1,10 @@
-"""Builds the game from the player's own dump, start to finish, for the launcher (launcher/launcher.cpp) or by hand.
+"""Builds the game from the player's own dump, start to finish, for the setup (setup/setup.py) or by hand.
 
-Runs on Windows (the launcher's embedded Python, or MSYS2's) and on Linux (the system python3: this script needs only
+Runs on Windows (the release's embedded Python, or MSYS2's) and on Linux (the system python3: this script needs only
 the standard library; the tools it calls run in ~/.venvs/aoc, which the tools step makes).
 
 Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is log; the last line is "@@DONE ok|fail";
-"@@NEED wsl" asks the launcher to offer installing WSL):
+"@@NEED wsl" asks the setup to offer installing WSL):
 
   check     the dump folder (NSPs of the base, update 1.3.0 and DLCs, and prod.keys; each package is identified by
             its contents, not its file name, and an update of another version is refused), free disk and memory

@@ -222,15 +222,12 @@ def vma_include() -> Path:
 
 
 def runtime_sources() -> list[Path]:
-    """Every runtime/*.c, *.cpp, platform/*.c, ui/*.cpp and Dear ImGui (without the SDL back ends, which belong to the
-    launcher), without the files of the other system (Win32); on
+    """Every runtime/*.c, *.cpp, platform/*.c, ui/*.cpp and Dear ImGui, without the files of the other system (Win32); on
     Windows also runtime/aoc.rc (the aoc.exe manifest: per-monitor DPI and the UTF-8 code page)."""
     pats = ("*.c", "*.cpp", "*.rc", "platform/*.c", "ui/*.cpp", "third_party/imgui/*.cpp",
             "third_party/imgui/backends/*.cpp")
 
     def other_os(p: Path) -> bool:
-        if p.name.startswith("imgui_impl_sdl"):   # the launcher's SDL back ends (tools/build_launcher.py), not the game's
-            return True
         if WIN:
             return p.stem.endswith("_sdl") or p.name == "linux.c"
         return p.stem.endswith("_win") or p.name == "win32.c" or p.suffix == ".rc"
@@ -331,13 +328,14 @@ def step_host(args, gen: Path, lib: Path) -> Path:
     ]
     if WIN:   # runtime/aoc.rc, as in Astral Chain's tools/build_game.py (MIT); windres writes no depfile
         windres = shutil.which("llvm-windres") or need("windres")
-        lines += ["rule rc", f"  command = {windres} -I {shell_arg(RUNTIME)} -O coff $in -o $out",
+        lines += ["rule rc", f"  command = {windres} -I {shell_arg(RUNTIME)} -I {shell_arg(ROOT / 'assets')} -O coff $in -o $out",
                   "  description = rc $in"]
     objs = []
     for src in runtime_sources() + [out / "modules.c"]:
         o = runtime_object(out, src)
         if src.suffix == ".rc":
-            lines.append(f"build {ninja_escape(o)}: rc {ninja_escape(src)} | {ninja_escape(RUNTIME / 'aoc.manifest')}")
+            lines.append(f"build {ninja_escape(o)}: rc {ninja_escape(src)} | {ninja_escape(RUNTIME / 'aoc.manifest')} "
+                         f"{ninja_escape(ROOT / 'assets' / 'icon.ico')}")
         else:
             lines.append(f"build {ninja_escape(o)}: cc_rt {ninja_escape(src)}")
         objs.append(o)

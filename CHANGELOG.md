@@ -16,10 +16,13 @@ First version of AgeOfCalamityRecomp, based on AoC Recomp 0.1.5.
 - Everything is written in English: README, notes, comments, tool messages and file names. In the Deck folder:
   `install-shortcut.sh`, `README.txt`, `tools/`, `logs/sessions/`; the performance logs go to `logs/performance/`;
   `aoc-logs.sh` takes `list`, `summary`, `live`, `system`, `detailed`, `performance`, `diag` and `bundle`.
-- English only: the launcher, the build tool and the in-game menu no longer have Portuguese, Russian or Chinese text
+- English only: the setup, the build tool and the in-game menu no longer have Portuguese, Russian or Chinese text
   (the game's own name-entry keyboard still follows the game's language).
-- The launcher's setup is a three-step wizard (Game files, Platforms, Build) with the full log folded behind
-  **Technical details**; the play screen shows a short explanation under every setting.
+- The ImGui launcher is replaced by a plain setup window (tkinter), started by `AgeOfCalamityRecomp.exe` on Windows and
+  `setup.sh` on Linux: the game folder with a check mark for each file found, the platforms, a progress bar and the
+  log behind **Show details**. After the build the same window shows the game's settings, with **Play**. The release
+  no longer needs `SDL3.dll` or an MSYS2-built launcher.
+- `aoc.exe` and the setup window have the game's icon.
 - The documentation is five files: this changelog, the README, `CONTRIBUTING.md`, `THIRD_PARTY_NOTICES.md` and
   `docs/NOTES.md`.
 - `tools/deck/deploy.sh` takes the Deck's address and folder from `AOC_DECK` / `AOC_DECK_DIR` instead of fixed values.

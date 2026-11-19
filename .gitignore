@@ -57,6 +57,13 @@ Thumbs.db
 /python/
 /AoC-Launcher.exe
 /SDL3.dll
-/aoc-launcher
-/libSDL3.so.0
 /aoc-report.zip
+
+# The setup's own files (setup/setup.py) and the pieces the Windows package puts beside AgeOfCalamityRecomp.exe
+/setup.ini
+/launcher.ini
+/setup-error.txt
+/AgeOfCalamityRecomp.exe
+/AgeOfCalamityRecomp._pth
+/python3*.dll
+/vcruntime140*.dll

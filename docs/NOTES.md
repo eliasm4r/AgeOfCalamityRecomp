@@ -92,7 +92,8 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 |---|---|
 | `recomp/` | ARM64 to C lifter (from Astral Chain Recomp, itself from LAS Recomp): `gen.py` generates the C of the three modules, `layout.py` decides module bases, `patches-v130.txt` holds the game patches and spin waits |
 | `runtime/` | the host "Horizon": loader, dispatch, memory, kernel, IPC, `nn::*` overrides, audio, RomFS, DLCs, saves, NVN front end, Vulkan back end, input, window, ImGui menu |
-| `launcher/` | the launcher (setup wizard and game settings) |
+| `setup/` | the setup (tkinter): runs `tools/make_build.py`, then edits `aoc.ini` and starts the game |
+| `assets/` | the key art and the icon cut from it (`tools/make_icon.py`) |
 | `tools/` | extraction, RomFS merge, build, release, reports, censuses, Deck tools (`tools/deck/`) |
 | `tests/` | differential lifter tests against Unicorn and tool tests |
 

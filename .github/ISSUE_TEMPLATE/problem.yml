@@ -5,14 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the problem and attach `aoc-report.zip` (the launcher's **Report a problem...** button; on a Steam Deck without the launcher, `./aoc-logs.sh bundle`). The zip holds logs and PC details, nothing of the game.
+        Describe the problem and attach `aoc-report.zip` (the setup's **Report a problem...** button; on a Steam Deck without the setup, `./aoc-logs.sh bundle`). The zip holds logs and PC details, nothing of the game.
 
         Never attach game files, `prod.keys` or saves.
   - type: input
     id: version
     attributes:
       label: AgeOfCalamityRecomp version
-      description: Shown in the launcher and in the first line of `system.txt`
+      description: Shown in the setup and in the first line of `system.txt`
       placeholder: "0.2.0"
     validations:
       required: true
@@ -31,7 +31,7 @@ body:
     attributes:
       label: Which part
       options:
-        - Forge (launcher, building the game)
+        - Build (setup, building the game)
         - Starting the game
         - Playing (picture, sound, freeze, performance)
         - DLC
