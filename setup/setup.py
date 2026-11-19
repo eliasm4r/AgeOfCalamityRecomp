@@ -346,6 +346,11 @@ class Build:
             elif line.startswith("@@STEP "):
                 parts = line[7:].split(" ", 2)
                 self.events.put(("step", (parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "")))
+            elif line.startswith("@@PROGRESS "):
+                try:
+                    self.events.put(("progress", float(line[11:])))
+                except ValueError:
+                    pass
             elif line.startswith("@@NEED wsl"):
                 self.events.put(("wsl", None))
             elif line.startswith("@@DONE "):
@@ -625,6 +630,7 @@ class App:
         self.steps = []
         self.need_wsl = False
         self.started = time.monotonic()
+        self.fraction = None   # the build's own "@@PROGRESS" figure, once it prints one
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
@@ -649,6 +655,9 @@ class App:
                     if state == "fail":
                         step["note"] = note
             self.show_progress()
+        elif kind == "progress":
+            self.fraction = max(self.fraction or 0.0, min(1.0, value))
+            self.show_progress()
         elif kind == "log":
             self.add_log(value)
         elif kind == "wsl":
@@ -660,11 +669,14 @@ class App:
         total = len(self.steps) or 1
         finished = sum(1 for s in self.steps if s["state"] in ("ok", "skip"))
         current = next((s for s in self.steps if s["state"] == "run"), None)
-        self.bar.configure(value=int(1000 * (finished + (0.5 if current else 0)) / total))
+        # The build's own figure follows the files it translates and compiles; without it, half a step per running step.
+        fraction = self.fraction if self.fraction is not None else (finished + (0.5 if current else 0)) / total
+        self.bar.configure(value=int(1000 * fraction))
         if current:
             n = self.steps.index(current) + 1
             minutes = int(time.monotonic() - self.started) // 60
-            self.status.set(T["step"].format(n=n, total=total, title=current["title"]) + (f"  ({minutes} min)" if minutes else ""))
+            self.status.set(f"{int(100 * fraction)} %  ·  " + T["step"].format(n=n, total=total, title=current["title"])
+                            + (f"  ({minutes} min)" if minutes else ""))
 
     def build_ended(self, result):
         self.build = None

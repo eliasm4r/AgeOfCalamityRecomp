@@ -3,8 +3,8 @@
 Runs on Windows (the release's embedded Python, or MSYS2's) and on Linux (the system python3: this script needs only
 the standard library; the tools it calls run in ~/.venvs/AgeOfCalamityRecomp, which the tools step makes).
 
-Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; every other line is log; the last line is "@@DONE ok|fail";
-"@@NEED wsl" asks the setup to offer installing WSL):
+Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; "@@PROGRESS <0-1>" is the whole build's progress; every
+other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setup to offer installing WSL):
 
   check     the dump folder (NSPs of the base, update 1.3.0 and DLCs, and prod.keys; each package is identified by
             its contents, not its file name, and an update of another version is refused), free disk and memory
@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -132,6 +133,67 @@ class StepFailed(Exception):
     pass
 
 
+# ---- overall progress: "@@PROGRESS <0-1>" (with --prepare: "progress <0-1> <step title>", RecompLauncher's format)
+# Each step weighs about what it takes on a first build (seconds on an 8-core PC); inside a step the C generator's
+# "emitted a/b chunks" and ninja's "[n/m]" lines move it forward. In a step that compiles, the first ninja run is the
+# game code (most of the time) and any later one is the runtime.
+WEIGHTS = {"check": 5, "tools": 120, "extract": 30, "romfs": 300, "dlc": 60, "deck": 900, "wingen": 40,
+           "winxlate": 5, "winbuild": 480, "windist": 15, "send": 60}
+NINJA = re.compile(r"^\[(\d+)/(\d+)\] ")
+EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
+
+
+class Progress:
+    def __init__(self):
+        self.plan, self.index, self.inside, self.shown, self.prepare = [], 0, 0.0, -1.0, False
+        self.ninja_totals = []
+
+    def start(self, plan, prepare):
+        self.plan, self.prepare = [sid for sid, _ in plan], prepare
+
+    def step(self, index):
+        self.index, self.inside, self.ninja_totals = index, 0.0, []
+        self.report()
+
+    def line(self, text):
+        if not self.plan:
+            return
+        sid = self.plan[self.index]
+        m = EMITTED.search(text)
+        if m:   # the generator: all of wingen, the first tenth of the Deck step
+            done = int(m[1]) / max(1, int(m[2]))
+            self.advance(done * (0.1 if sid == "deck" else 1.0))
+            return
+        m = NINJA.match(text)
+        if m:
+            total = int(m[2])
+            if total not in self.ninja_totals:
+                self.ninja_totals.append(total)
+            first = self.ninja_totals.index(total) == 0
+            low, high = ((0.1 if sid == "deck" else 0.0), 0.95) if first else (0.95, 1.0)
+            self.advance(low + (high - low) * int(m[1]) / max(1, total))
+
+    def advance(self, inside):
+        if inside > self.inside:
+            self.inside = inside
+            self.report()
+
+    def report(self):
+        weights = [WEIGHTS.get(sid, 10) for sid in self.plan]
+        done = sum(weights[:self.index]) + weights[self.index] * self.inside if self.plan else 0
+        value = min(1.0, done / max(1, sum(weights)))
+        if value - self.shown < 0.002 and value < 1:
+            return
+        self.shown = value
+        if self.prepare:
+            out(f"progress {value:.3f} {tr('t_' + self.plan[self.index])}")
+        else:
+            out(f"@@PROGRESS {value:.3f}")
+
+
+PROGRESS = Progress()
+
+
 def run(cmd, cwd=None, env=None, problems=None) -> None:
     """Runs a command, its output going to the log line by line; a non-zero exit fails the step. problems: a list that
     receives the (code, detail) of each "@@PROBLEM <code> <detail>" line the command prints."""
@@ -144,6 +206,7 @@ def run(cmd, cwd=None, env=None, problems=None) -> None:
             problems.append(tuple((line.split(" ", 2) + [""])[1:3]))
         elif line.strip():
             out(line)
+            PROGRESS.line(line)
     if p.wait():
         raise StepFailed(tr("exit", p.returncode))
 
@@ -472,7 +535,7 @@ def s_winxlate(args) -> str:
 
 
 def s_winbuild(args) -> str:
-    msys(args, f"python3 -u tools/build.py --work {sh_quote(msys_path(args.win_work))} --big-jobs 2 guest host")
+    msys(args, f"python3 -u tools/build.py --work {sh_quote(msys_path(args.win_work))} guest host")
     return "ok"
 
 
@@ -579,11 +642,11 @@ def main() -> int:
     out(f"AgeOfCalamityRecomp {VERSION}, {' '.join(sys.argv[1:])}")
     for sid, _ in plan:
         out(f"@@PLAN {sid} {tr('t_' + sid)}")
+    PROGRESS.start(plan, args.prepare)
     for n, (sid, fn) in enumerate(plan):
         title = tr("t_" + sid)
-        if args.prepare:
-            out(f"progress {n / len(plan):.2f} {title}")
         step(sid, "run", title)
+        PROGRESS.step(n)
         try:
             r = fn(args)
             step(sid, r or "ok", title)
@@ -610,6 +673,8 @@ def main() -> int:
         state.write_text(json.dumps(old, indent=1) + "\n", encoding="utf-8")
     if args.prepare:
         out("progress 1.00 " + tr("folder_ok", ROOT / "dist"))
+    else:
+        out("@@PROGRESS 1.000")
     out("@@DONE ok")
     return 0
 

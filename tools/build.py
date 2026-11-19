@@ -53,7 +53,11 @@ GEN_WORKER_MEM = 1536 << 20   # recomp/gen.py WORKER_MEM
 
 
 def mem_available() -> int:
-    """Linux MemAvailable in bytes (0 when it cannot be read)."""
+    """Free memory in bytes: Linux MemAvailable, or on Windows what tools/hostmem.py measures (0 when unknown). It sizes
+    the generator workers and the pool of giant functions; at 0 both fall back to one at a time."""
+    if WIN:
+        import hostmem
+        return hostmem.available_ram() or 0
     try:
         for line in Path("/proc/meminfo").read_text().splitlines():
             if line.startswith("MemAvailable:"):
