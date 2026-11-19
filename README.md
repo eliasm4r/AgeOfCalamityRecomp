@@ -60,18 +60,19 @@ works.
 ## Install
 
 1. Download **`AgeOfCalamityRecomp-<version>-Windows.zip`** (or **`-Linux.tar.gz`**) from the
-   [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it to a folder with
-   room, for example `C:\Games`.
+   [latest release](https://github.com/eliasm4r/AgeOfCalamityRecomp/releases/latest) and extract it anywhere, for
+   example in Downloads (on Linux, extract it where the game should live).
 2. Start **`AgeOfCalamityRecomp Setup.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
 3. In the setup window:
+   - on Windows, choose where to install the game (about 25 GB; `%LOCALAPPDATA%\AgeOfCalamityRecomp` by default);
    - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
      update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
      identifies them by their contents;
    - tick **Windows (this PC)**, **Steam Deck / Linux**, or both;
-   - press **Build** and let the PC work. The first time takes **1 to 2 hours**; **Show details** shows the full log.
-4. When it is done the same window shows the game's settings: pick yours and press **Play**. Later, start the game
-   from the **AgeOfCalamityRecomp** shortcut (Start Menu, and the desktop if you left the box ticked), or open
-   `AgeOfCalamityRecomp Setup.exe` again to change settings or rebuild.
+   - press **Build** and let the PC work. The first time takes **20 to 30 minutes**; **Show details** shows the full log.
+4. When it is done, press **Play**. Later, start the game from the **AgeOfCalamityRecomp** shortcut (Start Menu, and
+   the desktop if you left the box ticked). Its settings are in the game itself: press **F1**, or Minus + Plus on a
+   controller. The extracted zip can be deleted once the game is installed.
 
 The setup downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
 the Steam Deck version), extracts the game code from your files, translates it and compiles it.
@@ -88,7 +89,8 @@ the Steam Deck version), extracts the game code from your files, translates it a
 <summary><b>Updating to a new version</b></summary>
 <br>
 
-Extract the new package **over the old folder** and build again (the setup offers it by itself). Your `build` and `dist` folders stay, so only what
+On Windows, extract the new zip anywhere, start its setup, keep the same install folder and press **Update**. On
+Linux, extract the new package over the old folder and build again. Your `build` and `dist` folders stay, so only what
 changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/settings.ini`) are never overwritten.
 With **RecompLauncher**, the game is built again by itself after an update.
 </details>

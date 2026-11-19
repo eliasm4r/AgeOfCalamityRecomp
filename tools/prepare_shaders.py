@@ -12,8 +12,9 @@ written next to AgeOfCalamityRecomp.exe in the record layouts of runtime/gfx_sha
     seed-answers.bin   "ACSANS": stage, code hash, input id (zero: the runtime finds it), answers, priority
 
 Then `AgeOfCalamityRecomp.exe --prepare-shaders` translates every record into the shader cache, writes
-shader-prepared.bin and builds each variant's stage library or compute pipeline once into the GPU driver's own disk
-cache. The variants play meets with other answers are recorded by the game itself (shader-answers.bin) and warmed at
+shader-prepared.bin and, except on NVIDIA, whose disk cache never gives these back (vk_pipeline.c
+vk_pipeline_prepare_shaders), builds each variant's stage library or compute pipeline once into the GPU driver's own
+disk cache. The variants play meets with other answers are recorded by the game itself (shader-answers.bin) and warmed at
 each start. The seed files are deleted at the end; game-derived output stays in the (ignored) install folder.
 
 A driver whose shader compiler crashes on a variant crashes on it in every run: the journal the run leaves names the

@@ -9,8 +9,8 @@
   },
   "prepare": {
     "program": ["python/python.exe"],
-    "args": ["-u", "{install}/tools/make_build.py", "--prepare", "--game-dir", "{game}"],
-    "label": "Builds the game from your copy: unpacks it, translates and compiles the game code, then prepares the shaders. About 30 minutes the first time; an update only redoes what changed.",
+    "args": ["-u", "{install}/installer/setup.py", "--prepare", "--game-dir", "{game}"],
+    "label": "Builds the game from your copy: unpacks it, translates and compiles the game code, then prepares the shaders. 20 to 30 minutes the first time; an update only redoes what changed.",
     "timeout": 14400
   },
   "start": {

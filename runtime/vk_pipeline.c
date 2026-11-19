@@ -3091,7 +3091,16 @@ int vk_pipeline_prepare_shaders(void) {
     const char *pe = cfg_get("ACR_PREWARM_XLATE");   // no fixed default: half the CPUs, at most 16, when unset
     int procs = pe && *pe ? atoi(pe) : cpus / 2 > 16 ? 16 : cpus / 2;
     int rc = gfx_shader_prepare_seed(dir, cpus, procs < 1 ? 1 : procs);
-    if (!rc) lb_warm_prepared(dir);
+    // NVIDIA's own disk cache never gave these libraries back (RTX 4070, 2026-11-19: 776 variants took 11.4 s in every
+    // run, 40,727 about 10 minutes of the setup), while pipeline-cache.bin did (1.1 s) at 61 KB a variant, 2.5 GB for
+    // all of them: there the driver step is skipped, and a library is built when play first meets it, then kept in
+    // pipeline-cache.bin. ACR_PREPARE_DRIVER=1 runs it anyway; AMD keeps it (0.1 ms a library from its cache).
+    const char *pd = cfg_get("ACR_PREPARE_DRIVER");
+    int nvidia = vk_ctx()->props.vendorID == 0x10DE;
+    if (!rc && nvidia && !(pd && *pd == '1'))
+        printf("prepare-shaders: driver step skipped (NVIDIA keeps no stage library in its disk cache)\n");
+    else if (!rc)
+        lb_warm_prepared(dir);
     return rc;
 }
 

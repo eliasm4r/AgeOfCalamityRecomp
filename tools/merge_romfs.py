@@ -5,7 +5,8 @@ The launcher runs this on Windows and Linux:
   python tools/merge_romfs.py [--game-dir "Game Files"] [--keys <prod.keys>]
 
 1. prepares build/v130/tmp/hactool-home/.switch/{prod,title}.keys (tools/extract.py hactool-home; values never shown);
-2. hard-links the base and update NSPs under ASCII names (the Windows hactool does not open Unicode paths);
+2. opens the base and update NSPs where they are, or, when a path is not plain ASCII (the Windows hactool does not
+   open those), hard-links them under ASCII names (copied when the dump is on another disk);
 3. extracts the NCAs of both NSPs (~11 GB temporary) and merges section 1 of the update's program NCA (BKTR) over the
    base, checking the six IVFC levels (-y);
 4. deletes the temporary files and the copied keys, only once the image exists.
@@ -66,19 +67,24 @@ def find_nsps(game_dir: Path, keys: Path) -> tuple[Path, Path]:
     return out[0], out[1]
 
 
-def link_or_copy(src: Path, dst: Path) -> None:
+def link_or_copy(src: Path, dst: Path) -> Path:
+    """The path hactool opens for src: src itself when it is plain ASCII (the Windows hactool fails only on other
+    characters), else dst, hard-linked or, on another disk, copied (11 GB for the base game)."""
+    if str(src).isascii():
+        return src
     if dst.exists():
-        return
+        return dst
     try:
         os.link(src, dst)   # same disk: copies nothing
-        return
+        return dst
     except OSError:
         pass
     if not WIN:   # another disk (e.g. the dump in /mnt/c under WSL): the Linux hactool opens any path
         os.symlink(src, dst)
-        return
+        return dst
     print(f"hard link failed; copying {dst.name} (this can take a while)...", flush=True)
     shutil.copyfile(src, dst)
+    return dst
 
 
 def run_hactool(args: list, env=None, log=None) -> int:
@@ -108,15 +114,14 @@ def main() -> int:
     inp = TMP / "in"
     inp.mkdir(parents=True, exist_ok=True)
     base_nsp, update_nsp = find_nsps(args.game_dir, keys)
-    link_or_copy(base_nsp, inp / "base.nsp")
-    link_or_copy(update_nsp, inp / "update.nsp")
+    nsps = {"base": link_or_copy(base_nsp, inp / "base.nsp"), "update": link_or_copy(update_nsp, inp / "update.nsp")}
 
     # 3. NCAs of both NSPs (the base is ~11 GB) and the merge
     for name in ("base", "update"):
         d = TMP / name
         if not d.is_dir():
             print(f"Extracting {name}.nsp ...", flush=True)
-            if run_hactool(["-t", "pfs0", f"--outdir={d}", str(inp / f"{name}.nsp")]):
+            if run_hactool(["-t", "pfs0", f"--outdir={d}", str(nsps[name])]):
                 fail(f"hactool could not open {name}.nsp")
     base_nca = max((TMP / "base").glob("*.nca"), key=lambda p: p.stat().st_size)
     upd_nca = max((TMP / "update").glob("*.nca"), key=lambda p: p.stat().st_size)

@@ -150,9 +150,14 @@ class StepFailed(Exception):
 # "emitted a/b chunks" and ninja's "[n/m]" lines move it forward. In a step that compiles, the first ninja run is the
 # game code (most of the time) and any later one is the runtime.
 WEIGHTS = {"check": 5, "tools": 120, "extract": 30, "romfs": 300, "dlc": 60, "deck": 900, "wingen": 40,
-           "winxlate": 5, "winbuild": 480, "windist": 15, "dlss": 10, "shaders": 900, "send": 60}
+           "winxlate": 5, "winbuild": 480, "windist": 15, "dlss": 10, "shaders": 400, "send": 60}
 NINJA = re.compile(r"^\[(\d+)/(\d+)\] ")
 EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
+# The shaders step (gfx_shader.c, vk_pipeline.c): first the translation ("prepare: n of m pairs", the whole step on
+# NVIDIA, about 6 minutes on an RTX 4070), then, on other GPUs, the driver builds them ("preparation progress: n of m
+# variants").
+SHADERS_XLATE = re.compile(r"prepare: (\d+) of (\d+) pairs")
+SHADERS_BUILD = re.compile(r"preparation progress: (\d+) of (\d+) variants")
 
 
 class Progress:
@@ -171,6 +176,12 @@ class Progress:
         if not self.plan:
             return
         sid = self.plan[self.index]
+        if sid == "shaders":
+            for pattern, low, high in ((SHADERS_XLATE, 0.0, 0.9), (SHADERS_BUILD, 0.9, 1.0)):
+                m = pattern.search(text)
+                if m:
+                    self.advance(low + (high - low) * int(m[1]) / max(1, int(m[2])))
+            return
         m = EMITTED.search(text)
         if m:   # the generator: all of wingen, the first tenth of the Deck step
             done = int(m[1]) / max(1, int(m[2]))

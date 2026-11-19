@@ -9,11 +9,20 @@ Installed view, after a build: Play, Report a problem and the game folder. No se
 menu (F1), which writes settings.ini.
 
 Started by "AgeOfCalamityRecomp Setup.exe" in the Windows package (python/pythonw.exe renamed, see sitecustomize.py), by
-setup.sh on Linux, or with "python setup/setup.py". Its own settings live in setup.ini at the top of the folder.
+setup.sh on Linux, or with "python setup/setup.py". Its own settings live in setup.ini at the top of the install folder.
+
+Two places it runs from:
+  - the Windows package (tools/make_release.py), as installer/setup.py next to installer/sources.zip: the player picks
+    an install folder (%LOCALAPPDATA%\\AgeOfCalamityRecomp by default), the setup unpacks sources.zip there, copies
+    python/ and the setup exe beside it, and builds there. A newer package over the same folder is the update.
+    "installer/setup.py --prepare --game-dir DIR" (RecompLauncher's prepare step) unpacks into the package's own
+    folder and runs make_build.py --prepare without a window;
+  - a repository copy or an install folder, as setup/setup.py: everything happens in that folder.
 """
 import ctypes
 import os
 import queue
+import shutil
 import signal
 import subprocess
 import sys
@@ -21,13 +30,20 @@ import threading
 import time
 import tkinter
 import webbrowser
+import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
 from texts import TEXTS as T  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
+BUNDLE = HERE.parent                 # the folder the setup was started from
+SOURCES = HERE / "sources.zip"       # only in the Windows package: the repository and the prebuilt tools
+PACKAGED = SOURCES.is_file()
+ROOT = BUNDLE                        # the install folder, where the game is built; chosen in the window when PACKAGED
+SETUP_EXE = "AgeOfCalamityRecomp Setup.exe"
+LONGEST_FOLDER = 100
 WIN = os.name == "nt"
 BASE_ID, UPDATE_ID, DLC_PREFIX = "01002B00111A2000", "01002B00111A2800", "01002B00111A3"
 ISSUES_URL = "https://github.com/eliasm4r/AgeOfCalamityRecomp/issues/new?template=problem.yml"
@@ -35,7 +51,7 @@ WIDTH = 560
 
 
 def use_tk():
-    tcl = ROOT / "python" / "tcl"
+    tcl = Path(sys.executable).parent / "tcl"
     if WIN and tcl.is_dir():
         os.environ["TCL_LIBRARY"] = str(tcl / "tcl8.6")
         os.environ["TK_LIBRARY"] = str(tcl / "tk8.6")
@@ -60,12 +76,73 @@ def built_version():
         return ""
 
 
-def game_dir():
-    return ROOT / "dist" / ("windows" if WIN else "steamdeck")
+def game_dir(root=None):
+    return (root or ROOT) / "dist" / ("windows" if WIN else "steamdeck")
 
 
-def game_ready():
-    return (game_dir() / ("AgeOfCalamityRecomp.exe" if WIN else "AgeOfCalamityRecomp")).is_file()
+def game_ready(root=None):
+    return (game_dir(root) / ("AgeOfCalamityRecomp.exe" if WIN else "AgeOfCalamityRecomp")).is_file()
+
+
+# ---- the install folder (Windows package only)
+def ours(folder):
+    """A folder the setup may write into: an install, or the unpacked package itself."""
+    return (folder / "tools" / "make_build.py").is_file() or (folder / "installer" / "sources.zip").is_file()
+
+
+def default_install():
+    if (BUNDLE / "tools" / "make_build.py").is_file():   # already unpacked here (RecompLauncher, or chosen before)
+        return BUNDLE
+    if not WIN:
+        return Path.home() / "AgeOfCalamityRecomp"
+    local = os.environ.get("LOCALAPPDATA", "")
+    if local and local.isascii():
+        return Path(local) / "AgeOfCalamityRecomp"
+    return Path(os.environ.get("SystemDrive", "C:") + "\\") / "AgeOfCalamityRecomp"
+
+
+def install_problem(text):
+    """Why this install folder cannot be used, or "". Plain ASCII paths only: MSYS2, hactool and WSL all read it."""
+    if not text or not Path(text).is_absolute() or not text.isascii() or any(c in text[2:] for c in '<>:"|?*%&^!;'):
+        return T["plain_folder"]
+    if len(text) > LONGEST_FOLDER:
+        return T["long_folder"]
+    folder = Path(text)
+    if folder.is_file() or folder.is_dir() and any(folder.iterdir()) and not ours(folder):
+        return T["busy_folder"]
+    return ""
+
+
+def install_files(target, cancelled):
+    """Unpacks sources.zip into target, then, when target is not the package itself, copies python/ and the setup exe
+    beside it (only the files that differ), so the install builds, updates and starts on its own. False if cancelled."""
+    target.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(SOURCES) as z:
+        for info in z.infolist():
+            if cancelled():
+                return False
+            z.extract(info, target)
+    if target.resolve() == BUNDLE.resolve():
+        return True
+    copies = [(BUNDLE / SETUP_EXE, target / SETUP_EXE)]
+    for top, _, files in os.walk(BUNDLE / "python"):
+        for name in files:
+            src = Path(top) / name
+            copies.append((src, target / src.relative_to(BUNDLE)))
+    for src, dst in copies:
+        if cancelled():
+            return False
+        if not src.is_file():
+            continue
+        st = src.stat()
+        try:
+            same = dst.stat().st_size == st.st_size and int(dst.stat().st_mtime) == int(st.st_mtime)
+        except OSError:
+            same = False
+        if not same:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    return True
 
 
 def python_exe():
@@ -195,7 +272,24 @@ class Build:
         threading.Thread(target=self.run, daemon=True).start()
 
     def run(self):
-        cmd = [python_exe(), "-u", str(ROOT / "tools" / "make_build.py")] + self.args
+        if PACKAGED:
+            self.events.put(("plan", ("unpack", T["t_unpack"])))
+            self.events.put(("step", ("unpack", "run", "")))
+            try:
+                done = install_files(ROOT, lambda: self.cancelled)
+            except (OSError, zipfile.BadZipFile) as error:
+                self.events.put(("log", f"{SOURCES} -> {ROOT}: {error}"))
+                self.events.put(("step", ("unpack", "fail", str(error))))
+                self.events.put(("end", "fail"))
+                return
+            if not done:
+                self.events.put(("end", "cancel"))
+                return
+            self.events.put(("step", ("unpack", "ok", "")))
+            if self.cancelled:
+                self.events.put(("end", "cancel"))
+                return
+        cmd =[python_exe(), "-u", str(ROOT / "tools" / "make_build.py")] + self.args
         extra = {"creationflags": 0x08000000} if WIN else {"start_new_session": True}
         env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
         try:
@@ -262,6 +356,9 @@ class App:
         self.root.resizable(False, False)
         self.set_icon()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        if PACKAGED:
+            global ROOT
+            ROOT = default_install()   # its setup.ini, if any, brings back the dump folder of the last build
         self.settings = Settings()
         self.events = queue.Queue()
         self.build = None
@@ -274,7 +371,9 @@ class App:
     def set_icon(self):
         """The game icon on the window and the taskbar. On Windows the sizes the screen's scaling asks for are loaded
         from the .ico and given to the window (Tk would stretch its 16 or 32 pixel one, which looks blurred)."""
-        ico, png = ROOT / "assets" / "icon.ico", ROOT / "assets" / "icon.png"
+        ico, png = BUNDLE / "assets" / "icon.ico", BUNDLE / "assets" / "icon.png"
+        if (HERE / "icon.ico").is_file():   # the Windows package carries it in installer/
+            ico = HERE / "icon.ico"
         try:
             if not WIN:
                 self.icon = tkinter.PhotoImage(file=str(png))
@@ -310,18 +409,32 @@ class App:
         s = self.settings.values
         intro = T["intro"]
         installed = game_ready()
-        if installed:
+        if installed and not PACKAGED:
             intro += "\n\n" + T["update_note"]
         ttk.Label(f, text=intro, wraplength=WIDTH, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 14))
-        ttk.Label(f, text=T["folder"]).grid(row=2, column=0, columnspan=3, sticky="w")
+        self.inputs = []
+        self.install = tkinter.StringVar(value=str(ROOT))
+        if PACKAGED:   # where the game goes; the repository copy builds where it is
+            place = ttk.Frame(f)
+            place.grid(row=2, column=0, columnspan=3, sticky="we", pady=(0, 12))
+            place.columnconfigure(0, weight=1)
+            ttk.Label(place, text=T["install_folder"]).grid(row=0, column=0, columnspan=2, sticky="w")
+            entry = ttk.Entry(place, textvariable=self.install, width=70)
+            entry.grid(row=1, column=0, sticky="we", pady=(2, 2))
+            button = ttk.Button(place, text=T["browse"], command=self.choose_install)
+            button.grid(row=1, column=1, sticky="e", padx=(8, 0), pady=(2, 2))
+            self.install_note = ttk.Label(place, wraplength=WIDTH, justify="left")
+            self.install_note.grid(row=2, column=0, columnspan=2, sticky="w")
+            self.inputs += [entry, button]
+        ttk.Label(f, text=T["folder"]).grid(row=3, column=0, columnspan=3, sticky="w")
         self.folder = tkinter.StringVar(value=s["game_dir"])
         self.folder_entry = ttk.Entry(f, textvariable=self.folder, width=70)
-        self.folder_entry.grid(row=3, column=0, columnspan=2, sticky="we", pady=(2, 6))
+        self.folder_entry.grid(row=4, column=0, columnspan=2, sticky="we", pady=(2, 6))
         self.folder_button = ttk.Button(f, text=T["browse"], command=self.choose_folder)
-        self.folder_button.grid(row=3, column=2, sticky="e", padx=(8, 0), pady=(2, 6))
+        self.folder_button.grid(row=4, column=2, sticky="e", padx=(8, 0), pady=(2, 6))
 
         found = ttk.Frame(f)
-        found.grid(row=4, column=0, columnspan=3, sticky="w", pady=(0, 12))
+        found.grid(row=5, column=0, columnspan=3, sticky="w", pady=(0, 12))
         self.found = []
         for i, name in enumerate(("base", "update", "dlc", "keys")):
             mark = ttk.Label(found, width=2)
@@ -331,14 +444,14 @@ class App:
             self.found.append((name, mark, text))
 
         box = ttk.LabelFrame(f, text=T["targets"], padding=(10, 6))
-        box.grid(row=5, column=0, columnspan=3, sticky="we")
+        box.grid(row=6, column=0, columnspan=3, sticky="we")
         box.columnconfigure(0, weight=1)
         self.windows = tkinter.BooleanVar(value=s["windows"] == "1")
         self.deck = tkinter.BooleanVar(value=s["deck"] == "1")
         self.with_romfs = tkinter.BooleanVar(value=s["with_romfs"] == "1")
         self.send = tkinter.StringVar(value="ssh" if s["send"] == "1" else "copy")
         self.host = tkinter.StringVar(value=s["deck_host"])
-        self.inputs = [self.folder_entry, self.folder_button]
+        self.inputs += [self.folder_entry, self.folder_button]
         note = {"foreground": "#666", "wraplength": WIDTH - 40, "justify": "left"}
         row = 0
         if WIN:
@@ -379,10 +492,10 @@ class App:
         self.inputs += [copy, ssh, first, self.host_entry]
 
         self.bar = ttk.Progressbar(f, maximum=1000)
-        self.bar.grid(row=6, column=0, columnspan=3, sticky="we", pady=(16, 4))
+        self.bar.grid(row=7, column=0, columnspan=3, sticky="we", pady=(16, 4))
         self.status = tkinter.StringVar()
         self.status_label = ttk.Label(f, textvariable=self.status, wraplength=WIDTH, justify="left")
-        self.status_label.grid(row=7, column=0, columnspan=3, sticky="w")
+        self.status_label.grid(row=8, column=0, columnspan=3, sticky="w")
 
         self.log_frame = ttk.Frame(f)
         self.log = tkinter.Text(self.log_frame, height=14, width=80, wrap="none", font=("Consolas", 9), state="disabled",
@@ -394,7 +507,7 @@ class App:
         self.log_frame.columnconfigure(0, weight=1)
 
         buttons = ttk.Frame(f)
-        buttons.grid(row=9, column=0, columnspan=3, sticky="we", pady=(14, 0))
+        buttons.grid(row=10, column=0, columnspan=3, sticky="we", pady=(14, 0))
         buttons.columnconfigure(2, weight=1)
         self.details_button = ttk.Button(buttons, text=T["details"], command=self.toggle_details)
         self.details_button.grid(row=0, column=0, padx=(0, 8))
@@ -407,6 +520,7 @@ class App:
         self.close_button.grid(row=0, column=4)
         f.columnconfigure(0, weight=1)
         self.folder.trace_add("write", lambda *change: self.refresh())
+        self.install.trace_add("write", lambda *change: self.refresh())
         self.steps = []
         self.refresh()
 
@@ -430,6 +544,14 @@ class App:
                            foreground="#1a7f37" if ok else ("#666" if optional else "#c62828"))
             text.configure(text=f"{T[name]}: {detail}")
         self.files_ok = ((found["base"] and found["update"]) or found["nsp"] >= 2) and found["keys"]
+        if PACKAGED:
+            text = self.install.get().strip().strip('"')
+            problem = install_problem(text)
+            there = not problem and game_ready(Path(text))
+            self.install_note.configure(text=problem or (T["installed_here"] if there else ""),
+                                        foreground="#c62828" if problem else "#666")
+            if not self.build:
+                self.main_button.configure(text=T["update"] if there else T["build"])
         if self.deck.get():
             self.deck_panel.grid()
         else:
@@ -445,12 +567,20 @@ class App:
         if path:
             self.folder.set(str(Path(path)))
 
+    def choose_install(self):
+        path = filedialog.askdirectory(parent=self.root, title=T["install_title"], initialdir=self.install.get() or None)
+        if path:
+            folder = Path(path)
+            if folder.is_dir() and any(folder.iterdir()) and not ours(folder):   # e.g. D:\Games: a folder inside it
+                folder = folder / "AgeOfCalamityRecomp"
+            self.install.set(str(folder))
+
     def toggle_details(self):
         if self.log_frame.winfo_ismapped():
             self.log_frame.grid_remove()
             self.details_button.configure(text=T["details"])
         else:
-            self.log_frame.grid(row=8, column=0, columnspan=3, sticky="we", pady=(8, 0))
+            self.log_frame.grid(row=9, column=0, columnspan=3, sticky="we", pady=(8, 0))
             self.details_button.configure(text=T["hide_details"])
             self.log.see("end")
 
@@ -483,6 +613,18 @@ class App:
             return messagebox.showwarning(T["window"], T["need_target"], parent=self.root)
         if deck and self.send.get() == "ssh" and not self.host.get().strip():
             return messagebox.showwarning(T["window"], T["need_host"], parent=self.root)
+        if PACKAGED:
+            text = self.install.get().strip().strip('"')
+            problem = install_problem(text)
+            if problem:
+                return messagebox.showwarning(T["window"], problem, parent=self.root)
+            global ROOT
+            ROOT = Path(text)
+            self.settings.path = ROOT / "setup.ini"
+            try:
+                ROOT.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                return messagebox.showwarning(T["window"], str(error), parent=self.root)
         self.save_choices()
         s = self.settings.values
         args = ["--game-dir", s["game_dir"]]
@@ -693,7 +835,17 @@ class App:
         self.root.destroy()
 
 
+def prepare(args):
+    """RecompLauncher's prepare step (recomplauncher.json): the package is the install, so sources.zip is unpacked in
+    place, then make_build.py runs with the same arguments, its output on this console."""
+    if PACKAGED:
+        install_files(BUNDLE, lambda: False)
+    return subprocess.call([python_exe(), "-u", str(ROOT / "tools" / "make_build.py"), *args], cwd=str(ROOT))
+
+
 def main():
+    if "--prepare" in sys.argv[1:]:
+        return prepare(sys.argv[1:])
     if WIN:
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(1)

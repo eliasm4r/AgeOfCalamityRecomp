@@ -6,6 +6,9 @@ First beta of AgeOfCalamityRecomp: Hyrule Warriors: Age of Calamity (update 1.3.
 Deck from your own copy of the game.
 
 ### Setup
+- The Windows download is an installer: the zip holds only the setup, which asks where to put the game
+  (`%LOCALAPPDATA%\AgeOfCalamityRecomp` by default) and builds it there. The extracted zip can be deleted afterwards;
+  a newer zip installs over the same folder.
 - A plain setup window, started by `AgeOfCalamityRecomp Setup.exe` on Windows and `setup.sh` on Linux: the folder with
   your NSPs and `prod.keys` with a check mark for each file found, the platforms, a progress bar in percent and the
   log behind **Show details**. Where Smart App Control refuses the setup exe, `python/Setup (if blocked).exe` opens the
@@ -13,11 +16,12 @@ Deck from your own copy of the game.
 - It is an installer only: the game's settings are in the game (F1, or Minus + Plus on a controller). Run it again on
   a folder that already holds the game and **Update** installs the new version over it, redoing only what changed and
   keeping your saves and settings.
-- The Windows build uses the whole PC: a first build takes about 9 minutes on an 8-core PC, then about 18 minutes to
-  prepare the shaders.
-- **Shaders prepared before play**: every one of the game's 40,727 shaders is translated and built into the graphics
-  driver's cache by the setup, so a fight does not stop to build them. Without it, the first seconds of each fight
-  skipped about 170 draws (objects missing, effects blinking) and stalled for up to 700 ms.
+- The Windows build uses the whole PC: a first install takes about 20 minutes on an 8-core PC with an NVIDIA card,
+  the shader preparation included, and the progress bar follows it to the end. A dump on another disk is read in
+  place instead of being copied first.
+- **Shaders prepared before play**: every one of the game's 40,727 shaders is translated by the setup (and, on AMD,
+  built into the graphics driver's cache), so a fight does not stop to translate them. Without it, the first seconds
+  of each fight skipped about 170 draws (objects missing, effects blinking) and stalled for up to 700 ms.
 - With an NVIDIA RTX graphics card the setup downloads NVIDIA's DLSS library (`nvngx_dlss.dll` 310.9.1, from NVIDIA's
   DLSS SDK repository, checked against its pinned hash).
 - The game goes in the Start Menu, and on the desktop unless the box is unticked, with its own icon.

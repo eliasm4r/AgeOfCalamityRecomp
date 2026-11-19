@@ -1,25 +1,30 @@
 """Builds the downloadable packages for a GitHub release: one for Windows, one for Linux.
 
-Each package is the repository at HEAD (git archive: our code, the setup in setup/, no game data) plus what a player's
-PC cannot be asked to build before the setup runs:
+The sources are the repository at HEAD (git archive: our code, the setup in setup/, no game data) plus what a player's
+PC cannot be asked to build before the setup runs: prebuilt/hactool/ (hactool 1.4.0, ISC, for the RomFS merge) and
+prebuilt/xlate/ (the shader translator, Ryujinx 1.3.2 + our patches, MIT, so nobody needs .NET).
 
-  Windows  AgeOfCalamityRecomp-<v>-Windows.zip
+  Windows  AgeOfCalamityRecomp-<v>-Windows.zip: an installer, as WondersBeyondRecomp's is
              AgeOfCalamityRecomp Setup.exe     setup/launcher.c with the game icon: starts python/Setup (if blocked).exe
              python/Setup (if blocked).exe     the setup itself: pythonw.exe under another name (its signature kept, so
-                                               Smart App Control lets it start), whose name makes setup/sitecustomize.py
-                                               open setup/setup.py
+                                               Smart App Control lets it start), whose name makes sitecustomize.py open
+                                               installer/setup.py
              python/                           Python 3.13 embeddable + Tcl/Tk (tcltk.msi) + cryptography, lz4, numpy
                                                (runs the setup, make_build.py, the dump extraction, the C generator)
-             prebuilt/hactool/win-x64/         hactool 1.4.0 (ISC) for the RomFS merge
-             prebuilt/xlate/{win,linux}-x64/   the shader translator (Ryujinx 1.3.2 + our patches, MIT), so nobody
-                                               needs .NET: win-x64 for AgeOfCalamityRecomp.exe, linux-x64 for the Deck build in WSL
-  Linux    AgeOfCalamityRecomp-<v>-Linux.tar.gz
-             prebuilt/hactool/linux-x64/, prebuilt/xlate/linux-x64/ (the setup is setup.sh, with the system python3)
+             installer/                        setup.py, texts.py, sitecustomize.py, icon.ico, and sources.zip: the
+                                               sources with prebuilt/{hactool/win-x64, xlate/win-x64, xlate/linux-x64}
+                                               (linux-x64 for the Deck build in WSL), unpacked by the setup into the
+                                               install folder the player picks
+             LICENSE, THIRD_PARTY_NOTICES.md, recomplauncher.json
+  Linux    AgeOfCalamityRecomp-<v>-Linux.tar.gz: the sources as they are, with prebuilt/hactool/linux-x64 and
+           prebuilt/xlate/linux-x64 (the setup is setup.sh, with the system python3)
 
 Run on Windows in MSYS2 UCRT64, from a clean commit, with the development WSL distro set up (its ~/AgeOfCalamityRecomp-build has the
 Linux translator, its venv has pip):
 
   python3 tools/make_release.py [--wsl-distro archlinux] [--win-xlate C:/AgeOfCalamityRecomp-win/host] [--allow-dirty]
+  python tools/make_release.py --windows-only [--win-xlate DIR]   # no WSL: the Windows zip without the Linux
+                                                                  # translator (no Deck build), with a Python that has pip
   python tools/make_release.py --local    # only AgeOfCalamityRecomp Setup.exe and python/ in this folder, to try the setup
 
 Output in build/release/; the sha256 of each package is printed and written next to it.
@@ -52,9 +57,14 @@ GIT = next((g for g in ("C:/Program Files/Git/cmd/git.exe",) if Path(g).is_file(
 # tools/ and recomp/ are listed (no module name is in both). Python reads python313._pth (the DLL's name) before a
 # ._pth named after the exe, so this one file also serves "Setup (if blocked).exe": setup/ is listed for its
 # sitecustomize.py, which opens the setup only when the exe's name does not start with "python".
-PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\setup\n..\\tools\n..\\recomp\nimport site\n"
+PTH = "python313.zip\n.\nLib\nLib\\site-packages\n..\\installer\n..\\setup\n..\\tools\n..\\recomp\nimport site\n"
 SETUP_EXE = "AgeOfCalamityRecomp Setup"   # setup/launcher.c, with the game icon
 SIGNED = "Setup (if blocked)"             # python/pythonw.exe under another name, its signature kept
+# What the Windows installer carries besides python/ and the sources: (path at HEAD, path in the package)
+INSTALLER = [("setup/setup.py", "installer/setup.py"), ("setup/texts.py", "installer/texts.py"),
+             ("setup/sitecustomize.py", "installer/sitecustomize.py"), ("assets/icon.ico", "installer/icon.ico"),
+             ("LICENSE", "LICENSE"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+             ("recomplauncher.json", "recomplauncher.json")]
 
 
 def sh(cmd, **kw):
@@ -159,6 +169,37 @@ def write_zip(path: Path, files: list) -> None:
             z.writestr(zi, data)
 
 
+def zip_bytes(files: list) -> bytes:
+    """A zip of (path, mode, bytes) as it is, without the top folder: installer/sources.zip."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for name, mode, data in sorted(files):
+            zi = zipfile.ZipInfo(name, date_time=time.localtime()[:6])
+            zi.external_attr = (0o100000 | mode) << 16
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(zi, data)
+    return buf.getvalue()
+
+
+def download_wheels(stage: Path) -> Path:
+    """The Windows wheels, with this Python's pip."""
+    wheels = stage / "wheels"
+    shutil.rmtree(wheels, ignore_errors=True)
+    sh([sys.executable, "-m", "pip", "download", "-q", "--only-binary=:all:", "--platform", "win_amd64",
+        "--python-version", "3.13", "--implementation", "cp", "-d", wheels, *WHEELS])
+    return wheels
+
+
+def windows_package(tree: list, prebuilt: list, wheels: Path, stage: Path) -> list:
+    """The installer: python/, the two setup exes, installer/ with sources.zip (tree + prebuilt), the licences."""
+    by_name = {n: d for n, _, d in tree}
+    python = python_embed(wheels, stage)
+    files = python + setup_exe(python, stage)
+    files += [(dst, 0o644, by_name[src]) for src, dst in INSTALLER]
+    files.append(("installer/sources.zip", 0o644, zip_bytes(tree + prebuilt)))
+    return files
+
+
 def write_tgz(path: Path, files: list) -> None:
     now = int(time.time())
     with tarfile.open(path, "w:gz", compresslevel=9) as t:
@@ -176,11 +217,7 @@ def install_local() -> int:
     """AgeOfCalamityRecomp Setup.exe and python/ in this folder, as the Windows package has them, so a copy of the repository
     starts the setup the same way (both are ignored by git)."""
     stage = OUT / "stage"
-    wheels = stage / "wheels"
-    shutil.rmtree(wheels, ignore_errors=True)
-    sh([sys.executable, "-m", "pip", "download", "-q", "--only-binary=:all:", "--platform", "win_amd64",
-        "--python-version", "3.13", "--implementation", "cp", "-d", wheels, *WHEELS])
-    python = python_embed(wheels, stage)
+    python = python_embed(download_wheels(stage), stage)
     for name, _, data in python + setup_exe(python, stage):
         dst = ROOT / name
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -197,6 +234,8 @@ def main() -> int:
     ap.add_argument("--allow-dirty", action="store_true", help="package HEAD even with uncommitted changes")
     ap.add_argument("--local", action="store_true",
                     help="only put AgeOfCalamityRecomp Setup.exe and python/ into this folder (Windows, any Python with pip)")
+    ap.add_argument("--windows-only", action="store_true",
+                    help="no WSL: only the Windows zip, without the Linux translator (any Python with pip)")
     args = ap.parse_args()
     if args.local:
         return install_local()
@@ -209,24 +248,27 @@ def main() -> int:
     stage = OUT / "stage"
     stage.mkdir(exist_ok=True)
 
-    # The translator must match the sources at HEAD (its identity is a hash of them; tools/build_xlate.py). Computed
-    # in WSL, where the translator is built: on Windows Python sorts paths without case, which changes the hash.
-    ident = subprocess.run(["wsl", "-d", args.wsl_distro, "-e", "bash", "-lc",
-                            f"cd '{wsl_path(ROOT)}' && python3 -c 'import sys; sys.path.insert(0, \"tools\"); "
-                            f"import build_xlate; print(build_xlate.identity())'"],
-                           check=True, capture_output=True, text=True).stdout.strip().splitlines()[-1]
+    # The translators must match the sources at HEAD (their identity is a hash of them; tools/build_xlate.py).
+    sys.path.insert(0, str(ROOT / "tools"))
+    import build_xlate
+    ident = build_xlate.identity()
     print(f"translator identity: {ident[:16]}")
 
-    # Linux parts, made in WSL: hactool, the Linux translator, and the Windows wheels (pip download)
-    s = wsl_path(stage)
-    hsrc = wsl_path(ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0")
-    wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && "
-                         f"bash tools/build_hactool_linux.sh '{hsrc}' '{s}/hactool-linux' && "
-                         f"mkdir -p '{s}/xlate-linux' && cp ~/AgeOfCalamityRecomp-build/xlate/xlate ~/AgeOfCalamityRecomp-build/xlate/xlate.id "
-                         f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/AgeOfCalamityRecomp/bin/python -m pip download -q "
-                         f"--only-binary=:all: --platform win_amd64 --python-version 3.13 --implementation cp "
-                         f"-d '{s}/wheels' {' '.join(WHEELS)}")
-    for idf in (stage / "xlate-linux/xlate.id", args.win_xlate / "xlate.id"):
+    if args.windows_only:
+        wheels = download_wheels(stage)
+    else:
+        # Linux parts, made in WSL: hactool, the Linux translator, and the Windows wheels (pip download)
+        s = wsl_path(stage)
+        hsrc = wsl_path(ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0")
+        wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && "
+                             f"bash tools/build_hactool_linux.sh '{hsrc}' '{s}/hactool-linux' && "
+                             f"mkdir -p '{s}/xlate-linux' && cp ~/AgeOfCalamityRecomp-build/xlate/xlate ~/AgeOfCalamityRecomp-build/xlate/xlate.id "
+                             f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/AgeOfCalamityRecomp/bin/python -m pip download -q "
+                             f"--only-binary=:all: --platform win_amd64 --python-version 3.13 --implementation cp "
+                             f"-d '{s}/wheels' {' '.join(WHEELS)}")
+        wheels = stage / "wheels"
+    ids = [args.win_xlate / "xlate.id"] + ([] if args.windows_only else [stage / "xlate-linux/xlate.id"])
+    for idf in ids:
         got = idf.read_text().strip()
         if got != ident:
             sys.exit(f"ERROR: {idf} is {got[:16]}, the translator sources at HEAD give {ident[:16]}; rebuild the translator")
@@ -236,26 +278,26 @@ def main() -> int:
     print(f"repository at HEAD: {len(tree)} files, {sum(len(d) for _, _, d in tree) / 1e6:.1f} MB")
     lic = (ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0/LICENSE").read_bytes()
 
-    # ---- Windows
-    win = list(tree)
-    python = python_embed(stage / "wheels", stage)
-    win += python + setup_exe(python, stage)
-    win.append(("prebuilt/hactool/win-x64/hactool.exe", 0o755, (ROOT / "toolchain/hactool-1.4.0-win/hactool.exe").read_bytes()))
-    win.append(("prebuilt/hactool/LICENSE", 0o644, lic))
+    # ---- Windows: the installer, whose sources.zip carries the prebuilt tools
+    prebuilt = [("prebuilt/hactool/win-x64/hactool.exe", 0o755,
+                 (ROOT / "toolchain/hactool-1.4.0-win/hactool.exe").read_bytes()),
+                ("prebuilt/hactool/LICENSE", 0o644, lic)]
     for f in ("xlate.exe", "xlate.id"):
-        win.append((f"prebuilt/xlate/win-x64/{f}", 0o755, (args.win_xlate / f).read_bytes()))
-    for f in ("xlate", "xlate.id"):
-        win.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
+        prebuilt.append((f"prebuilt/xlate/win-x64/{f}", 0o755, (args.win_xlate / f).read_bytes()))
+    if not args.windows_only:
+        for f in ("xlate", "xlate.id"):
+            prebuilt.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
+    win = windows_package(tree, prebuilt, wheels, stage)
+    outs = [(OUT / f"AgeOfCalamityRecomp-{version}-Windows.zip", write_zip, win)]
 
-    # ---- Linux
-    lin = list(tree)
-    lin.append(("prebuilt/hactool/linux-x64/hactool", 0o755, (stage / "hactool-linux/hactool").read_bytes()))
-    lin.append(("prebuilt/hactool/LICENSE", 0o644, lic))
-    for f in ("xlate", "xlate.id"):
-        lin.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
-
-    outs = [(OUT / f"AgeOfCalamityRecomp-{version}-Windows.zip", write_zip, win),
-            (OUT / f"AgeOfCalamityRecomp-{version}-Linux.tar.gz", write_tgz, lin)]
+    # ---- Linux: the sources as they are
+    if not args.windows_only:
+        lin = list(tree)
+        lin.append(("prebuilt/hactool/linux-x64/hactool", 0o755, (stage / "hactool-linux/hactool").read_bytes()))
+        lin.append(("prebuilt/hactool/LICENSE", 0o644, lic))
+        for f in ("xlate", "xlate.id"):
+            lin.append((f"prebuilt/xlate/linux-x64/{f}", 0o755, (stage / "xlate-linux" / f).read_bytes()))
+        outs.append((OUT / f"AgeOfCalamityRecomp-{version}-Linux.tar.gz", write_tgz, lin))
     for path, writer, files in outs:
         writer(path, files)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()

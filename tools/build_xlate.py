@@ -41,11 +41,12 @@ def tree_hashes(base: Path) -> dict[str, str]:
     def build_output(rel: Path) -> bool:
         return len(rel.parts) > 2 and rel.parts[0] == "src" and rel.parts[2] in ("obj", "bin")
 
-    return {
-        p.relative_to(base).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(base.rglob("*"))
+    # sorted by the POSIX path string: Windows compares Path objects without case, which would change the order there
+    return dict(sorted(
+        (p.relative_to(base).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest())
+        for p in base.rglob("*")
         if p.is_file() and not build_output(p.relative_to(base))
-    }
+    ))
 
 
 def mng_pin() -> str:
@@ -119,7 +120,7 @@ def identity() -> str:
     """sha256 over the translator's inputs, in a fixed order: path and content hash of each file."""
     h = hashlib.sha256()
     files = [Path(__file__).resolve(), XLATE / "Program.cs", XLATE / "xlate.csproj",
-             *sorted((XLATE / "patches").glob("*.patch"))]
+             *sorted((XLATE / "patches").glob("*.patch"), key=lambda p: p.name)]
     for f in files:
         h.update(f"{f.name}\0{hashlib.sha256(f.read_bytes()).hexdigest()}\n".encode())
     for rel, digest in tree_hashes(VENDOR).items():
