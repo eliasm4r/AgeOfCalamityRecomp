@@ -117,7 +117,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_HDR_UI] = "HUD and menu brightness",
     [UI_MENU_HDR_UI_DESC] = "Nits of the HUD's and this menu's white.",
     [UI_MENU_SHADOW_SCALE] = "Shadow resolution",
-    [UI_MENU_SHADOW_SCALE_DESC] = "Draws the sun's shadow maps this many times larger on each side than the game's 960x960: "
+    [UI_MENU_SHADOW_SCALE_DESC] = "Draws the sun's shadow map this many times larger on each side than the game's 1024x2048: "
                                   "sharper shadow edges and leaf shadows. Takes effect at the next start.",
     [UI_MENU_PCSS] = "Soft shadows",
     [UI_MENU_PCSS_DESC] = "Sun shadows sharp where an object meets the ground and softer the further the shadow falls "

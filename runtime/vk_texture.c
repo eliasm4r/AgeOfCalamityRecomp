@@ -317,10 +317,14 @@ static int shadow_scale(void) {
 static int shadow_scale_of(const nvn_texdesc *d, const TexVkFormat *f, uint32_t samples, int mirrored) {
     int scale = shadow_scale();
     if (scale == 1 || mirrored || samples > 1 || d->format != NVN_FORMAT_DEPTH16 || !f->depth) return 1;
-    if (d->target != NVN_TEXTURE_TARGET_2D_ARRAY || d->width != d->height || d->width < 256 || d->depth < 2 || d->depth > 4)
-        return 1;
+    // Astral Chain: square arrays of 2 to 4 layers. Age of Calamity: one 1024x2048 DEPTH16 2D atlas for the sun (its
+    // only DEPTH16 target in a Hyrule Field battle frame, ACR_DUMP), its cascades one above the other.
+    int ac = d->target == NVN_TEXTURE_TARGET_2D_ARRAY && d->width == d->height && d->width >= 256 && d->depth >= 2 &&
+             d->depth <= 4;
+    int aoc = d->target == NVN_TEXTURE_TARGET_2D && d->width >= 512 && (d->height == d->width || d->height == 2 * d->width);
+    if (!ac && !aoc) return 1;
     uint32_t most = vk_ctx()->props.limits.maxImageDimension2D;
-    return d->width * (uint32_t)scale <= most ? scale : 1;
+    return (d->width > d->height ? d->width : d->height) * (uint32_t)scale <= most ? scale : 1;
 }
 
 // defer_init: the caller records the image's first transition (init_image or alias_copy).
