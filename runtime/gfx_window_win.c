@@ -314,11 +314,22 @@ static void window_main(void *arg) {
         // The frame was measured at the system DPI; the window may have opened on a monitor at another scale.
         plat_xchg32(&g_dpi, (int32_t)GetDpiForWindow(g_hwnd));
         outer_size(g_hwnd, cw, ch, &ow, &oh);
-        SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, ow, oh, SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        // With ACR_FULLSCREEN the window is made fullscreen while still hidden, and shown so, behind the user's windows
+        // and without the focus. Shown first at its windowed size and made fullscreen at the first activation, it
+        // showed the picture in the top left corner, then growing to the whole screen as the swapchain followed.
+        int fs_now = !background && cfg_fullscreen();
+        SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, ow, oh, SWP_NOMOVE | SWP_NOACTIVATE | (fs_now ? 0 : SWP_SHOWWINDOW));
+        if (fs_now) {
+            g_background = 1;   // toggle_fullscreen without taking the focus or the top of the z-order
+            toggle_fullscreen(g_hwnd);
+            g_background = 0;
+            g_saved_place.showCmd = SW_SHOWNORMAL;   // read while hidden: F11 must bring the window back shown
+            SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
         if (!background) {
             FLASHWINFO fw = {.cbSize = sizeof fw, .hwnd = g_hwnd, .dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG};
             FlashWindowEx(&fw);
-            g_fs_pending = cfg_fullscreen();
+            g_fs_pending = cfg_fullscreen() && !fs_now;
         }
         note_applied();
         refresh_rate_update(g_hwnd, 1);

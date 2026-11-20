@@ -139,8 +139,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                           "scale. Takes effect after a restart.",
     [UI_MENU_DLSS_DLAA] = "DLAA (native)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance",
-    [UI_MENU_FXAA] = "Game anti-aliasing (FXAA)",
-    [UI_MENU_FXAA_DESC] = "The game's own FXAA edge smoothing. It blurs fine detail a little; with DLAA on it is not needed.",
+    [UI_MENU_FXAA] = "Anti-aliasing (FXAA)",
+    [UI_MENU_FXAA_DESC] = "Smooths the jagged edges of the 3D scene; the HUD stays sharp. It softens fine detail a little. Off while DLAA or DLSS is on.",
 
     [UI_MENU_FPS_LIMIT] = "Frame rate limit",
     [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws. The game moves a fixed step per frame at 30, "

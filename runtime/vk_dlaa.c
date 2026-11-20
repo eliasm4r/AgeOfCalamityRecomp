@@ -219,7 +219,7 @@ void vk_dlaa_init(void) {
 // work on the anti-aliased picture.
 // Upscaling (a scene smaller than the output: ACR_DLSS quality/balanced/performance, or the game's own 5/6): measured
 // at a 960x536 scene, 1920x1080 output, the bloom and its composite write back into the light target at the scene size,
-// then one full-screen draw (the FXAA shader below, which also scales) reads it into an output-sized R11G11B10F target
+// then one full-screen draw (the scaling shader below) reads it into an output-sized R11G11B10F target
 // with no depth, and the HUD is drawn over that target at the output size. DLSS runs at the begin of that pass: it
 // reads the light target and its result is blitted into the pass's target, whose scaling draw is then skipped. The
 // HUD, drawn afterwards into the same target, is never jittered nor passed through DLSS.
@@ -753,18 +753,13 @@ void vk_dlaa_frame(void) {
     D.cam_addr = 0;
 }
 
-// ---------------------------------------------------------------- the game's FXAA (ACR_FXAA, live)
-// Astral Chain's FXAA is two full-screen passes after the bloom, just before the HUD: one copies the scene target into a
-// scratch target, the other draws the anti-aliased result back over the scene (found by diffing frame dumps with the
-// game's own switch, ModelSceneExtensionParam EnableFXAA, on and off). With fxaa = 0 the draws of that second pass's
-// fragment shader are skipped, so the scene reaches the HUD as it was. Shaders are known by the FNV-1a hash of their
-// SPIR-V, as vk_dump.c names them; a translator change gives new hashes and the switch then does nothing.
-// With a scene smaller than the output (the game's own 5/6 render scale, or a DLSS mode) the same shader draws the
-// scaled picture into the output-sized target, in a pass without the depth attachment the in-place FXAA has: there it
-// is always drawn, whatever fxaa says (skipping it would leave the 3D picture out), unless DLSS already wrote that
-// target this frame.
-// The stock translator's hash, and the one with tools/xlate patch 0010 (PCSS, PR #89) applied.
-static const uint64_t FXAA_FS[] = {0xf450003ebeb3dc52ull, 0x0a12f4bc2a9a4fbeull};
+// ---------------------------------------------------------------- the scaling draw (DLSS modes)
+// With a scene smaller than the output (the game's own 5/6 render scale, or a DLSS mode) one full-screen draw scales the
+// picture into the output-sized target, in a pass without depth (see "where DLAA runs" above). When DLSS already wrote
+// that target this frame the draw is skipped. Shaders are known by the FNV-1a hash of their SPIR-V, as vk_dump.c names
+// them: Astral Chain's stock translator and the one with tools/xlate patch 0010 (PCSS, PR #89).
+// FXAA on the 3D picture is vk_fxaa.c.
+static const uint64_t SCALE_FS[] = {0xf450003ebeb3dc52ull, 0x0a12f4bc2a9a4fbeull};
 
 static uint64_t spirv_hash(const GfxShader *s) {
     static struct { const GfxShader *s; uint64_t h; } tab[8192];
@@ -783,20 +778,15 @@ static uint64_t spirv_hash(const GfxShader *s) {
 }
 
 int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) {
-    static uint64_t frame_read = ~0ull;
-    static int fxaa = 1;
-    uint64_t f = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
-    if (f != frame_read) frame_read = f, fxaa = cfg_bool("ACR_FXAA");   // once a frame: the menu switches it live
-    if (fxaa && !D.up) return 0;   // nothing to skip: no shader lookup per draw at the defaults
-    if (!fs) return 0;
+    if (!D.up || !fs || ex->depth.image) return 0;
     uint64_t h = spirv_hash(fs);
-    if (h != FXAA_FS[0] && h != FXAA_FS[1]) return 0;
-    if (!ex->depth.image) return D.up;   // the scaling pass
-    return !fxaa;
+    return h == SCALE_FS[0] || h == SCALE_FS[1];
 }
 
+int vk_dlaa_ran(void) { return D.done || D.up; }
+
 #else
-// NGX is loaded as a Windows DLL; elsewhere DLAA, the DLSS modes' scaling and the FXAA switch do nothing.
+// NGX is loaded as a Windows DLL; elsewhere DLAA and the DLSS modes' scaling do nothing.
 #include "vk_dlaa.h"
 
 int vk_dlaa_wanted(void) { return 0; }
@@ -811,4 +801,5 @@ void vk_dlaa_frame(void) {}
 void vk_dlaa_draw(VkExec *ex) { (void)ex; }
 void vk_dlaa_viewport(VkExec *ex, VkViewport *v) { (void)ex, (void)v; }
 int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs) { (void)ex, (void)fs; return 0; }
+int vk_dlaa_ran(void) { return 0; }
 #endif
