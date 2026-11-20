@@ -263,7 +263,7 @@ static void perf_open(void) {
     fprintf(perf_f, "# AgeOfCalamityRecomp %s performance log, one row a second (tools/perf_view.py)\n", rt_port_version);
     // the settings in effect, so sessions played with different ones can be told apart (tools/perf_view.py shows them)
     static const char *const keys[] = {"ACR_DEVICE_PROFILE", "ACR_OUTPUT_RES", "ACR_RENDER_SCALE", "ACR_OPERATION_MODE",
-                                       "ACR_FPS_LIMIT", "ACR_REPLAY_ASYNC", "ACR_SHADOW_RES", "ACR_VK_PRESENT"};
+                                       "ACR_FPS_LIMIT", "ACR_REPLAY_ASYNC", "ACR_SHADOW_SCALE", "ACR_VK_PRESENT"};
     fprintf(perf_f, "# settings:");
     for (size_t i = 0; i < sizeof keys / sizeof *keys; i++) {
         const char *v = cfg_value(keys[i]);

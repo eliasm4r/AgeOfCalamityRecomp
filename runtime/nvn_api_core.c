@@ -594,29 +594,15 @@ NVN_API(nvnQueueFinish) {
     }
     gfx_backend()->cpu_synced(gfx_backend()->fence_done());
 }
-// ---------- Submit latency guard for Astral Chain 1.2.1's per-object uniform double buffer
-// NVN starts the GPU when QueueSubmitCommands returns, within microseconds; here the replay into Vulkan takes 15-30 ms
-// first, and the GPU reads uniform memory only after it. The game's producer f_70008c6460 (thread 0x103e, p56)
-// rewrites the half of its per-object uniform blocks that was front until the last flip, 14-23 ms after the submit
-// that still reads it, with no fence: on hardware the GPU has read that half by then. Here the rewrite lands inside
-// the replay, and that frame draws other objects' matrices (phantom rocks, flat far field).
-// The guard makes the producer wait, at its commit point, until the newest submit has been replayed and completed.
-// lod_entered / lod_issued count submits that entered QueueSubmitCommands / reached the back end; lod_fence holds
-// the fence of the last LOD_RING. ACR_LOD_GUARD=0 turns the wait off.
-#define LOD_RING 64
-static uint64_t lod_entered, lod_issued, lod_fence[LOD_RING];
-
 // void nvnQueueSubmitCommands(NVNqueue *q, int n, const NVNcommandHandle *handles): replayed on this thread with its
 // core given up (section 2.2), or queued for the replay thread (ACR_REPLAY_ASYNC, vk_backend.c); the newest fence
-// value is what QueueFenceSync records. With the queue the fence covers replay and GPU, so the LOD guard below waits
-// for both.
+// value is what QueueFenceSync records.
 NVN_API(nvnQueueSubmitCommands) {
     queue_t *q = arg_p(c, 0);
     int n = (int)arg_x(c, 1);
     const uint64_t *h = arg_p(c, 2);
     if (n < 0 || (n && !h)) rt_fatal("nvn: QueueSubmitCommands with %d handles at %p", n, (const void *)h);
     NVN_BLOCKING();
-    uint64_t no = __atomic_add_fetch(&lod_entered, 1, __ATOMIC_SEQ_CST);
     q->submits++;
     uint64_t f;
     if (gfx_replay_async()) {
@@ -645,26 +631,5 @@ NVN_API(nvnQueueSubmitCommands) {
     if (submit_wait) gfx_backend()->fence_wait(f, UINT64_MAX);
     uint64_t prev = __atomic_load_n(&last_fence, __ATOMIC_RELAXED);
     while (f > prev && !__atomic_compare_exchange_n(&last_fence, &prev, f, 1, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {}
-    __atomic_store_n(&lod_fence[no % LOD_RING], f, __ATOMIC_RELAXED);
-    __atomic_store_n(&lod_issued, no, __ATOMIC_SEQ_CST);
 }
 
-// The producer (1.2.1 main f_70008c6460) releases the read lock on obj+0x538 at lr 0x70008c70c8; when
-// [obj+0x529] == [obj+0x528] (x19 = obj) it goes on to rewrite the back half. Waits off the core, at most ~400 ms.
-static void obs_release_read(Cpu *c) {
-    uint64_t lr = c->x[30], obj = c->x[19];
-    rt_original(c);
-    if (lr != 0x70008c70c8ull) return;
-    static int on = -1;
-    if (on < 0) {
-        on = cfg_bool("ACR_LOD_GUARD");
-    }
-    if (!on || *(volatile uint8_t *)(uintptr_t)(obj + 0x528) != *(volatile uint8_t *)(uintptr_t)(obj + 0x529)) return;
-    uint64_t e = __atomic_load_n(&lod_entered, __ATOMIC_SEQ_CST);
-    if (!e) return;
-    NVN_BLOCKING();
-    for (int i = 0; i < 200 && __atomic_load_n(&lod_issued, __ATOMIC_SEQ_CST) < e; i++) plat_sleep_ms(1);
-    uint64_t f = __atomic_load_n(&lod_fence[e % LOD_RING], __ATOMIC_RELAXED);
-    if (gfx_backend()->fence_done() < f) gfx_backend()->fence_wait(f, 200000000ull);
-}
-HOST_OBSERVER("_ZN2nn2os15ReleaseReadLockEPNS0_20ReaderWriterLockTypeE", obs_release_read);

@@ -283,10 +283,8 @@ static void walk_get(void) {
     }
 }
 
-// The mouse camera as a right-stick sample, held for the whole presented frame. Under `lock`. The sample is divided by
-// the camera speed factor the game runs with (camera_speed.c, cam_speed_applied), which multiplies every right-stick
-// turn rate, so ACR_MOUSE_SENS alone sets the mouse's speed; below 1 the sample stays within the stick's range, so the
-// mouse's top speed drops with the factor.
+// The mouse camera as a right-stick sample, held for the whole presented frame. Under `lock`. The sample stays within
+// the stick's range.
 static void mouse_camera(int32_t out[2]) {
     static uint64_t frame = ~0ull, t0;
     static int32_t held[2];
@@ -309,7 +307,7 @@ static void mouse_camera(int32_t out[2]) {
             held[0] = held[1] = 0;   // frames stopped: do not hold a deflection
         }
     }
-    double k = cam_speed_applied(), x = held[0] / k, y = held[1] / k, len = sqrt(x * x + y * y);
+    double x = held[0], y = held[1], len = sqrt(x * x + y * y);
     if (len > STICK_MAX) x *= STICK_MAX / len, y *= STICK_MAX / len;
     out[0] = (int32_t)lround(x);
     out[1] = (int32_t)lround(y);
@@ -380,7 +378,7 @@ static int pad_layout_get(void) {
     const char *set = cfg_value("ACR_PAD_LAYOUT");
     pad_layout = input_pad_layout_pick(set, pad_east_a);
     if (pad_layout != was)
-        rt_log("input: gamepad layout %s (pad_layout = %s)", pad_layout == PAD_LAYOUT_XBOX ? "xbox" : "nintendo", set);
+        rt_log("input: gamepad layout %s (pad_layout = %s)", pad_layout == PAD_LAYOUT_XBOX ? "A bottom" : "A right", set);
     plat_xchg32(&pad_layout_shown, pad_layout);
     return pad_layout;
 }

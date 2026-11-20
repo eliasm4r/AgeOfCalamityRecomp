@@ -46,14 +46,16 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
   NVIDIA DLSS / DLAA on RTX cards, anisotropic filtering, shadow quality, colour settings and HDR.
 - **Steam Deck profile**: detected by itself, with full screen 1280x800, handheld render mode and a quick menu on
   **L3+R3**.
-- **Keyboard and mouse** with every key rebindable, and **Xbox, PlayStation and Switch controllers** with a Nintendo
-  or Xbox button layout, Xbox button prompts, rumble and motion.
+- **Keyboard and mouse** and **Xbox, PlayStation and Switch controllers**, every key and button rebindable (the
+  controller plays as on the Switch, A on the right button, until you remap it), Xbox or PlayStation button prompts
+  that change at once, rumble and motion.
 - **All four DLCs** mounted from your own files, including *Pulse of the Ancients* and *Guardian of Remembrance*.
 - **Options menu on F1** with graphics, sound, controls, amiibo, mods and cheats, and a **performance overlay on F10**.
 - **Built-in problem reports**: one button makes a zip with the logs and your PC's details, nothing of the game.
 
-The game runs at its own **30 fps**. A 60 fps mode needs three of the game's clocks patched together and is in the
-works.
+The game runs at its own **30 fps** or at **60 fps** (Frame rate, in the quick menu or the full menu, applied at
+once), at the right speed in both. **120, 144 and 240 fps are experimental**: still in development and not optimized
+yet (above 60 the game steps by the real time of each frame, as in the TotK recomp; busy battles stay under 120).
 
 <br>
 
@@ -142,7 +144,7 @@ stays under your fingers on AZERTY. The table names the Switch buttons; the game
 one does.
 
 <table>
-<tr><th>Switch button</th><th>Keyboard and mouse</th><th>Controller (Xbox layout)</th></tr>
+<tr><th>Switch button</th><th>Keyboard and mouse</th><th>Controller (Xbox pad)</th></tr>
 <tr><td>Left stick</td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td><td>Left stick</td></tr>
 <tr><td>Right stick (camera)</td><td>Mouse, or arrows</td><td>Right stick</td></tr>
 <tr><td>Y</td><td><kbd>Left click</kbd> or <kbd>L</kbd></td><td><kbd>X</kbd></td></tr>
@@ -184,11 +186,11 @@ ships only this project's own code and turns your files into the game on your PC
 </details>
 
 <details>
-<summary><b>Why 30 fps on my 144 Hz screen?</b></summary>
+<summary><b>Why no 120 or 144 fps on my 144 Hz screen?</b></summary>
 <br>
 
-The game moves a fixed step per frame at 30 fps, as on the Switch. Drawing frames faster would make the whole game run
-faster. The 60 fps mode needs three of the game's clocks patched together, and it is being worked on.
+The game steps its world by whole 60 Hz vsyncs: two per frame at 30 fps (as on the Switch), one at 60 fps. So 30 and
+60 are the rates it can run at the right speed. 60 fps needs about twice the processor time of 30.
 </details>
 
 <details>

@@ -236,7 +236,6 @@ static void window_settings_live(void) {
     unsigned v = cfg_version();
     if (started && v == seen) return;
     seen = v;
-    res_fov_live();
     const char *e = cfg_value("ACR_VK_PRESENT");
     if (!started || strncmp(e, present, sizeof present - 1)) {
         snprintf(present, sizeof present, "%s", e);
@@ -272,6 +271,57 @@ static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
 
 const char *gfx_window_present_mode(void) { return __atomic_load_n(&g_present_got, __ATOMIC_ACQUIRE); }
 
+// ---- ACR_TRACE=present, with VK_KHR_present_wait: when each frame reached the screen. Every present carries an ID
+// (VkPresentIdKHR); a thread waits on them in order (vkWaitForPresentKHR) and takes the time each one returns, and
+// every 300 frames the log gets how many refreshes of the display the frames stayed on screen. A steady 30 fps on a
+// 240 Hz monitor is 8 each; frames of 7 and 9 in turn are a stutter (or the waiting thread woke late once: the counts
+// are noisy, compare runs, not single windows). The swapchain is replaced or destroyed under g_pw_mx, which the waiter
+// holds while it waits (at most 50 ms).
+static PlatMutex g_pw_mx = PLAT_MUTEX_INIT;
+static uint64_t g_pw_id;          // the last present ID handed out (g_pl)
+static uint64_t g_pw_first;       // the first ID presented on the current swapchain (g_pw_mx)
+static int g_pw_thread;
+
+static void pw_main(void *arg) {
+    (void)arg;
+    uint64_t want = 0, last_t = 0, hist[16] = {0}, n = 0;
+    VkSwapchainKHR sc = VK_NULL_HANDLE;
+    PFN_vkWaitForPresentKHR wait_present =
+        (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(vk_ctx()->device, "vkWaitForPresentKHR");
+    if (!wait_present) return;
+    for (;;) {
+        plat_mutex_lock(&g_pw_mx);
+        if (g_sc != sc || want < g_pw_first) sc = g_sc, want = g_pw_first, last_t = 0;
+        uint64_t top = __atomic_load_n(&g_pw_id, __ATOMIC_ACQUIRE);
+        VkResult r = VK_NOT_READY;
+        if (sc && want && want <= top) r = wait_present(vk_ctx()->device, sc, want, 50000000ull);
+        plat_mutex_unlock(&g_pw_mx);
+        if (r == VK_SUCCESS) {
+            uint64_t t = kern_now_ns();
+            double hz = gfx_window_refresh_hz();
+            if (last_t && hz > 0) {
+                int k = (int)lround((double)(t - last_t) * 1e-9 * hz);
+                hist[k < 0 ? 0 : k > 15 ? 15 : k]++;
+                if (++n == 300) {
+                    char line[256];
+                    int o = 0;
+                    for (int i = 0; i < 16; i++)
+                        if (hist[i]) o += snprintf(line + o, sizeof line - (size_t)o, " %d:%llu", i, (unsigned long long)hist[i]);
+                    rt_log("present: on screen over 300 frames, refreshes of %.2f Hz per frame (count):%s", hz, line);
+                    memset(hist, 0, sizeof hist);
+                    n = 0;
+                }
+            }
+            last_t = t;
+            want++;
+        } else if (r == VK_TIMEOUT || r == VK_NOT_READY) {
+            if (r == VK_NOT_READY) plat_sleep_ms(1);
+        } else {
+            want++;   // out of date, lost: the next one
+        }
+    }
+}
+
 // Queues the present of a blit vk_present_blit left waiting (g_pl held). A swapchain rebuild and the next blit flush it
 // first; the device release drops it.
 static void flip_locked(void) {
@@ -281,9 +331,21 @@ static void flip_locked(void) {
     VkPresentInfoKHR pi = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, .waitSemaphoreCount = 1,
                            .pWaitSemaphores = &g_render_done[g_flip_idx], .swapchainCount = 1, .pSwapchains = &g_sc,
                            .pImageIndices = &g_flip_idx};
+    VkPresentIdKHR pid = {.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR, .swapchainCount = 1};
+    uint64_t id = 0;
+    if (vk_ctx()->has_present_wait && (rt_trace & RT_TRACE_PRESENT)) {
+        id = g_pw_id + 1;
+        pid.pPresentIds = &id;
+        pi.pNext = &pid;
+        if (!g_pw_thread) {
+            g_pw_thread = 1;
+            plat_thread_spawn(pw_main, NULL, "acr present wait", 0);
+        }
+    }
     vk_queue_lock();
     VkResult r = vkQueuePresentKHR(vk_ctx()->gfx_queue, &pi);
     vk_queue_unlock();
+    if (id) __atomic_store_n(&g_pw_id, id, __ATOMIC_RELEASE);
     vk_device_fault_report(r);
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) plat_xchg32(&g_dirty, 1);
 }
@@ -326,6 +388,8 @@ static int create_swapchain(void) {
     if (caps.maxImageCount && count > caps.maxImageCount) count = caps.maxImageCount;
     if (count > 8) count = 8;
 
+    plat_mutex_lock(&g_pw_mx);   // the present-wait thread is not waiting on the old swapchain
+    g_pw_first = g_pw_id + 1;
     vk_queue_lock();
     vkDeviceWaitIdle(c->device);
     VkSwapchainKHR old = g_sc;
@@ -342,6 +406,7 @@ static int create_swapchain(void) {
         rt_log("gfx: vkCreateSwapchainKHR failed (%d)", (int)r);
         g_sc = old;
         vk_queue_unlock();
+        plat_mutex_unlock(&g_pw_mx);
         return 0;
     }
     for (uint32_t i = 0; i < g_sc_n; i++) {
@@ -350,6 +415,7 @@ static int create_swapchain(void) {
         g_sc_view[i] = VK_NULL_HANDLE;
     }
     if (old) vkDestroySwapchainKHR(c->device, old, NULL);
+    plat_mutex_unlock(&g_pw_mx);
     g_sc_fmt = sf.format;
     g_sc_hdr = hdr;
     vk_hdr_set_active(hdr);
@@ -835,7 +901,10 @@ void gfx_window_release_vk(void) {
             g_sc_view[i] = VK_NULL_HANDLE;
         }
         if (g_pool) vkDestroyCommandPool(c->device, g_pool, NULL);
+        plat_mutex_lock(&g_pw_mx);
         if (g_sc) vkDestroySwapchainKHR(c->device, g_sc, NULL);
+        g_sc = VK_NULL_HANDLE;
+        plat_mutex_unlock(&g_pw_mx);
         if (g_surface) vkDestroySurfaceKHR(c->instance, g_surface, NULL);
         g_sc = VK_NULL_HANDLE; g_surface = VK_NULL_HANDLE; g_pool = VK_NULL_HANDLE; g_sc_n = 0;
         g_started = 0;     // the window and its thread stay; the next gfx_window_start makes a new surface

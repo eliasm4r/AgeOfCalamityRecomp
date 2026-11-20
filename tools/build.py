@@ -187,13 +187,13 @@ RT_FLAGS = ["-O2", "-g", "-Wall", "-fno-strict-aliasing", "-march=x86-64-v3"]
 # -no-pie: the modules' function tables (hundreds of thousands of pointers) need no relocation at load.
 # $ORIGIN: a libSDL3.so.0 next to the executable comes before the system's (the Deck folder).
 LINK_FLAGS = ["-fuse-ld=lld", "-no-pie", "-Wl,-z,noexecstack", "'-Wl,-rpath,$$ORIGIN/lib'"]
-LINK_LIBS = ["-lvulkan", "-lSDL3", "-lopus", "-lvpx", "-lzstd", "-l:libstdc++.a", "-lm", "-lpthread", "-ldl"]
+LINK_LIBS = ["-lvulkan", "-lSDL3", "-lopus", "-lvpx", "-l:libstdc++.a", "-lm", "-lpthread", "-ldl"]
 if WIN:   # as astral-chain-pc-recomp tools/build_game.py (MSYS2 UCRT64), plus the libraries folder_pick_win.cpp needs
     # MSYS2's VMA (newer than 3.4.0) marks nullability on some pointers only: hundreds of warnings per file.
     RT_FLAGS += ["-D_WIN32_WINNT=0x0A00", "-Wno-nullability-completeness"]
     LINK_FLAGS = ["-fuse-ld=lld", "-Wl,--stack,16777216"]
     LINK_LIBS = ["-lpsapi", "-lbcrypt", "-lvulkan-1", "-luser32", "-lgdi32", "-ldwmapi", "-limm32", "-lwinmm", "-lole32",
-                 "-lshell32", "-luuid", "-lSDL3", "-lopus", "-l:libvpx.a", "-l:libzstd.a", "-l:libstdc++.a",
+                 "-lshell32", "-luuid", "-lSDL3", "-lopus", "-l:libvpx.a", "-l:libstdc++.a",
                  "-l:libwinpthread.a"]
 # vk_mem_alloc.h: the system's, else the version TotK Recomp pins (VMA 3.4.0, MIT), downloaded once to
 # toolchain/vma and checked by hash.
@@ -366,11 +366,9 @@ SNIPER_TAR = (f"https://repo.steampowered.com/steamrt-images-sniper/snapshots/{S
               "8f71947035f97925a311b2ed753f22efcf2f13d6f1631945b8e537f8903ce2cf")
 SNIPER_MEMBERS = ["usr/include", "usr/share/pkgconfig", "usr/lib/x86_64-linux-gnu", "usr/lib/gcc/x86_64-linux-gnu",
                   "lib/x86_64-linux-gnu", "lib64"]
-ZSTD_TAR = ("https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz",
-            "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3")
-# Opus and libvpx static from the sysroot (SteamOS has another libvpx.so), zstd static built here, SDL3 dynamic
+# Opus and libvpx static from the sysroot (SteamOS has another libvpx.so), SDL3 dynamic
 # copied to lib/ next to the executable, Vulkan from the system (the loader is stable).
-DIST_LIBS = ["-lvulkan", "-lSDL3", "-l:libopus.a", "-l:libvpx.a", "-l:libzstd.a", "-l:libstdc++.a", "-lm", "-lpthread",
+DIST_LIBS = ["-lvulkan", "-lSDL3", "-l:libopus.a", "-l:libvpx.a", "-l:libstdc++.a", "-lm", "-lpthread",
              "-ldl"]
 GLIBC_MAX = (2, 31)
 
@@ -418,7 +416,7 @@ def sniper_sysroot(work: Path) -> Path:
 
 
 def dist_deps(work: Path, cc: list[str]) -> Path:
-    """<work>/deps: Vulkan 1.4.363 headers and VMA (headers only) and libzstd.a 1.5.7 built against the sysroot."""
+    """<work>/deps: Vulkan 1.4.363 headers and VMA (headers only)."""
     deps = work / "deps"
     inc, lib = deps / "include", deps / "lib"
     inc.mkdir(parents=True, exist_ok=True)
@@ -430,18 +428,6 @@ def dist_deps(work: Path, cc: list[str]) -> Path:
             shutil.copytree(f"/usr/include/{d}", inc / d)
     if not (inc / "vk_mem_alloc.h").is_file():
         shutil.copy(vma_include() / "vk_mem_alloc.h", inc / "vk_mem_alloc.h")
-    if not (lib / "libzstd.a").is_file():
-        tar = fetch(ZSTD_TAR, work / "dl" / "zstd-1.5.7.tar.gz")
-        src = work / "dl" / "zstd-1.5.7"
-        if not src.is_dir():
-            subprocess.run(["tar", "-xf", str(tar), "-C", str(work / "dl")], check=True)
-        print("dist: compilando libzstd.a contra o sysroot")
-        subprocess.run(["make", "-C", str(src / "lib"), f"-j{os.cpu_count() or 4}", "libzstd.a",
-                        f"CC={' '.join(cc)}", "CFLAGS=-O2 -march=x86-64-v3", "ZSTD_LEGACY_SUPPORT=0"],
-                       check=True, stdout=subprocess.DEVNULL)
-        shutil.copy(src / "lib" / "libzstd.a", lib / "libzstd.a")
-        shutil.copy(src / "lib" / "zstd.h", inc / "zstd.h")
-        shutil.copy(src / "lib" / "zstd_errors.h", inc / "zstd_errors.h")
     return deps
 
 

@@ -12,7 +12,7 @@
 #include "vk.h"
 #include "platform/platform.h"
 
-#define R_OK 0u
+#define RES_OK 0u
 #define ST_FREE 0u
 #define ST_STACK 0xBu
 #define PERM_RW 3u
@@ -106,7 +106,7 @@ static void get_info(Cpu *c, uint64_t pc) {
     uint32_t id = (uint32_t)c->x[1];
     uint64_t v = 0;
     if (mem_info(id, &v)) {
-        c->x[0] = R_OK;
+        c->x[0] = RES_OK;
         c->x[1] = v;
         return;
     }
@@ -128,7 +128,7 @@ static void get_info(Cpu *c, uint64_t pc) {
         svc_fatal(c, 0x29, pc, why);
     }
     }
-    c->x[0] = R_OK;
+    c->x[0] = RES_OK;
     c->x[1] = v;
 }
 
@@ -194,7 +194,7 @@ static void svc_body(Cpu *c, uint32_t imm, uint64_t pc) {
         rt_log("guest Break reason %#llx result %#x at %s", (unsigned long long)x[0], result,
                ldr_describe(pc, at, sizeof at));
         if (x[0] & 0x80000000ull) {
-            x[0] = R_OK;
+            x[0] = RES_OK;
             return;
         }
         svc_fatal(c, imm, pc, "Break (the SDK aborted)");
@@ -206,7 +206,7 @@ static void svc_body(Cpu *c, uint32_t imm, uint64_t pc) {
             fflush(stdout);
             rt_log_raw((const char *)(uintptr_t)x[0], n);
         }
-        x[0] = R_OK;
+        x[0] = RES_OK;
         return;
     }
     case 0x29: get_info(c, pc); return;

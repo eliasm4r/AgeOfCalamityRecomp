@@ -159,7 +159,7 @@ int probe_shader(void) {
     char dir[PLAT_PATH_MAX];
     char tmp[PLAT_PATH_MAX];
     if (!plat_temp_dir(tmp, sizeof tmp)) strcpy(tmp, ".");
-    snprintf(dir, sizeof dir, "%s/astralchain-shader-probe-%u", tmp, plat_process_id());
+    snprintf(dir, sizeof dir, "%s/AgeOfCalamityRecomp-shader-probe-%u", tmp, plat_process_id());
     CHECK(plat_setenv("ACR_SHADER_CACHE", dir), "cannot set ACR_SHADER_CACHE");
 
     // pass 1: translate through the service

@@ -53,16 +53,16 @@ void vk_queue_lock(void);
 void vk_queue_unlock(void);
 void res_sizes(unsigned out[2], unsigned scene[2]);
 double frame_step_limit_hz(void);
-int frame_step_realtime(void);
 int vk_dlaa_missing(void);
-int cam_speed_available(void);
 extern const int rt_game_version;
 extern const char rt_port_version[];
 void cheats_frame(uint64_t frame);   // cheats.c
 bool tab_cheats(float scale);        // ui/cheats_tab.cpp; true: restart into the rebuild
+// audren.h pulls in cpu.h through host.h: the one call the Sound tab needs from it, as declared there.
+enum { AUDIO_DEVICE_NAME_MAX = 256 };
+int audio_output_devices(char (*names)[AUDIO_DEVICE_NAME_MAX], int max);
 void ov_operation_mode_changed(void);   // ov_system.c: ACR_OPERATION_MODE changed while the game runs
 void diag_mark_user(void);              // diag.c: a mark in the performance log and a report
-int rt_patch_set(const char *name);     // patches.c: a patch set of the generated C, -1 when this game has none
 }
 
 // Roboto Medium (Apache-2.0, ui/fonts/LICENSE-Roboto.txt) with Latin and Cyrillic glyphs.
@@ -279,10 +279,6 @@ static void title_line(const char *title, const char *right) {
     dl->AddRectFilledMultiColor(ImVec2(xm, p.y), ImVec2(x1, p.y + t), off, on, on, off);
     ImGui::Dummy(ImVec2(0, t));
 }
-
-// A row whose setting needs a patch set this game version has (recomp/patches-*.txt): without it the setting does
-// nothing, so the menu leaves it out; it comes back once the patch is ported.
-static bool has_patch(const char *set) { return rt_patch_set(set) >= 0; }
 
 static void make_context(void) {
     ImGui::CreateContext();
@@ -565,7 +561,7 @@ static void row_output_res(void) {
 }
 
 static void row_render_scale(void) {
-    static const char *const vals[] = {"game", "50", "60", "67", "85", "100"};
+    static const char *const vals[] = {"game", "50", "60", "67", "85", "100", "125", "140"};
     enum { N = sizeof vals / sizeof *vals };
     char shown[N][32];
     const char *names[N];
@@ -577,25 +573,10 @@ static void row_render_scale(void) {
     opt_choice_list("ACR_RENDER_SCALE", UI_MENU_RENDER_SCALE, vals, names, N, UI_MENU_RENDER_SCALE_DESC);
 }
 
-static void row_shadow_res(void) {
-    static const char *const vals[] = {"game", "512", "768", "1024", "1536", "2048"};
-    enum { N = sizeof vals / sizeof *vals };
-    const char *names[N];
-    names[0] = menu_text(UI_MENU_SHADOW_RES_GAME);
-    for (int i = 1; i < N; i++) names[i] = vals[i];
-    opt_choice_list("ACR_SHADOW_RES", UI_MENU_SHADOW_RES, vals, names, N, UI_MENU_SHADOW_RES_DESC);
-}
-
 static void row_shadow_scale(void) {
     static const char *const vals[] = {"1", "2", "3", "4"};
     static const char *const names[] = {"960 (1x)", "1920 (2x)", "2880 (3x)", "3840 (4x)"};
     opt_choice_list("ACR_SHADOW_SCALE", UI_MENU_SHADOW_SCALE, vals, names, 4, UI_MENU_SHADOW_SCALE_DESC);
-}
-
-static void row_shadow_range(void) {
-    static const char *const vals[] = {"100", "150", "200", "300"};
-    static const char *const names[] = {"160 m (1x)", "240 m (1.5x)", "320 m (2x)", "480 m (3x)"};
-    opt_choice_list("ACR_SHADOW_RANGE", UI_MENU_SHADOW_RANGE, vals, names, 4, UI_MENU_SHADOW_RANGE_DESC);
 }
 
 static void row_gpu(void) {
@@ -634,27 +615,13 @@ static void row_game_lang(void) {
     opt_choice_list("ACR_LANG", UI_MENU_GAME_LANG, vals, names, N, UI_MENU_GAME_LANG_DESC, cur);
 }
 
-// The frame limit (frame_rate.c): unset, the older fps60 = 0 still means 30. The monitor choice shows the rate it gives.
+// The frame rate (frame_rate.c): the game's own 30 or 60. Older settings with 40 to 240 or display read as 30 or 60.
+// 30 is the game's own rate; above it the game steps by the real frame time (frame_rate.c). All apply at once.
 static void row_fps_limit() {
-    // 40 and 45: the Steam Deck's screen runs at 40 to 60 Hz (the OLED to 90); 40 divides 40 and 120 Hz evenly
-    static const char *const vals[] = {"30", "40", "45", "60", "90", "120", "144", "display"};
-    static const UiTextId ids[] = {UI_MENU_FPS_30, UI_MENU_FPS_40,  UI_MENU_FPS_45,  UI_MENU_FPS_60,
-                                   UI_MENU_FPS_90, UI_MENU_FPS_120, UI_MENU_FPS_144, UI_MENU_FPS_DISPLAY};
-    enum { N = sizeof vals / sizeof *vals };
-    const char *names[N];
-    for (int i = 0; i < N; i++) names[i] = menu_text(ids[i]);
-    static char display[64];
-    double hz = gfx_window_refresh_hz();
-    if (hz > 0) {
-        snprintf(display, sizeof display, menu_text(UI_MENU_FPS_DISPLAY_HZ), hz);
-        names[N - 1] = display;
-    }
-    const char *set = cfg_get("ACR_FPS_LIMIT"), *old = cfg_get("ACR_FPS60");
-    int cur = (!set || !*set) && old && !strcmp(old, "0") ? 0 : -1;
-    // Without the frame-step patch the game paces itself at 30 (frame_rate.c): a limit above that changes nothing, so
-    // the row says why instead of offering 40 to 240.
-    if (!frame_step_realtime()) opt_disable_next(UI_MENU_QUICK_FPS_LATER);
-    opt_choice_list("ACR_FPS_LIMIT", UI_MENU_FPS_LIMIT, vals, names, N, UI_MENU_FPS_LIMIT_DESC, cur);
+    static const char *const vals[] = {"30", "60", "120", "144", "240"};
+    const char *names[] = {menu_text(UI_MENU_FPS_30), menu_text(UI_MENU_FPS_60), menu_text(UI_MENU_FPS_120),
+                           menu_text(UI_MENU_FPS_144), menu_text(UI_MENU_FPS_240)};
+    opt_choice_list("ACR_FPS_LIMIT", UI_MENU_FPS_LIMIT, vals, names, 5, UI_MENU_FPS_LIMIT_DESC);
 }
 
 // The menu's name of a ACR_VK_PRESENT mode (gfx_window_present_mode); NULL for another.
@@ -719,18 +686,15 @@ static void tab_screen(float scale) {
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
     row_render_scale();
-    if (has_patch("shadow")) row_shadow_res();
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR};
     opt_choice("ACR_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("ACR_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");
     static const UiTextId aspect[] = {UI_MENU_ASPECT_FIT, UI_MENU_ASPECT_STRETCH};
     opt_choice("ACR_ASPECT", UI_MENU_ASPECT, aspect, 2, UI_MENU_ASPECT_DESC);
-    if (has_patch("fov")) opt_slider("ACR_FOV", UI_MENU_FOV, 70, 140, UI_MENU_FOV_DESC, 5, "%.0f %%");
     static const char *const aniso[] = {"game", "2", "4", "8", "16"};
     const char *aniso_names[] = {menu_text(UI_MENU_ANISO_GAME), "2x", "4x", "8x", "16x"};
     opt_choice_list("ACR_ANISO", UI_MENU_ANISO, aniso, aniso_names, 5, UI_MENU_ANISO_DESC);
     row_shadow_scale();
-    if (has_patch("cascade")) row_shadow_range();
     opt_slider("ACR_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     // contact shadows (vk_contact.c) find their passes by Astral Chain's G-buffer layout, not yet matched to this game's
     // frame: the row stays out of the menu (settings.ini still takes contact_shadows) until it is
@@ -739,6 +703,8 @@ static void tab_screen(float scale) {
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
                                     UI_MENU_DLSS_PERFORMANCE};
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);
+    static const UiTextId preset[] = {UI_MENU_DLSS_PRESET_DEFAULT, UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J};
+    opt_choice("ACR_DLSS_PRESET", UI_MENU_DLSS_PRESET, preset, 3, UI_MENU_DLSS_PRESET_DESC);
     opt_toggle("ACR_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);
@@ -752,6 +718,7 @@ static void tab_screen(float scale) {
 static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
+    opt_toggle("ACR_FRAME_QUEUE", UI_MENU_FRAME_QUEUE, UI_MENU_FRAME_QUEUE_DESC);
     row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     if (opt_choice("ACR_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC))
@@ -760,26 +727,44 @@ static void tab_game(float scale) {
     opt_end();
 }
 
+// The output device row: System default (ACR_AUDIO_DEVICE unset) and the playback devices SDL lists, by name. The list
+// is read again when the tab comes into view and once a second while it shows, so a device plugged in or out appears
+// without reopening the menu. A chosen device that is unplugged keeps its name as the value; the mixer plays on the
+// system default meanwhile (audio_mixer.c output_worker).
+enum { MAX_AUDIO_DEVICES = 16 };
+static char g_audio_names[MAX_AUDIO_DEVICES][AUDIO_DEVICE_NAME_MAX];
+static int g_audio_n;
+
+static void row_audio_device(void) {
+    static int last_frame = -2;
+    static double next_list;
+    int frame = ImGui::GetFrameCount();
+    double now = ImGui::GetTime();
+    if (frame != last_frame + 1 || now >= next_list) {
+        g_audio_n = audio_output_devices(g_audio_names, MAX_AUDIO_DEVICES);
+        next_list = now + 1.0;
+    }
+    last_frame = frame;
+    const char *vals[MAX_AUDIO_DEVICES + 1], *names[MAX_AUDIO_DEVICES + 1];
+    vals[0] = "";
+    names[0] = menu_text(UI_MENU_AUDIO_DEVICE_DEFAULT);
+    for (int i = 0; i < g_audio_n; i++) vals[i + 1] = names[i + 1] = g_audio_names[i];
+    int cur = strcmp(cfg_value("ACR_AUDIO_DEVICE"), "default") ? -1 : 0;   // "default" in settings.ini is the first row
+    opt_choice_list("ACR_AUDIO_DEVICE", UI_MENU_AUDIO_DEVICE, vals, names, g_audio_n + 1, UI_MENU_AUDIO_DEVICE_DESC,
+                    cur);
+}
+
 static void tab_sound(float scale) {
     opt_begin("##sound", scale);
     opt_slider("ACR_VOLUME", UI_MENU_VOLUME, 0, 100, UI_MENU_VOLUME_DESC, 5, "%.0f %%");
     opt_toggle("ACR_MUTE", UI_MENU_MUTE, UI_MENU_MUTE_DESC);
     opt_toggle("ACR_MUTE_BACKGROUND", UI_MENU_MUTE_BG, UI_MENU_MUTE_BG_DESC);
+    row_audio_device();
     opt_end();
 }
 
 // A confirmation is open (Controls: restart, Advanced: reset): B and Esc close it, not the menu; L / R stay on the page.
 static bool g_modal;
-
-// The note under the layout: Automatic with a gamepad connected, the layout it picked ("in use: Xbox"). NULL otherwise.
-static const char *pad_layout_note(void) {
-    int got = input_pad_layout();
-    if (got < 0 || strcmp(cfg_value("ACR_PAD_LAYOUT"), "auto")) return nullptr;
-    static char note[96];
-    snprintf(note, sizeof note, menu_text(UI_MENU_PAD_LAYOUT_IN_USE),
-             menu_text(got == PAD_LAYOUT_XBOX ? UI_MENU_PAD_LAYOUT_XBOX : UI_MENU_PAD_LAYOUT_NINTENDO));
-    return note;
-}
 
 // The action a key presses, or -1: the walk key is a key of its own, but Shift is B in the default bindings, and a
 // walk key that also presses something walks and does that something at the same time. The bindings come from a
@@ -816,23 +801,20 @@ static void row_walk_key(void) {
                     -1, n);
 }
 
-// The note under the prompts. The settings name a folder of prompts (input_prompts_folder: the prompts and the pad
-// layout, as a layout that puts A on the right button needs the face buttons named the other way round), but the game
-// reads its fonts and UI archive once at start (romfs.c overlay_init). While the folder in use differs: "files
-// missing" when the setup did not write the one asked for, why it was left out at start (damaged, a game resolution
-// that is not 16:9, a RomFS mod with the same files, ACR_ROMFS_PATCHES), else "prompts change after restart", and only then
-// *restart is set: a restart would bring the prompts asked for. NULL when they match.
+// The note under the prompts. The settings name a file of prompts (input_prompts_folder: the prompts and the pad
+// layout, as a layout that puts A on the right button needs the face buttons named the other way round); a change
+// applies at once (romfs_prompts_tick: the game's button atlas uploads again). While the file in use differs: "files
+// missing" when the setup did not write the one asked for, "damaged" when it failed its check at start, else "prompts
+// change after restart" (not expected any more), and only then *restart is set. NULL when they match.
 static const char *prompts_note(bool *restart) {
     *restart = false;
+    romfs_prompts_tick();   // a change just made applies now (the game's button textures upload again)
     const char *layout = cfg_value("ACR_PAD_LAYOUT"), *used = romfs_prompts();
     const char *want = input_prompts_folder(input_prompts_pick(cfg_get("ACR_PROMPTS"), layout), layout);
     if (want == used || (want && used && !strcmp(want, used))) return nullptr;
     if (want && !romfs_prompts_ready(want)) return menu_text(UI_MENU_PROMPTS_MISSING);
     switch (romfs_prompts_off(want)) {
     case ROMFS_PROMPTS_FAILED: return menu_text(UI_MENU_PROMPTS_FAILED);
-    case ROMFS_PROMPTS_SHAPE: return menu_text(UI_MENU_PROMPTS_OFF_SHAPE);
-    case ROMFS_PROMPTS_MODS: return menu_text(UI_MENU_PROMPTS_OFF_MODS);
-    case ROMFS_PROMPTS_PATCHES: return menu_text(UI_MENU_PROMPTS_OFF_PATCHES);
     default: *restart = true; return menu_text(UI_MENU_PROMPTS_RESTART);
     }
 }
@@ -879,13 +861,18 @@ static void restart_confirm(void) {
 
 static void tab_controls(float scale) {
     opt_begin("##controls", scale);
-    static const UiTextId layout[] = {UI_MENU_PAD_LAYOUT_AUTO, UI_MENU_PAD_LAYOUT_NINTENDO, UI_MENU_PAD_LAYOUT_XBOX};
-    opt_choice("ACR_PAD_LAYOUT", UI_MENU_PAD_LAYOUT, layout, 3, UI_MENU_PAD_LAYOUT_DESC, pad_layout_note());
-    static const UiTextId prompts[] = {UI_MENU_PROMPTS_NINTENDO, UI_MENU_PROMPTS_XBOX};
-    bool restart;
-    const char *note = prompts_note(&restart);
-    opt_choice("ACR_PROMPTS", UI_MENU_PROMPTS, prompts, 2, UI_MENU_PROMPTS_DESC, note);
-    bool ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
+    // No layout row: the gamepad always plays as on the Switch (A on the right button); the remapping rows change it.
+    // The prompts row only when the setup wrote the prompts (tools/make_prompts.py; without them the row would only
+    // say "files missing"), or they are in use.
+    bool ask = false;
+    if (romfs_prompts() || romfs_prompts_ready("prompts-xbox.bin") || romfs_prompts_ready("prompts-xbox-label.bin") ||
+        romfs_prompts_ready("prompts-ps.bin") || romfs_prompts_ready("prompts-ps-label.bin")) {
+        static const UiTextId prompts[] = {UI_MENU_PROMPTS_NINTENDO, UI_MENU_PROMPTS_XBOX, UI_MENU_PROMPTS_PLAYSTATION};
+        bool restart;
+        const char *note = prompts_note(&restart);
+        opt_choice("ACR_PROMPTS", UI_MENU_PROMPTS, prompts, 3, UI_MENU_PROMPTS_DESC, note);
+        ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
+    }
     opt_toggle("ACR_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
     opt_slider("ACR_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("ACR_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
@@ -905,9 +892,6 @@ static void tab_controls(float scale) {
     opt_toggle("ACR_INVERT_RY", UI_MENU_INVERT_RY, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_LX", UI_MENU_INVERT_LX, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_LY", UI_MENU_INVERT_LY, UI_MENU_INVERT_DESC);
-    // camera_speed.c reads TotK's camera pack, which this game does not have: the row shows once it is ported
-    if (cam_speed_available() > 0)
-        opt_slider("ACR_STICK_SENS", UI_MENU_STICK_SENS, 0.1f, 3, UI_MENU_STICK_SENS_DESC, 0.05f, "%.2f");
     opt_slider("ACR_MOUSE_SENS", UI_MENU_MOUSE_SENS, 0, 10, UI_MENU_MOUSE_SENS_DESC, 0.1f, "%.1f");
     row_walk_key();
     opt_slider("ACR_WALK_SCALE", UI_MENU_WALK_SCALE, 0.2f, 0.9f, UI_MENU_WALK_SCALE_DESC, 0.01f, "%.2f");
@@ -1003,7 +987,6 @@ static void tab_advanced(float scale) {
     opt_toggle("ACR_ASTC_BC", UI_MENU_ASTC_BC, UI_MENU_ASTC_BC_DESC);
 
     opt_group(UI_MENU_GROUP_FIXES);
-    opt_toggle("ACR_LOD_GUARD", UI_MENU_LOD_GUARD, UI_MENU_LOD_GUARD_DESC);
     opt_toggle("ACR_FIX_C0", UI_MENU_FIX_C0, UI_MENU_FIX_C0_DESC);
     opt_toggle("ACR_FIX_ZERO", UI_MENU_FIX_ZERO, UI_MENU_FIX_ZERO_DESC);
     opt_toggle("ACR_BIND_SKIP", UI_MENU_BIND_SKIP, UI_MENU_BIND_SKIP_DESC);
@@ -1176,10 +1159,10 @@ static void layout_quick(uint32_t w, uint32_t h, float scale) {
     opt_begin("##quick_rows", scale);
     if (g_quick_focus.exchange(0)) opt_focus_first();
 
-    static const char *const fps_vals[] = {"30", "60"};
-    const char *fps_names[] = {menu_text(UI_MENU_FPS_30), menu_text(UI_MENU_FPS_60)};
-    opt_disable_next(UI_MENU_QUICK_FPS_LATER);
-    opt_choice_list("ACR_FPS_LIMIT", UI_MENU_QUICK_FPS, fps_vals, fps_names, 2, UI_MENU_QUICK_FPS_DESC);
+    static const char *const fps_vals[] = {"30", "60", "120", "144", "240"};
+    const char *fps_names[] = {menu_text(UI_MENU_FPS_30), menu_text(UI_MENU_FPS_60), menu_text(UI_MENU_FPS_120),
+                               menu_text(UI_MENU_FPS_144), menu_text(UI_MENU_FPS_240)};
+    opt_choice_list("ACR_FPS_LIMIT", UI_MENU_QUICK_FPS, fps_vals, fps_names, 5, UI_MENU_QUICK_FPS_DESC);
 
     static const char *const res_vals[] = {"handheld", "docked"};
     const char *res_names[] = {menu_text(UI_MENU_QUICK_RES_HANDHELD), menu_text(UI_MENU_QUICK_RES_DOCKED)};

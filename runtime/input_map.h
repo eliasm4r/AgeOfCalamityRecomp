@@ -81,22 +81,25 @@ int input_map_bind(const char *button, const char *list);
 // Applies the ACR_BIND_<action> settings (cfg_get) over the defaults: at start, and again when one of them changes.
 void input_map_configure(void);
 
-// The layout for a ACR_PAD_LAYOUT value: "nintendo" or "xbox" (any case); "xbox_prompts", 0.1.9's name for the Nintendo
-// layout with the Xbox prompts, maps the buttons as "nintendo". Anything else ("auto", NULL) picks Nintendo when the
+// The layout for a ACR_PAD_LAYOUT value: "nintendo" or "xbox" (any case); "playstation" is the Xbox layout (cross,
+// the bottom button, is A); "xbox_prompts", 0.1.9's name for the Nintendo layout with the Xbox prompts, maps the
+// buttons as "nintendo". Anything else ("auto", NULL) picks Nintendo when the
 // pad's east button is labelled A (a Switch Pro Controller, a GuliKit) and Xbox otherwise.
 int input_pad_layout_pick(const char *setting, int east_labelled_a);
 
 // Button prompts (ACR_PROMPTS): the controller whose buttons the game's prompts show. Nintendo: the game's own. Xbox:
-// LB RB LT RT, Menu, View and a d-pad cross for the other buttons, and the face buttons named by the label of the
-// button the pad layout presses (runtime/romfs.c overlay_init, tools/make_romfs_patches.py --prompts).
-enum { PROMPTS_NINTENDO, PROMPTS_XBOX };
-// The prompts for a ACR_PROMPTS value ("nintendo" or "xbox", any case). Unset or empty: Xbox while the pad layout
+// LB RB LT RT, Menu and View for the other buttons, and the face buttons named by the label of the button the pad
+// layout presses; PlayStation: L1 R1 L2 R2, Options and Create, and cross, circle, square and triangle the same way
+// (runtime/prompts.c, tools/make_prompts.py).
+enum { PROMPTS_NINTENDO, PROMPTS_XBOX, PROMPTS_PLAYSTATION };
+// The prompts for a ACR_PROMPTS value ("nintendo", "xbox" or "playstation", any case). Unset or empty: Xbox while the pad layout
 // setting is "xbox_prompts", else Nintendo.
 int input_prompts_pick(const char *prompts, const char *pad_layout);
-// The folder next to romfs-index.bin that holds those prompts for a ACR_PAD_LAYOUT value, NULL for the game's own. The
-// Nintendo layout plays an Xbox pad by position, so its folder names the face buttons the other way round
-// (romfs-patches-xbox: the right button does A and is labelled B); xbox and auto put every Switch button on the button
-// labelled with its letter (auto picks the layout per pad by its labels), so they share romfs-patches-xbox-label.
+// The file next to romfs-index.bin that holds those prompts for a ACR_PAD_LAYOUT value, NULL for the game's own. The
+// Nintendo layout plays an Xbox pad by position, so its file names the face buttons the other way round
+// (prompts-xbox.bin: the right button does A and is labelled B; prompts-ps.bin: it is circle); xbox, playstation and
+// auto put A on the bottom button (auto picks the layout per pad by its labels), so they share prompts-xbox-label.bin
+// (prompts-ps-label.bin: A is cross).
 const char *input_prompts_folder(int prompts, const char *pad_layout);
 // down[pad] != 0 for the gamepad inputs held. Returns the Switch button bits (0..15) the layout's pad table presses.
 uint64_t input_map_pad_buttons(const uint8_t down[PAD_COUNT], int layout);

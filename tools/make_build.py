@@ -24,6 +24,8 @@ other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setu
   winxlate  xlate.exe, the shader translator for Windows (prebuilt/xlate/win-x64 from the release package)
   winbuild  AgeOfCalamityRecomp.exe in MSYS2 UCRT64 (tools/build.py guest host)
   windist   dist/windows: AgeOfCalamityRecomp.exe, its DLLs, the translator, exefs/, romfs/ (a hard link), romfs-index.bin
+  prompts   the Xbox and PlayStation button prompts (tools/make_prompts.py): the game's button textures from romfs.bin
+            with Xbox or PlayStation buttons drawn over the Switch ones, into each game folder this build made
   dlss      dist/windows/nvngx_dlss.dll, NVIDIA's DLSS library, downloaded from NVIDIA's DLSS SDK repository when the PC
             has an NVIDIA RTX GPU (skipped otherwise; a failed download warns and the game runs without DLAA)
   shaders   every game shader translated into dist/windows/shader-cache and built into the GPU driver's cache
@@ -74,6 +76,7 @@ TEXT = {
     "t_winxlate": "Prepare the shader translator",
     "t_winbuild": "Build for Windows",
     "t_windist": "Put the Windows game folder together",
+    "t_prompts": "Draw the Xbox and PlayStation button prompts",
     "t_dlss": "Download NVIDIA DLSS",
     "t_shaders": "Prepare the shaders (once, so fights do not stutter)",
     "t_send": "Send to the Steam Deck",
@@ -105,6 +108,7 @@ TEXT = {
     "dlss_kept": "a DLSS library of another version is already in the game folder: kept",
     "dlss_failed": "WARNING: NVIDIA DLSS could not be downloaded ({0}). The game runs without DLAA; the next build tries again",
     "shaders_kept": "the shaders are already prepared for this translator",
+    "prompts_failed": "WARNING: the Xbox and PlayStation button prompts could not be made ({0}); the game keeps the Switch ones",
     # what tools/extract.py inventory found wrong in the dump ("@@PROBLEM <code> <detail>")
     "p_base": "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)",
     "p_update": "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder",
@@ -150,7 +154,7 @@ class StepFailed(Exception):
 # "emitted a/b chunks" and ninja's "[n/m]" lines move it forward. In a step that compiles, the first ninja run is the
 # game code (most of the time) and any later one is the runtime.
 WEIGHTS = {"check": 5, "tools": 120, "extract": 30, "romfs": 300, "dlc": 60, "deck": 900, "wingen": 40,
-           "winxlate": 5, "winbuild": 480, "windist": 15, "dlss": 10, "shaders": 400, "send": 60}
+           "winxlate": 5, "winbuild": 480, "windist": 15, "prompts": 3, "dlss": 10, "shaders": 400, "send": 60}
 NINJA = re.compile(r"^\[(\d+)/(\d+)\] ")
 EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
 # The shaders step (gfx_shader.c, vk_pipeline.c): first the translation ("prepare: n of m pairs", the whole step on
@@ -609,6 +613,23 @@ def s_windist(args) -> str:
     return "ok"
 
 
+# ---- Xbox and PlayStation button prompts (tools/make_prompts.py, runtime/prompts.c): made from the player's own romfs.bin, next to
+# romfs-index.bin of each game folder. A failure only warns: the game then shows the Switch prompts.
+def s_prompts(args) -> str:
+    folders = [ROOT / "dist" / d for d, on in (("windows", args.windows), ("steamdeck", args.deck)) if on]
+    folders = [f for f in folders if f.is_dir()]
+    if not folders:
+        return "skip"
+    for f in folders:
+        p = capture([tool_python(), ROOT / "tools/make_prompts.py", "--image", ROOT / "build/v130/romfs.bin", "--out", f])
+        text = (p.stdout + p.stderr).decode("utf-8", "replace").strip()
+        if p.returncode:
+            out(tr("prompts_failed", text.splitlines()[-1] if text else p.returncode))
+            return "skip"
+        out(text)
+    return "ok"
+
+
 # ---- NVIDIA DLSS (runtime/vk_dlaa.c): NGX loads nvngx_dlss.dll from the folder of AgeOfCalamityRecomp.exe. The package
 # does not ship it: NVIDIA's own copy comes from the DLSS SDK repository (NVIDIA RTX SDK license) at a pinned tag and
 # hash, as TotK's installer gets it.
@@ -702,6 +723,9 @@ def main() -> int:
         plan.append(("deck", s_deck))
     if args.windows:
         plan += [("wingen", s_wingen), ("winxlate", s_winxlate), ("winbuild", s_winbuild), ("windist", s_windist)]
+    if args.deck or args.windows:
+        plan.append(("prompts", s_prompts))
+    if args.windows:
         if WIN:
             plan += [("dlss", s_dlss), ("shaders", s_shaders)]
     if args.send:

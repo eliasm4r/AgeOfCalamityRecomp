@@ -287,14 +287,6 @@ void ov_operation_mode_test_tick(void);                    // ov_system.c: ACR_T
 void ov_peek_tick(void);                                   // ov_system.c: ACR_PEEK diagnosis, at every present
 void ov_scan_tick(void);                                   // ov_system.c: ACR_SCAN_F32 (diagnosis)
 
-// ---- camera speed (camera_speed.c): ACR_STICK_SENS
-float cam_speed_wanted(void);                              // the factor ACR_STICK_SENS asks for, 0.1 to 3
-float cam_speed_applied(void);                             // the factor in effect: 1 until romfs.c serves the pack
-int cam_speed_available(void);                             // the RomFS has the pack: 1, 0, -1 before the index loads
-int cam_pack_build(const void *in, size_t n, const void *zsdic, size_t zsdic_n, void **out, size_t *out_n);
-                                                           // Pack/Actor/PlayerCamera.pack.zs with the camera speeds
-                                                           // multiplied, malloc'd; 0 = factor 1 or cannot (logged)
-void cam_pack_served(void);                                // romfs.c serves the multiplied pack
 // ---- game resolution (resolution.c): ACR_OUTPUT_RES, ACR_RENDER_SCALE
 uint64_t res_heap_extra_bytes(void);                       // added to the application pool (mem_init), 2 MiB steps
 uint64_t res_heap_extra_kib(void);                         // the targets' growth over the game's sizes; 0 = none
@@ -302,10 +294,7 @@ void res_init(void);                                       // after rt_patches_i
 float res_dlss_lod_bias(void);                             // ACR_DLSS upscaling: texture LOD bias (<= 0)
 void res_sizes(unsigned out[2], unsigned scene[2]);      // the output and scene sizes in effect (the game's own
                                                            // until res_init switched the sets on)
-int res_is_16x9(unsigned w, unsigned h);                   // within 1% of 16:9 (the test res_init and romfs.c share)
-int res_wants_wide_overlay(const unsigned out[2]);         // not 16:9 on a game version with the camera aspect patch
 void res_wanted(unsigned out[2]);                          // the output size ACR_OUTPUT_RES asks for
-void res_fov_live(void);                                   // ACR_FOV to the camera (set fov); on a settings change
 // ---- code patches (patches.c) and the frame step (frame_rate.c)
 void rt_patches_init(void);                                // after ldr_load: switches from the environment, the patch
                                                            // page committed; logs the sets
@@ -315,10 +304,10 @@ void rt_patch_disable(int set);                            // before the guest s
 void rt_patch_switch(int set, int on);                     // at run time (live settings): each site takes the new code
                                                            // the next time it runs
 void *rt_patch_page(void);                                 // the page the patched code reads (NULL without the table)
-void frame_step_init(void);                                // after rt_patches_init: the real-time step's first value
-int frame_step_realtime(void);                             // the real-time step is on: presents ignore the interval
-uint64_t frame_step_cap_ns(void);                          // with the real-time step: the shortest frame in ns
-double frame_step_limit_hz(void);                         // the frame rate the limit gives (overlay); 0 unknown
+void frame_step_init(void);                                // reads the frame rate setting (ACR_FPS_LIMIT)
+int frame_step_interval(void);                             // vsyncs per game frame: 2 at 30 fps, 1 above
+uint64_t frame_step_period_ns(void);                       // the time between two presents the setting asks for
+double frame_step_limit_hz(void);                         // the frame rate set, 30 to 240 (overlay); 0 unknown
 int64_t frame_step_world_us(void);                         // game time since the loaded save's first frame, -1 before
                                                            // (ACR_FPS_LIMIT, live)
 uint64_t frame_step_ticks(void);                           // game time since the first present in 60 Hz ticks (input scripts)

@@ -50,12 +50,15 @@ typedef struct Mixer {
     float *buf; int nbuf, frame;
     int *offset;                                   // first mix buffer of each mix id
     SplitInfo *split; int nsplit; SplitDest *dest; int ndest;
-    SDL_AudioStream *stream; int device_ok, rate;
+    SDL_AudioStream *stream; int device_ok, rate;  // stream: output_open's, then the output worker's alone
+    SDL_AudioDeviceID open_id, failed_id;          // the device the stream plays on; the last one that failed to open
+    PlatThread *worker; PlatEvent wake;            // output_worker, NULL until a device is chosen; wake: a cfg change
+    _Atomic int worker_quit; unsigned watch_ver;   // watch_ver: the render thread's last cfg_version (output_watch)
     float ring[RING_FRAMES * 2];
     _Atomic uint64_t wr, rd, underruns, overruns, missing_frames, callback_frames, callback_nonzero, skipped_frames;
     _Atomic int playing; int ready;                // ready: the callback's own state
-    int target, period;                            // output target and device period, frames (output_open)
-    uint64_t stall_ns;
+    int target, period;                            // output target and device period, frames (output_timing)
+    uint64_t stall_ns;                             // target and stall_ns: set by a device switch, read by the pacing
     _Atomic uint64_t pulled_ns;                    // kern_now_ns of the device's last request, 0 before the first
     _Atomic uint64_t flush_until; _Atomic unsigned stop_epoch; unsigned callback_epoch;
     EffectState *effect; int *effect_order; unsigned effect_reported;
@@ -178,6 +181,61 @@ static void SDLCALL sdl_pull(void *user, SDL_AudioStream *stream, int additional
     }
 }
 
+// ACR_AUDIO_DEVICE (from TotK's recomp): the playback device by the name SDL reports (SDL_GetAudioDeviceName), since
+// SDL's device ids change between runs. Unset, empty or "default": the system default, which SDL follows when Windows
+// changes it.
+static int device_is_default(const char *want) { return !want || !*want || !strcmp(want, "default"); }
+
+// The device for `want`: the first playback device of that name, *found 1; else the system default, *found 0 for a name
+// SDL does not list (unplugged). The default asks SDL nothing.
+static SDL_AudioDeviceID device_pick(const char *want, int *found) {
+    *found = 1;
+    if (device_is_default(want)) return SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    int n = 0;
+    SDL_AudioDeviceID *ids = SDL_GetAudioPlaybackDevices(&n), id = 0;
+    for (int i = 0; ids && i < n && !id; i++) {
+        const char *name = SDL_GetAudioDeviceName(ids[i]);
+        if (name && !strcmp(name, want)) id = ids[i];
+    }
+    SDL_free(ids);
+    *found = id != 0;
+    return id ? id : SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+}
+
+int audio_output_devices(char (*names)[AUDIO_DEVICE_NAME_MAX], int max) {
+    if (!SDL_WasInit(SDL_INIT_AUDIO)) return 0;   // ACR_AUDIO=none or no output: nothing to pick
+    int n = 0, k = 0;
+    SDL_AudioDeviceID *ids = SDL_GetAudioPlaybackDevices(&n);
+    for (int i = 0; ids && i < n && k < max; i++) {
+        const char *name = SDL_GetAudioDeviceName(ids[i]);
+        if (name && *name && strlen(name) < AUDIO_DEVICE_NAME_MAX) snprintf(names[k++], AUDIO_DEVICE_NAME_MAX, "%s", name);
+    }
+    SDL_free(ids);
+    return k;
+}
+
+// The pacing figures of the stream's device: its period, the output target and the stall time. Set before the stream
+// is resumed; the render thread reads target and stall_ns while a switch sets them (audio_mixer_pace_ns).
+static void output_timing(Mixer *m, SDL_AudioSpec *dev) {
+    int period = 0;
+    if (!SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(m->stream), dev, &period) || period <= 0) period = m->frame;
+    m->period = period;
+    int target = m->frame * m->prefill > 2 * period ? m->frame * m->prefill : 2 * period;
+    __atomic_store_n(&m->target, target > RING_FRAMES / 2 ? RING_FRAMES / 2 : target, __ATOMIC_RELAXED);
+    uint64_t period_ns = (uint64_t)period * 1000000000ull / (uint64_t)m->rate;
+    __atomic_store_n(&m->stall_ns, 4 * period_ns > STALL_MS * 1000000ull ? 4 * period_ns : STALL_MS * 1000000ull,
+                     __ATOMIC_RELAXED);
+}
+
+static void output_log(Mixer *m, const char *what) {
+    const char *name = SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(m->stream));
+    rt_log("audio: SDL device '%s' %s, %d Hz stereo float, prefill %d ms, device period %d frames; the device paces "
+           "rendering at %.1f ms queued", name ? name : "?", what, m->rate, m->prefill * 5, m->period,
+           m->target * 1000.0 / m->rate);
+}
+
+static void output_worker_start(Mixer *m);
+
 static void output_open(Mixer *m, int rate) {
     const char *mode = cfg_get("ACR_AUDIO");
     if ((mode && !strcmp(mode, "none")) || cfg_get("ACR_AUDIO_OFF")) {
@@ -188,12 +246,18 @@ static void output_open(Mixer *m, int rate) {
         rt_log("audio: SDL audio init failed (%s): mixing without sound", SDL_GetError());
         return;
     }
+    const char *want = cfg_get("ACR_AUDIO_DEVICE");
+    int found;
+    m->open_id = device_pick(want, &found);
+    if (!found) rt_log("audio: ACR_AUDIO_DEVICE '%s' is not connected: the system default plays", want);
     SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, rate};
-    m->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, sdl_pull, m);
+    m->stream = SDL_OpenAudioDeviceStream(m->open_id, &spec, sdl_pull, m);
     if (!m->stream) {
         rt_log("audio: no output device (%s): mixing without sound", SDL_GetError());
         return;
     }
+    SDL_AudioSpec dev;
+    output_timing(m, &dev);
     if (!SDL_ResumeAudioStreamDevice(m->stream)) {
         rt_log("audio: starting the output failed (%s): mixing without sound", SDL_GetError());
         SDL_DestroyAudioStream(m->stream);
@@ -201,26 +265,83 @@ static void output_open(Mixer *m, int rate) {
         return;
     }
     m->device_ok = 1;
+    output_log(m, "opened");
+    m->watch_ver = cfg_version();
+    if (!device_is_default(want)) output_worker_start(m);   // watches the chosen device from the start
+}
+
+// ---- switching the output device while the game plays (ACR_AUDIO_DEVICE is live)
+// One worker thread per mixer, started when a device is first chosen, owns the stream from then on: it opens the new
+// device (tens of ms) off the render thread, so the game's audio never waits for it. Once a second, and at once when
+// cfg changes, it resolves the setting again: a chosen device that disappears falls back to the system default, and the
+// output returns to it within a second of it being plugged in again. SDL's device events are not used: on Windows
+// nothing pumps SDL's event queue (the window is Win32, gfx_window_win.c), while SDL's device list stays current.
+
+// Moves the output to device `id` with the same spec; SDL converts to the device's own format and channels.
+static void output_switch(Mixer *m, SDL_AudioDeviceID id) {
+    SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, m->rate};
+    SDL_AudioStream *s = SDL_OpenAudioDeviceStream(id, &spec, sdl_pull, m);   // opens paused: no callback yet
+    if (!s) {
+        const char *name = SDL_GetAudioDeviceName(id);
+        rt_log("audio: opening device '%s' failed (%s): the output stays where it was", name ? name : "?",
+               SDL_GetError());
+        m->failed_id = id;   // not tried again until the setting or the device list leads elsewhere
+        return;
+    }
+    SDL_DestroyAudioStream(m->stream);   // closes the old device; returns once its callback has finished
+    m->stream = s;
+    m->open_id = id;
+    m->failed_id = 0;
+    // No callback runs until the resume: its prefill starts over, and the render thread paces by its timer (pulled_ns
+    // 0) until the new device asks for audio. The ring and the game go on; ring_pull trims what piled up meanwhile.
+    m->ready = 0;
+    atomic_store_explicit(&m->pulled_ns, 0, memory_order_release);
     SDL_AudioSpec dev;
-    int period = 0;
-    if (!SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(m->stream), &dev, &period) || period <= 0) period = m->frame;
-    m->period = period;
-    m->target = m->frame * m->prefill > 2 * period ? m->frame * m->prefill : 2 * period;
-    if (m->target > RING_FRAMES / 2) m->target = RING_FRAMES / 2;
-    uint64_t period_ns = (uint64_t)period * 1000000000ull / (uint64_t)rate;
-    m->stall_ns = 4 * period_ns > STALL_MS * 1000000ull ? 4 * period_ns : STALL_MS * 1000000ull;
-    const char *name = SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(m->stream));
-    rt_log("audio: SDL device '%s' opened, %d Hz stereo float, prefill %d ms, device period %d frames; the device paces "
-           "rendering at %.1f ms queued", name ? name : "?", rate, m->prefill * 5, period, m->target * 1000.0 / rate);
+    output_timing(m, &dev);
+    if (!SDL_ResumeAudioStreamDevice(s)) rt_log("audio: starting the output failed (%s)", SDL_GetError());
+    output_log(m, "switched to");
+}
+
+static void output_worker(void *p) {
+    Mixer *m = p;
+    while (!atomic_load(&m->worker_quit)) {
+        const char *want = cfg_get("ACR_AUDIO_DEVICE");
+        int found;
+        SDL_AudioDeviceID id = device_pick(want, &found);
+        if (id != m->open_id && id != m->failed_id) {
+            if (!found) rt_log("audio: ACR_AUDIO_DEVICE '%s' is not connected: switching to the system default", want);
+            output_switch(m, id);
+        }
+        if (id == m->open_id) m->failed_id = 0;
+        plat_event_wait_ns(&m->wake, 1000000000ull);
+    }
+}
+
+static void output_worker_start(Mixer *m) {
+    plat_event_init(&m->wake, 0, 0);
+    m->worker = plat_thread_new(output_worker, m, "audio-out");
+    if (!m->worker) rt_log("audio: no output worker thread: the device stays as it is until the next start");
+}
+
+// Render thread: wakes the worker when cfg changed, or starts it when a device is chosen for the first time. Until the
+// worker runs the stream plays on the system default (output_open), so an unset setting costs this check alone.
+static void output_watch(Mixer *m) {
+    unsigned ver = cfg_version();
+    if (ver == m->watch_ver) return;
+    m->watch_ver = ver;
+    if (m->worker) plat_event_set(&m->wake);
+    else if (!device_is_default(cfg_get("ACR_AUDIO_DEVICE"))) output_worker_start(m);
 }
 
 int64_t audio_mixer_pace_ns(AudioRenderer *r, uint64_t now) {
     Mixer *m = r->mixer;
+    if (m && m->device_ok) output_watch(m);
     if (!m || !m->device_ok || !atomic_load_explicit(&m->playing, memory_order_acquire)) return -1;
     uint64_t pulled = atomic_load_explicit(&m->pulled_ns, memory_order_acquire);
-    if (!pulled || (now > pulled && now - pulled > m->stall_ns)) return -1;
+    if (!pulled || (now > pulled && now - pulled > __atomic_load_n(&m->stall_ns, __ATOMIC_RELAXED))) return -1;
     uint64_t have = atomic_load(&m->wr) - atomic_load_explicit(&m->rd, memory_order_acquire);
-    uint64_t full = (uint64_t)m->target + (uint64_t)m->frame;   // one more render fits above the target
+    // one more render fits above the target
+    uint64_t full = (uint64_t)__atomic_load_n(&m->target, __ATOMIC_RELAXED) + (uint64_t)m->frame;
     if (have < full) return 0;
     int64_t ns = (int64_t)((have - full + 1) * 1000000000ull / (uint64_t)m->rate);
     return ns < 500000 ? 500000 : ns;   // until the device has taken it below the target again
@@ -429,6 +550,11 @@ void audio_mixer_set_running(AudioRenderer *r, int running) {
 void audio_mixer_close(AudioRenderer *r) {
     Mixer *m = r->mixer;
     if (!m) return;
+    if (m->worker) {   // the render thread is joined: nothing wakes or starts the worker any more
+        atomic_store(&m->worker_quit, 1);
+        plat_event_set(&m->wake);
+        plat_thread_join(m->worker);
+    }
     if (m->stream) {   // destroying the stream closes the device and waits for the callback to finish
         SDL_DestroyAudioStream(m->stream);
         SDL_QuitSubSystem(SDL_INIT_AUDIO);

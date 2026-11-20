@@ -246,5 +246,60 @@ class MakeBuildTest(unittest.TestCase):
         self.assertEqual(make_build.romfs_size(), 11719230892)
 
 
+class MakePromptsTest(unittest.TestCase):
+    """tools/make_prompts.py: BC3 both ways, the fingerprint runtime/prompts.c checks, the drawings."""
+
+    def setUp(self):
+        try:
+            import make_prompts
+        except ImportError as e:   # numpy (tools/requirements.txt)
+            self.skipTest(str(e))
+        self.m = make_prompts
+
+    def test_fnv_matches_the_runtime(self):
+        # FNV-1a 64 test vectors (prompts.c prompts_hash computes the same)
+        self.assertEqual(self.m.fnv1a64(b""), 0xCBF29CE484222325)
+        self.assertEqual(self.m.fnv1a64(b"a"), 0xAF63DC4C8601EC8C)
+
+    def test_bc3_round_trip(self):
+        import numpy as np
+        rng = np.random.default_rng(1)
+        px = np.zeros((64, 16, 4), np.uint8)
+        for i in range(64):   # two colours and an alpha ramp per block, as the icons have
+            a, b = rng.integers(0, 256, 3), rng.integers(0, 256, 3)
+            pick = rng.integers(0, 2, 16)
+            px[i, :, :3] = np.where(pick[:, None], a, b)
+            px[i, :, 3] = np.linspace(0, 255, 16).astype(np.uint8)
+        blocks = self.m.bc3_encode(px)
+        img = self.m.bc3_decode(blocks.tobytes(), 4, 4 * 64)
+        back = img.reshape(64, 4, 4, 4).reshape(64, 16, 4)
+        self.assertLessEqual(int(np.abs(back[:, :, 3].astype(int) - px[:, :, 3]).max()), 20)
+        self.assertLessEqual(int(np.abs(back[:, :, :3].astype(int) - px[:, :, :3]).max()), 12)
+
+    def test_face_buttons_by_position(self):
+        # prompts-xbox.bin (Nintendo layout, by position) names A as B; the label file keeps the letters
+        self.assertEqual(self.m.OUTPUTS["prompts-xbox.bin"], ("xbox", True))
+        self.assertEqual(self.m.OUTPUTS["prompts-xbox-label.bin"], ("xbox", False))
+        self.assertEqual(self.m.SWAP, {"A": "B", "B": "A", "X": "Y", "Y": "X"})
+        # PlayStation: cross is A on the bottom button, circle is A by position (Nintendo layout)
+        self.assertEqual(self.m.OUTPUTS["prompts-ps.bin"], ("ps", True))
+        self.assertEqual(self.m.OUTPUTS["prompts-ps-label.bin"], ("ps", False))
+        self.assertEqual(self.m.PS_LABEL["A"], "cross")
+        self.assertEqual(self.m.PS_POSITION["A"], "circle")
+        self.assertEqual(set(self.m.PS_LABEL.values()), set(self.m.PS_POSITION.values()))
+
+    def test_letters_stay_in_their_box(self):
+        import numpy as np
+        y, x = self.m.grid(40, 60)
+        for word in ("A", "B", "X", "Y", "LB", "RT", "L1", "R2"):
+            cov = self.m.coverage(self.m.sd_text(y, x, word, 20, 30, 20), 40, 60)
+            ys, xs = np.nonzero(cov > 0)
+            self.assertTrue(len(ys), word)
+            self.assertGreaterEqual(ys.min(), 9, word)
+            self.assertLessEqual(ys.max(), 30, word)
+            self.assertGreater(xs.min(), 0, word)
+            self.assertLess(xs.max(), 59, word)
+
+
 if __name__ == "__main__":
     unittest.main()

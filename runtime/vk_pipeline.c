@@ -3226,23 +3226,30 @@ void vk_pipeline_save(void) {
         vkGetPipelineCacheData(P.device, P.cache, &size, data) == VK_SUCCESS) {
         if (!plat_file_write_atomic(P.cache_path, data, size)) rt_log("vk_pipeline: cannot write %s", P.cache_path);
     }
+    if (rt_trace & RT_TRACE_PERF) rt_log("vk_pipeline: cache saved, %zu KiB", size >> 10);
     free(data);
     plat_mutex_unlock(&save_lock);
 }
 
-// The game never shuts the device down (boot.c and the window end the process), so the cache is saved while it
-// runs: at most every 20 s, and only after new pipelines were built. New pipeline keys are appended every 2 s.
+// The game never shuts the device down (boot.c and the window end the process), so the cache is also saved while it
+// runs: after new pipelines were built, once none was built for AUTOSAVE_QUIET_MS (a load, a menu, a calm moment), and
+// at most every AUTOSAVE_MIN_MS. Every 20 s rewrote the whole cache (42 MiB, the same size each time, in a battle that
+// kept building a pipeline now and then), and a player's 60 fps dipped to 54 for a second every 24 s. The exit paths
+// save it too, and new pipeline keys are still appended every 2 s.
+#define AUTOSAVE_QUIET_MS 5000u
+#define AUTOSAVE_MIN_MS 120000u
 static void autosave_once(void) {
-    static uint64_t last_n, last_ms, last_keys;
+    static uint64_t last_n, last_ms, last_keys, seen_n, seen_ms;
     if (!P.ready) return;
     uint64_t now = plat_now_ms();
     if (*(volatile uint32_t *)&K.pend_n && now - last_keys >= 2000) last_keys = now, keys_flush();
     gfx_shader_record_flush(0);
-    if (now - last_ms < 20000) return;
     VkPipeStats s;
     vk_pipeline_stats(&s);
-    if (s.graphics + s.compute == last_n) return;
-    last_n = s.graphics + s.compute, last_ms = now;
+    uint64_t n = s.graphics + s.compute;
+    if (n != seen_n) seen_n = n, seen_ms = now;
+    if (n == last_n || now - seen_ms < AUTOSAVE_QUIET_MS || (last_ms && now - last_ms < AUTOSAVE_MIN_MS)) return;
+    last_n = n, last_ms = now;
     vk_pipeline_save();
 }
 

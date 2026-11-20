@@ -28,8 +28,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_QUICK_TITLE] = "Age of Calamity Recomp  ·  quick menu",
     [UI_MENU_QUICK_HINT] = "Hold L3+R3 to open or close. B closes.",
     [UI_MENU_QUICK_FPS] = "Frame rate",
-    [UI_MENU_QUICK_FPS_DESC] = "30 FPS is the game's own rate: it moves a fixed step per frame, so a lower cap would slow the game down. 60 FPS needs the frame-step patch, which is not ported yet. For more battery, also lower the TDP in the Steam performance menu.",
-    [UI_MENU_QUICK_FPS_LATER] = "60 FPS: needs the 60 FPS patch (coming)",
+    [UI_MENU_QUICK_FPS_DESC] = "30 FPS is the game's own rate; 60 FPS draws twice as many frames at the same game speed and needs about twice the processor time; 120, 144 and 240 FPS are experimental (in development, not optimized yet) and need a monitor that fast. For more battery, stay at 30 and also lower the TDP in the Steam performance menu.",
     [UI_MENU_QUICK_RES] = "Console mode",
     [UI_MENU_QUICK_RES_DESC] = "Whether the game thinks the Switch is docked (TV) or in handheld mode, as when you dock it. Age of Calamity draws at the same size in both: the picture size is the Game resolution of the full menu.",
     [UI_MENU_QUICK_RES_HANDHELD] = "Handheld",
@@ -40,7 +39,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 
     [UI_MENU_TITLE] = "Age of Calamity Recomp",
     [UI_MENU_TAB_SCREEN] = "Screen", [UI_MENU_TAB_GAME] = "Game", [UI_MENU_TAB_MODS] = "Mods", [UI_MENU_TAB_SOUND] = "Sound",
-    [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_MENU] = "Menu", [UI_MENU_TAB_ADVANCED] = "Advanced",
+    [UI_MENU_TAB_CONTROLS] = "Controls", [UI_MENU_TAB_AMIIBO] = "Amiibo", [UI_MENU_TAB_ADVANCED] = "Advanced",
     [UI_MENU_CONTINUE] = "Continue", [UI_MENU_QUIT] = "Quit game",
     [UI_MENU_ON] = "On", [UI_MENU_OFF] = "Off", [UI_MENU_AUTO] = "Automatic", [UI_MENU_DEFAULT_MARK] = "default",
     [UI_MENU_AFTER_RESTART] = "after restart", [UI_MENU_SET_BY_ENV] = "set by environment variable",
@@ -49,7 +48,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
 
     [UI_MENU_FULLSCREEN] = "Fullscreen", [UI_MENU_FULLSCREEN_DESC] = "Fills the screen with the game; F11 toggles it.",
     [UI_MENU_WINDOW_SIZE] = "Window size", [UI_MENU_WINDOW_SIZE_DESC] = "Size of the game window when not fullscreen.",
-    [UI_MENU_WINDOW_SIZE_CUSTOM] = "Custom",
     [UI_MENU_PRESENT] = "Presentation", [UI_MENU_PRESENT_DESC] = "How finished frames reach the screen.",
     [UI_MENU_PRESENT_MAILBOX] = "Mailbox", [UI_MENU_PRESENT_VSYNC] = "VSync", [UI_MENU_PRESENT_IMMEDIATE] = "Immediate",
     [UI_MENU_PRESENT_IN_USE] = "in use: %s",
@@ -67,7 +65,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                 "Steam Deck's screen and spares the GPU; below 1920 x 1080 the 3D scene can go up to 85 %.",
     [UI_MENU_RENDER_SCALE] = "3D render scale",
     [UI_MENU_RENDER_SCALE_DESC] = "Size of the 3D scene relative to the game resolution; the game's FSR scales it to "
-                                  "that size. 100 % draws it at full size: the sharpest.",
+                                  "that size. 100 % draws it at full size; 125 and 140 % draw it larger and scale it down "
+                                  "(supersampling): the sharpest, for about twice the GPU work at 140 %. Above 100 % "
+                                  "needs the 1920x1080 game resolution.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (75 %)",
     [UI_MENU_UPSCALER] = "Scaling to the window",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
@@ -77,13 +77,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_ASPECT_DESC] = "When the window's shape differs from the game resolution's (a 16:9 picture on a 21:9 "
                             "screen): keep the picture's shape with black bars, or stretch it over the window.",
     [UI_MENU_ASPECT_FIT] = "Black bars", [UI_MENU_ASPECT_STRETCH] = "Stretch",
-    [UI_MENU_FOV] = "Field of view",
-    [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own. Game version 1.4.3 only.",
-    [UI_MENU_SHADOW_RES] = "Shadow map size",
-    [UI_MENU_SHADOW_RES_DESC] = "Size of the sun's shadow map. The game's own size changes with the view, down to about 400 "
-                                "near the ground, so leaf shadows look blocky and jump; a fixed size keeps them still and "
-                                "sharper. Above 1024 the shadows cost more GPU time and video memory.",
-    [UI_MENU_SHADOW_RES_GAME] = "Game (changes)",
     [UI_MENU_ANISO] = "Texture filtering",
     [UI_MENU_ANISO_DESC] = "Anisotropic filtering of surface textures: ground, roads and walls seen at a shallow angle stay sharp into the distance instead of blurring. Game: the level the game asks for, as on the Switch.",
     [UI_MENU_ANISO_GAME] = "Game",
@@ -122,13 +115,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PCSS] = "Soft shadows",
     [UI_MENU_PCSS_DESC] = "Sun shadows sharp where an object meets the ground and softer the further the shadow falls "
                           "(PCSS). 0 keeps the game's filter. Takes effect at the next start.",
-    [UI_MENU_CONTACT_SHADOWS] = "Contact shadows",
-    [UI_MENU_CONTACT_SHADOWS_DESC] = "Small sun shadows the shadow maps miss: at feet, under stones, in grass and creases. "
-                                     "Traced on the screen after lighting. Takes effect at the next start.",
-    [UI_MENU_SHADOW_RANGE] = "Shadow cascade range",
-    [UI_MENU_SHADOW_RANGE_DESC] = "Moves the steps where shadows turn softer (the game's 20, 40, 80 and 160 m) further "
-                                  "away. Spreads the shadow map over more ground: raise Shadow resolution with it. "
-                                  "Takes effect at the next start.",
     [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
     [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; nvngx_dlss.dll next to AgeOfCalamityRecomp): smoother edges "
                           "and less shimmer. The HUD is not touched. The mode below sets the resolution it works from. Takes effect "
@@ -139,27 +125,31 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                           "scale. Takes effect after a restart.",
     [UI_MENU_DLSS_DLAA] = "DLAA (native)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance",
+    [UI_MENU_DLSS_PRESET] = "DLSS model",
+    [UI_MENU_DLSS_PRESET_DESC] = "Which DLSS model runs. Automatic follows NVIDIA's advice per mode: K for DLAA, Quality "
+                                 "and Balanced, M for Performance. J: slightly less ghosting behind moving characters, "
+                                 "a little more flicker. K: the sharpest model in every mode. Applies at once.",
+    [UI_MENU_DLSS_PRESET_DEFAULT] = "Automatic", [UI_MENU_DLSS_PRESET_K] = "K (sharpest)",
+    [UI_MENU_DLSS_PRESET_J] = "J (less ghosting)",
     [UI_MENU_FXAA] = "Anti-aliasing (FXAA)",
     [UI_MENU_FXAA_DESC] = "Smooths the jagged edges of the 3D scene; the HUD stays sharp. It softens fine detail a little. Off while DLAA or DLSS is on.",
 
-    [UI_MENU_FPS_LIMIT] = "Frame rate limit",
-    [UI_MENU_FPS_LIMIT_DESC] = "The most frames per second the game draws. The game moves a fixed step per frame at 30, "
-                               "so a higher limit waits for the 60 FPS patch.",
-    [UI_MENU_FPS_30] = "30 FPS", [UI_MENU_FPS_40] = "40 FPS", [UI_MENU_FPS_45] = "45 FPS",
-    [UI_MENU_FPS_60] = "60 FPS", [UI_MENU_FPS_90] = "90 FPS", [UI_MENU_FPS_120] = "120 FPS", [UI_MENU_FPS_144] = "144 FPS",
-    // the monitor's refresh rate; printf format with the rate in Hz when it is known
-    [UI_MENU_FPS_DISPLAY] = "Monitor rate", [UI_MENU_FPS_DISPLAY_HZ] = "Monitor rate (%.0f Hz)",
-    [UI_MENU_REALTIME] = "Game speed follows the clock",
-    [UI_MENU_REALTIME_DESC] = "Steps the game by real time, so a slow frame does not slow the game down.",
-    [UI_MENU_CLOTH_REALTIME] = "Cloth on the clock",
-    [UI_MENU_CLOTH_REALTIME_DESC] = "Steps cloth and hair by real time as well.",
-    [UI_MENU_HIGHFPS_FIX] = "High frame rate fixes",
-    [UI_MENU_HIGHFPS_FIX_DESC] = "Corrects physics that misbehave above 30 frames per second, and objects that stay see-through or invisible above 60.",
+    [UI_MENU_FPS_LIMIT] = "Frame rate",
+    [UI_MENU_FPS_LIMIT_DESC] = "30 FPS is the game's own rate. At 60 FPS the game draws twice as many frames and still "
+                               "runs at the right speed; it needs about twice the processor time, so a busy battle can "
+                               "dip below 60. 120, 144 and 240 FPS need a monitor that fast and a lot more processor "
+                               "time, and are experimental: still in development, not optimized yet (busy battles stay "
+                               "under 120 on a fast processor). Applies at once.",
+    [UI_MENU_FPS_30] = "30 FPS", [UI_MENU_FPS_60] = "60 FPS", [UI_MENU_FPS_120] = "120 FPS (experimental)",
+    [UI_MENU_FPS_144] = "144 FPS (experimental)", [UI_MENU_FPS_240] = "240 FPS (experimental)",
     [UI_MENU_GAME_LANG] = "Game language", [UI_MENU_GAME_LANG_DESC] = "Language of the game's text and voices.",
     [UI_MENU_GAME_LANG_AUTO] = "Automatic",
     [UI_MENU_OPERATION_MODE] = "Console mode",
     [UI_MENU_OPERATION_MODE_DESC] = "Whether the game thinks it runs docked or handheld.",
     [UI_MENU_MODE_DOCKED] = "Docked", [UI_MENU_MODE_HANDHELD] = "Handheld",
+    [UI_MENU_FRAME_QUEUE] = "Frame queue",
+    [UI_MENU_FRAME_QUEUE_DESC] = "The game starts a frame while the previous one waits for its turn on screen: far fewer "
+                                 "dropped frames at the limit, up to one frame more input delay. Applies at once.",
     [UI_MENU_ASSUME_FOCUS] = "Keep running out of focus",
     [UI_MENU_ASSUME_FOCUS_DESC] = "On (the default), the game keeps running while you are in another window, and the "
                                   "keyboard stays quiet until the window is in front again. Off, it pauses when its "
@@ -192,6 +182,11 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_MUTE] = "Mute", [UI_MENU_MUTE_DESC] = "Silences the game without changing the volume.",
     [UI_MENU_MUTE_BG] = "Mute in the background",
     [UI_MENU_MUTE_BG_DESC] = "Silences the game while another window is active.",
+    [UI_MENU_AUDIO_DEVICE] = "Output device",
+    [UI_MENU_AUDIO_DEVICE_DESC] = "Where the sound plays. System default follows the Windows default device. A chosen "
+                                  "device that is unplugged falls back to the system default until it is back. "
+                                  "Applies at once.",
+    [UI_MENU_AUDIO_DEVICE_DEFAULT] = "System default",
     [UI_MENU_INVERT_LX] = "Invert left stick X", [UI_MENU_INVERT_LY] = "Invert left stick Y",
     [UI_MENU_INVERT_RX] = "Invert right stick X (camera)", [UI_MENU_INVERT_RY] = "Invert right stick Y (camera)",
     [UI_MENU_INVERT_DESC] = "Mirrors this axis of the gamepad's stick.",
@@ -206,26 +201,25 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PAD_LAYOUT] = "Button layout",
     [UI_MENU_PAD_LAYOUT_DESC] = "Which button is A. Nintendo: the right one, as on a Switch (circle A, cross B, square "
                                 "Y, triangle X on a PlayStation controller). Xbox: the bottom one, as labelled on an "
-                                "Xbox controller. Automatic picks Nintendo for Nintendo and PlayStation controllers "
-                                "and Xbox for the others. Which controller the game's prompts show is set under "
-                                "Button prompts.",
+                                "Xbox controller. PlayStation: cross, the bottom one, is A, circle B, square X and "
+                                "triangle Y. Automatic picks Nintendo for Nintendo and PlayStation controllers and Xbox "
+                                "for the others. Button prompts below picks the icons the game shows.",
     [UI_MENU_PAD_LAYOUT_AUTO] = "Automatic", [UI_MENU_PAD_LAYOUT_NINTENDO] = "Nintendo (A right)",
     [UI_MENU_PAD_LAYOUT_XBOX] = "Xbox (A bottom)",
+    [UI_MENU_PAD_LAYOUT_PLAYSTATION] = "PlayStation (cross A)",
     [UI_MENU_PAD_LAYOUT_IN_USE] = "in use: %s",
     [UI_MENU_PROMPTS] = "Button prompts",
     [UI_MENU_PROMPTS_DESC] = "Which controller's buttons the game's prompts show. Nintendo: the game's own. Xbox: LB, "
-                             "RB, LT, RT, Menu, View and a d-pad cross, and A, B, X and Y as labelled on the button "
-                             "the layout above presses (with Nintendo (A right) the right button is labelled B, so the "
-                             "prompts for A show B). The game reads its prompts at start, so they change after a "
-                             "restart. They are part of the game's files, so a button you remap in Controls keeps its "
-                             "old prompt on screen.",
+                             "RB, LT, RT, Menu and View, and A, B, X and Y as labelled on the button "
+                             "pressed (A is on the right button as on the Switch, labelled B on an Xbox pad, so the "
+                             "prompts for A show B). PlayStation: L1, R1, L2, R2, Options and Create, and cross, "
+                             "circle, square and triangle the same way (A shows circle). Applies at once. They are "
+                             "part of the game's files, so a button you remap below keeps its old prompt on screen.",
     [UI_MENU_PROMPTS_NINTENDO] = "Nintendo", [UI_MENU_PROMPTS_XBOX] = "Xbox",
+    [UI_MENU_PROMPTS_PLAYSTATION] = "PlayStation",
     [UI_MENU_PROMPTS_MISSING] = "prompt files missing: run the setup again",
     [UI_MENU_PROMPTS_FAILED] = "prompt files damaged: run the setup again",
     [UI_MENU_PROMPTS_RESTART] = "prompts change after restart",
-    [UI_MENU_PROMPTS_OFF_SHAPE] = "off at a game resolution not 16:9",
-    [UI_MENU_PROMPTS_OFF_MODS] = "off: a RomFS mod replaces their files",
-    [UI_MENU_PROMPTS_OFF_PATCHES] = "off while ACR_ROMFS_PATCHES is set",
     [UI_MENU_RESTART] = "Restart now",
     [UI_MENU_RESTART_DESC] = "Closes the game and starts it again with the new prompts. Progress since your last save "
                              "is lost.",
@@ -244,9 +238,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_WALK_SCALE] = "Walk scale",
     [UI_MENU_WALK_SCALE_DESC] = "The tilt the keyboard's sticks get while the walk key is held. Half is a walk, the "
                                 "full tilt a run.",
-    [UI_MENU_STICK_SENS] = "Stick camera speed",
-    [UI_MENU_STICK_SENS_DESC] = "Multiplies the game's own right-stick camera speed, top speed included, at each of the "
-                                "game's five camera sensitivities. The mouse keeps its own setting.",
 
     [UI_BINDS_HELP] = "Select a cell and press A or Enter, then the key, mouse button or controller button. Delete or "
                       "X clears a cell. A key in use moves here; a controller button swaps with the one it replaces.",
@@ -335,7 +326,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_ASYNC_PREEMPT_DESC] = "Lets a game thread interrupt another one on the same virtual core.",
     [UI_MENU_PREEMPT_OFF] = "Off", [UI_MENU_PREEMPT_ON] = "On", [UI_MENU_PREEMPT_INHERIT] = "Inheritance only",
     [UI_MENU_REPLAY_ASYNC] = "GPU frame prep on its own thread",
-    [UI_MENU_REPLAY_ASYNC_DESC] = "Prepares frames for the GPU on a separate thread instead of the game thread. Adds up to one frame of latency.",
+    [UI_MENU_REPLAY_ASYNC_DESC] = "Prepares frames for the GPU on a separate thread instead of the game thread. Holds 60 fps in big fights, "
+                                  "where the game thread alone falls to about 45. Adds up to one frame of latency.",
     [UI_MENU_TIMER_1MS] = "1 ms Windows timer",
     [UI_MENU_TIMER_1MS_DESC] = "Raises the system timer resolution to 1 ms for steadier frame pacing.",
     [UI_MENU_PIPE_WAIT] = "Waiting draw handling",
@@ -364,7 +356,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_TEX_ALIAS] = "Texture aliasing", [UI_MENU_TEX_ALIAS_DESC] = "A new texture created over a live texture's memory starts with that content instead of empty.",
     [UI_MENU_TEX_VRAM_PRESSURE] = "Texture memory limit", [UI_MENU_TEX_VRAM_PRESSURE_DESC] = "Percent of video memory above which textures the game released are dropped (they come back from storage when used again). 0 keeps them.",
     [UI_MENU_ASTC_BC] = "Compress ASTC to BC3", [UI_MENU_ASTC_BC_DESC] = "With the GPU decoder: re-encodes decoded ASTC textures to BC3, a quarter of the video memory. For GPUs with 4 GB or less; textures look slightly blockier.",
-    [UI_MENU_LOD_GUARD] = "LOD guard", [UI_MENU_LOD_GUARD_DESC] = "Prevents objects flashing in the wrong place or a flat far field for a frame, by waiting for the game to finish rewriting level-of-detail data before the GPU reads it.",
     [UI_MENU_FIX_C0] = "Constant buffer fix",
     [UI_MENU_FIX_C0_DESC] = "Fills the driver-reserved constant bank c0 (storage sizes, dispatch size, point size, base instance) instead of reading zeros.",
     [UI_MENU_FIX_ZERO] = "Zero new GPU memory",
@@ -384,7 +375,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_VK_VALIDATION_DESC] = "Checks every Vulkan call and slows the game down a lot.",
     [UI_MENU_VK_VALIDATION_MISSING] = "The validation layer is not installed.",
     [UI_MENU_DLAA_MISSING] = "DLSS is not available: it needs an NVIDIA RTX card and nvngx_dlss.dll, which the Windows build downloads. Build again, or put the file next to AgeOfCalamityRecomp.exe, and restart.",
-    [UI_MENU_STICK_SENS_MISSING] = "Not available in this game yet: use the camera sensitivity in the game's own options.",
     [UI_MENU_VK_DYN_VERTEX] = "Dynamic vertex state",
     [UI_MENU_VK_DYN_VERTEX_DESC] = "Forces dynamic vertex input on or off; the default depends on the GPU.",
     [UI_MENU_VK_DYN_A2C] = "Dynamic alpha to coverage",
@@ -409,7 +399,6 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_OV_FPS] = "%.0f FPS", [UI_MENU_OV_FRAME_MS] = "%.1f ms", [UI_MENU_OV_GAME_PCT] = "game %.0f%%",
     [UI_MENU_OV_MAX_MS] = "max %.1f ms",
     [UI_MENU_OV_GPU] = "GPU", [UI_MENU_OV_CPU] = "CPU", [UI_MENU_OV_RAM] = "RAM", [UI_MENU_OV_VRAM] = "VRAM",
-    [UI_MENU_OV_TEMP] = "Temperature", [UI_MENU_OV_POWER] = "Power", [UI_MENU_OV_CLOCK] = "Clock",
     [UI_MENU_OV_NONE] = "-",
     [UI_MENU_OV_REPLAY] = "GPU frame prep", [UI_MENU_OV_GPU_TIME] = "GPU busy per frame",
     [UI_MENU_OV_PIPE_WAIT] = "Pipeline waits",

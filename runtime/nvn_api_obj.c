@@ -11,11 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cfg.h"
+#include "fs.h"
 #include "gfx.h"
 #include "host.h"
 #include "nvn_api.h"
 #include "nvn_hmap.h"
 #include "nvn_tex.h"
+#include "prompts.h"
 #include "platform/platform.h"
 
 // ---------- Descriptor pools
@@ -242,12 +245,12 @@ NVN_API(nvnTextureCompare) {
 NVN_API(nvnTextureGetRawStorageClass) { ret_x(c, 1); }
 
 // ---------- Texture views
-#define VW(c) ((view_t *)arg_p(c, 0))
+#define VIEW_ARG(c) ((view_t *)arg_p(c, 0))
 NVN_API(nvnTextureViewSetDefaults) { memset(arg_p(c, 0), 0, sizeof(view_t)); }
 NVN_API(nvnTextureViewSetLevels) {
     uint32_t base = (uint32_t)arg_x(c, 1), n = (uint32_t)arg_x(c, 2);
     if (base > 255 || n > 255) rt_fatal("nvn: texture view levels %d/%d", (int)base, (int)n);
-    view_t *v = VW(c);
+    view_t *v = VIEW_ARG(c);
     v->set_levels = 1;
     v->base_level = (uint8_t)base;
     v->nlevels = (uint8_t)n;
@@ -255,7 +258,7 @@ NVN_API(nvnTextureViewSetLevels) {
 NVN_API(nvnTextureViewSetLayers) {
     uint32_t first = (uint32_t)arg_x(c, 1), n = (uint32_t)arg_x(c, 2);
     if (first > 65535 || n > 65535) rt_fatal("nvn: texture view layers %d/%d", (int)first, (int)n);
-    view_t *v = VW(c);
+    view_t *v = VIEW_ARG(c);
     v->set_layers = 1;
     v->min_layer = (uint16_t)first;
     v->nlayers = (uint16_t)n;
@@ -263,14 +266,14 @@ NVN_API(nvnTextureViewSetLayers) {
 NVN_API(nvnTextureViewSetFormat) {
     uint32_t f = (uint32_t)arg_x(c, 1);
     if (f > 65535) rt_fatal("nvn: texture view format %d", (int)f);
-    view_t *v = VW(c);
+    view_t *v = VIEW_ARG(c);
     v->set_format = 1;
     v->format = (uint16_t)f;
 }
 NVN_API(nvnTextureViewSetTarget) {
     uint32_t t = (uint32_t)arg_x(c, 1);
     if (t > 255) rt_fatal("nvn: texture view target %d", (int)t);
-    view_t *v = VW(c);
+    view_t *v = VIEW_ARG(c);
     v->set_target = 1;
     v->target = (uint8_t)t;
 }
@@ -327,7 +330,21 @@ static void write_texels(Cpu *c, int strided) {
     texel_strides(o, r, &row, &img, "WriteTexels");
     if (v && v->set_format && v->format != o->d.format) rt_fatal("nvn: WriteTexels: format-reinterpreting view not supported");
     NVN_BLOCKING();
-    gfx_backend()->write_texels(o, v, r, arg_p(c, 3), row, img);
+    const uint8_t *src = arg_p(c, 3);
+    uint8_t *swapped = NULL;
+    // The game's menus write their textures with WriteTexels: a whole level 0 of a 2D BC3 texture in tight rows may be
+    // one whose buttons the Xbox prompts redraw (prompts.c); the copy of the game's data carries them instead.
+    int bc3 = o->d.format == NVN_FORMAT_RGBA_DXT5 || o->d.format == NVN_FORMAT_RGBA_DXT5_SRGB;
+    if (bc3 && (!v || !v->set_levels || !v->base_level) && !r->xoffset && !r->yoffset && !r->zoffset &&
+        r->width == (int)o->d.width && r->height == (int)o->d.height && r->depth == 1 && img == row * ((o->d.height + 3) / 4)) {
+        size_t size = (size_t)img;
+        if ((swapped = malloc(size))) {
+            memcpy(swapped, src, size);
+            if (prompts_swap(o->d.width, o->d.height, 1, swapped, size)) src = swapped;
+        }
+    }
+    gfx_backend()->write_texels(o, v, r, src, row, img);
+    free(swapped);
 }
 NVN_API(nvnTextureReadTexels) { read_texels(c, 0); }
 NVN_API(nvnTextureReadTexelsStrided) { read_texels(c, 1); }
@@ -645,14 +662,16 @@ NVN_API(nvnWindowSetCrop) {
 }
 
 // ---------- Present pacing
-// The vsync thread ticks at a fixed 60 Hz whatever the monitor does, so one game frame lasts `interval` ticks. With
-// the real-time frame step (frame_rate.c) game speed does not depend on the interval, so a frame is shown when it is
-// ready, at most at the frame limit (ACR_FPS_LIMIT: 30 to 240 per second or the monitor's rate): holding it to the
-// 2nd or 3rd tick would only add latency and 50 ms frames.
-#define VSYNC_HZ 60ull
+// The game steps its world by whole vsyncs per frame and sets interval 2 on its window; the frame rate setting decides
+// instead (frame_rate.c: 2 at 30 fps, 1 above, with the game's frame-rate block and speed scale to match) and so does
+// the time between presents.
+static int win_interval(const win_t *o) {
+    (void)o;
+    return frame_step_interval();
+}
 static uint64_t present_period(const win_t *o) {
-    if (frame_step_realtime()) return frame_step_cap_ns();
-    return (o->interval > 0 ? (uint64_t)o->interval : 1ull) * 1000000000ull / VSYNC_HZ;
+    (void)o;
+    return frame_step_period_ns();
 }
 
 // MacNativeGames nvn_pace.h: the present slot is the previous slot plus one period. Early: wait for the slot. Late by
@@ -677,8 +696,12 @@ static void sleep_until(uint64_t deadline) {
 }
 
 // NVNwindowAcquireTextureResult nvnWindowAcquireTexture(NVNwindow *w, NVNsync *s, int *index): blocks here, not in the
-// present, until the image's previous present plus one period has passed (the game often presents with a lock held).
-// That is the time the next frame goes to the display, so the image is free as soon as that time is reached.
+// present, until the image is free (the game often presents with a lock held). Without the frame queue that is the
+// image's previous present plus one period, when the next frame goes to the display, so a frame gets exactly one period
+// from acquire to present. Its present is a copy already on the queue by its display time, so with the frame queue
+// (ACR_FRAME_QUEUE=1, from TotK's recomp) the image is free from that time on: the game draws the next frame while the
+// previous one waits for its turn, and a frame that takes up to one more period still makes its slot, for up to one
+// frame more latency.
 NVN_API(nvnWindowAcquireTexture) {
     win_t *o = arg_p(c, 0);
     sync_t *s = arg_p(c, 1);
@@ -721,14 +744,16 @@ NVN_API(nvnQueueAcquireTexture) {
 
 // void nvnQueuePresentTexture(NVNqueue *q, NVNwindow *w, int index): queues the copy and returns at once. The display
 // time comes from the pacer: the back end's present thread holds the host present until then (back-edge pacing, as the
-// Switch's display flips at vblank), so the present cadence does not follow the replay time; one period later the
-// image is free for the next acquire. Added latency: the slack of the frame (period minus its work), as on the Switch.
+// Switch's display flips at vblank), so the present cadence does not follow the replay time; one period later (at that
+// time with the frame queue) the image is free for the next acquire. Added latency: the slack of the frame (period minus
+// its work), as on the Switch, plus up to a period with the frame queue.
 NVN_API(nvnQueuePresentTexture) {
     win_t *o = arg_p(c, 1);
     int idx = (int)arg_x(c, 2);
     movie_tick(c);   // ov_movie.c: hand over decoded movie frames that are due; needs the core, so before the wait
     ov_operation_mode_test_tick();   // ov_system.c: ACR_TEST_OPMODE (test hook; one load when unset)
     ov_peek_tick();                  // ov_system.c: ACR_PEEK (diagnosis; one load when unset)
+    romfs_prompts_tick();            // romfs.c: the button prompts setting, live (one load when unchanged)
     ov_scan_tick();                  // ov_system.c: ACR_SCAN_F32 (diagnosis; one load when unset)
     kern_watch_present();            // kernel.c: the hang watchdog sees the game is still presenting
     NVN_BLOCKING();
@@ -740,7 +765,7 @@ NVN_API(nvnQueuePresentTexture) {
     uint64_t slot = now + pace(&o->pace, now, period);
     gfx_backend()->present(t, o->crop, slot);
     o->ticket[idx] = o->presents;
-    o->avail[idx] = slot + period;
-    frame_step_present(slot, o->interval);   // frame_rate.c: the real-time step follows the display times
+    o->avail[idx] = cfg_bool("ACR_FRAME_QUEUE") ? slot : slot + period;
+    frame_step_present(slot, win_interval(o));   // frame_rate.c: the real-time step follows the display times
     rt_frame_presented(t, o->presents);
 }

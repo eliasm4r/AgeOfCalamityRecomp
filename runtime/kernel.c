@@ -649,7 +649,7 @@ static int ap_try(RtThread *w) {
 // may displace was of better or equal priority (DG_EQ: Horizon waits too), or the worse owners were claimed by better
 // waiters (DG_NOCORE). Per 60 presents: time per frame and a wait-length histogram per class, the owners that cost
 // most; a line per present over 25 ms; a line per wait with over 2 ms of DG_GAME (where the owner reached its
-// checkpoint), and one host RIP sample of the owner per such wait (exe RVA, for totk.map).
+// checkpoint), and one host RIP sample of the owner per such wait (exe RVA, for the link map).
 enum { DG_GAME, DG_HOST, DG_EQ, DG_NOCORE, DG_N };
 static const char *const dg_name[DG_N] = {"game", "host", "eq", "nocore"};
 #define DG_NB 8   // wait lengths: < 0.05, 0.25, 1, 2, 4, 8, 16 ms, longer
@@ -850,13 +850,21 @@ static void core_count(void) {
 
 static struct DgRel g_dg_rel;   // ACR_CORE_DIAG: the owner core_put is releasing, for core_grant
 
+// How many application cores t may run on.
+static int core_choices(const RtThread *t) { return __builtin_popcountll(t->mask & ((1u << NCORE) - 1)); }
+
+// The best waiter for core c: priority first; at equal priority the thread with fewer cores to go to (the main thread,
+// pinned to core 0, before the job workers that may run anywhere: in a battle it waited 22 % of its time for core 0
+// while workers held it), then the oldest. Horizon does not order equal priorities across cores either.
 static void core_grant(int c) {
     RtThread *b = NULL, **bp = NULL;
     int bpri = 0;
     for (RtThread **p = &g_core_wait; *p; p = &(*p)->cnext) {
         if (!core_allowed(*p, c)) continue;
         int pr = prio_of(*p);
-        if (!b || pr < bpri || (pr == bpri && (*p)->cseq < b->cseq)) {
+        if (!b || pr < bpri ||
+            (pr == bpri && (core_choices(*p) < core_choices(b) ||
+                            (core_choices(*p) == core_choices(b) && (*p)->cseq < b->cseq)))) {
             b = *p;
             bp = p;
             bpri = pr;
@@ -986,8 +994,13 @@ static void core_take(RtThread *t) {
     }
     if (!(t->mask & ((1u << NCORE) - 1)))
         rt_fatal("kernel: thread %#x core mask %#llx has no application core", t->handle, (unsigned long long)t->mask);
-    int c = t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core] ? t->core : -1;
-    for (int i = 0; c < 0 && i < NCORE; i++)
+    // a thread that may run on several cores takes core 0, the main thread's only core, last
+    int many = core_choices(t) > 1;
+    int c = t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core] &&
+                    !(many && t->core == 0)
+                ? t->core
+                : -1;
+    for (int i = NCORE - 1; c < 0 && i >= 0; i--)
         if (core_allowed(t, i) && !g_core_owner[i]) c = i;
     if (c >= 0) {
         t->cur_core = c;
@@ -1057,7 +1070,7 @@ int kern_core_away(void) {
     lock();
     core_put(t);
     acct(t, S_HOST);
-    if (rt_trace & RT_TRACE_SCHED)   // the caller as an exe RVA (totk.map)
+    if (rt_trace & RT_TRACE_SCHED)   // the caller as an exe RVA (the link map)
         t->wobj = (uintptr_t)__builtin_return_address(0) - plat_exe_base();
     unlock();
     return 1;

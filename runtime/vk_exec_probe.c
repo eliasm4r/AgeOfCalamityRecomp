@@ -313,8 +313,6 @@ static char *dr_read(const char *path, long *size) {
     return b;
 }
 
-static int dr_hex(char c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; }
-
 // A program of one census shader as the game hands it to NVN: control section, code with its 0x30-byte header.
 static prog_t *dr_prog(const char *root, const DrawEnt *e[], int n) {
     static uint64_t serial = 0x7000;

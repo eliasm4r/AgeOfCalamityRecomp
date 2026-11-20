@@ -37,6 +37,227 @@ site output main 161f394 294b5d18 fd402d10 @page:x17 fd401231 fd403632 7ef18e13 
 # of integers on the stack ([sp], [sp+4]).
 site output main 151e194 b94003e8 fd4003f0 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e260268   # ldr w8,[sp] -> virtual width
 site output main 151e19c b94007e8 0e0c3e68                            # ldr w8,[sp,#4] -> mov w8,v19.s[1]
+# Frame rates above 60 (runtime/frame_rate.c). The game steps by whole 60 Hz vsyncs: its frame-rate block at
+# main+0x269e150 is {fps, vsyncs per update, fps, fps as a float}, and 159 instructions read the vsyncs (+0x154). 104 of
+# them load it into a float register and convert it (ucvtf / scvtf) in a straight line, without a branch or a branch
+# target between the two: those now read +0x158 and convert it as 16.16 fixed point, so they get the frame's real time
+# in vsyncs (1.5 for a 40 ms frame, 0.5 at 120 fps). +0x158 held the rate again: its one reader (main+0xb08118, a
+# timer stepped by -1/fps) reads +0x150 instead, and the game's two writes there are dropped. The 55 integer readers
+# (frame counters, compares) keep +0x154, which the runtime fills with whole vsyncs that add up to the real time.
+# Found with capstone over the 1.3.0 main; original words checked.
+set  vsync  ACR_PATCH_VSYNC  1
+site vsync main b08118 bd415901 bd415101   # ldr s1,[x8,#0x158] -> [x8,#0x150]: the rate as an integer
+site vsync main 8a35f8 b9015909 d503201f   # str w9,[x8,#0x158] -> nop (the game's rate setter)
+site vsync main fc1630 b901592a d503201f   # str w10,[x9,#0x158] -> nop (its other copy)
+site vsync main 1ba9c bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 1baac 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 1bac8 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 1bad8 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 1eef8 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 1ef04 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 2e6d4 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 2e6e0 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 4af54 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 4af5c 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 534e8 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 534f4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 66704 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 66710 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 687e4 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 687e8 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 6e5ac bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 6e5b0 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 6e804 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 6e808 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 7a16c bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 7a174 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 7ff4c bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 7ff58 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 862e4 bd415541 bd415941   # ldr [#0x154] -> [#0x158]
+site vsync main 862ec 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 91b08 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 91b10 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 99800 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 99808 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main a1af8 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main a1b00 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main a1b2c bd415522 bd415922   # ldr [#0x154] -> [#0x158]
+site vsync main a1b30 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main a6a7c bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main a6a84 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main a70ec bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main a70f4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main c5674 b9415529 b9415929   # ldr [#0x154] -> [#0x158]
+site vsync main c5678 1e230120 1e03c120   # ucvtf -> fixed point 16.16
+site vsync main ebc30 bd415522 bd415922   # ldr [#0x154] -> [#0x158]
+site vsync main ebc38 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 11fc24 bd415542 bd415942   # ldr [#0x154] -> [#0x158]
+site vsync main 11fc28 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 1214cc bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 1214d0 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 122104 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 122108 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 122ce4 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 122ce8 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 124458 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 124464 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b4c0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b4c4 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b590 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b594 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b6e4 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b6e8 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b840 bd415543 bd415943   # ldr [#0x154] -> [#0x158]
+site vsync main 12b848 7e21d863 7f30e463   # ucvtf -> fixed point 16.16
+site vsync main 12b8e0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b8f0 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b930 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b934 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b998 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b99c 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12b9d0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12b9d4 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12ba14 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12ba18 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12ba60 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12ba64 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12baac bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bab0 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12baf8 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bafc 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bb44 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bb48 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bb8c bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bb90 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bbd4 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bbd8 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bc1c bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bc20 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bd04 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 12bd0c 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 12bd64 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 12bd6c 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 12bdc8 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 12bdd0 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 12be30 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12be34 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12be70 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12be74 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bea8 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12beac 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bee0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bee4 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bf18 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bf1c 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12bf50 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12bf54 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12c04c bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 12c054 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 12c1c0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12c1c4 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12c204 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 12c208 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 12c250 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 12c254 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 12c270 bd415680 bd415a80   # ldr [#0x154] -> [#0x158]
+site vsync main 12c27c 7e21d801 7f30e401   # ucvtf -> fixed point 16.16
+site vsync main 12c28c bd415680 bd415a80   # ldr [#0x154] -> [#0x158]
+site vsync main 12c298 7e21d801 7f30e401   # ucvtf -> fixed point 16.16
+site vsync main 12c2a8 bd415680 bd415a80   # ldr [#0x154] -> [#0x158]
+site vsync main 12c2b4 7e21d801 7f30e401   # ucvtf -> fixed point 16.16
+site vsync main 12c2c4 bd415680 bd415a80   # ldr [#0x154] -> [#0x158]
+site vsync main 12c2d0 7e21d801 7f30e401   # ucvtf -> fixed point 16.16
+site vsync main 130ddc bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 130de0 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 130e40 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 130e44 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 13d670 bd415680 bd415a80   # ldr [#0x154] -> [#0x158]
+site vsync main 13d674 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 141b60 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 141b68 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 147804 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 14781c 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 14ca20 bd415722 bd415b22   # ldr [#0x154] -> [#0x158]
+site vsync main 14ca28 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 14ee50 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 14ee54 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 153b74 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 153b78 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 15ec94 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 15ec98 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 15ecbc bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 15ecc0 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 15ed94 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 15ed9c 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1625cc bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 1625d8 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 163d24 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 163d28 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 16cf94 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 16cf9c 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 16de10 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 16de18 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 16fdb8 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 16fdc4 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 16fe10 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 16fe14 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 18f094 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 18f09c 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 19eb10 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 19eb18 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 19f33c bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 19f350 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 1a227c bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 1a2280 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 1a22c0 bd415502 bd415902   # ldr [#0x154] -> [#0x158]
+site vsync main 1a22c4 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 1a22fc bd415520 bd415920   # ldr [#0x154] -> [#0x158]
+site vsync main 1a2304 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 1a2d04 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 1a2d10 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1a2d64 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 1a2d70 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1a2dc4 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 1a2dcc 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1ac870 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 1ac880 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1ad5f4 bd415542 bd415942   # ldr [#0x154] -> [#0x158]
+site vsync main 1ad5f8 7e21d842 7f30e442   # ucvtf -> fixed point 16.16
+site vsync main 1b0434 bd415520 bd415920   # ldr [#0x154] -> [#0x158]
+site vsync main 1b043c 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 1b59ec bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 1b59f0 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1c4338 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 1c4340 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 1de6d4 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 1de6d8 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 71a268 bd415520 bd415920   # ldr [#0x154] -> [#0x158]
+site vsync main 71a270 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 71a2a0 bd415520 bd415920   # ldr [#0x154] -> [#0x158]
+site vsync main 71a2a8 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 71c6cc bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 71c6d4 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 71c8b8 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 71c8c4 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 71cc70 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 71cc78 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 787fc8 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
+site vsync main 787fcc 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 85924c bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 859260 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 85dd24 bd415540 bd415940   # ldr [#0x154] -> [#0x158]
+site vsync main 85dd38 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 86a420 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main 86a428 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main 86d044 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 86d04c 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 8c28c4 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 8c28cc 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main f9b418 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
+site vsync main f9b420 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
+site vsync main fa5d90 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main fa5da4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+
 # main: 1090 spin waits
 spin main 8de78 8deac   # 6 instructions; loads
 spin main 8e044 8e078   # 6 instructions; loads

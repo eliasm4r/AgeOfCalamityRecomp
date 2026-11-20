@@ -19,7 +19,7 @@ void vk_dlaa_frame(void);
 // the viewport of the scene's draws by the frame's jitter (vk_dlaa_viewport, when the viewport is recorded).
 void vk_dlaa_draw(VkExec *ex);
 void vk_dlaa_viewport(VkExec *ex, VkViewport *v);
-// vk_exec_draw.c, once a draw's fragment shader is known: 1 skips the draw (the game's scaling draw when DLSS wrote the
-// scaled picture).
-int vk_dlaa_skip_draw(VkExec *ex, const GfxShader *fs);
+// vk_exec_draw.c, once a draw's shaders are known: at the game's draw that scales the picture up to the output (the
+// DLSS modes), runs DLSS on the picture that draw samples and writes the output; 1 skips the game's draw.
+int vk_dlaa_scale_draw(VkExec *ex);
 int vk_dlaa_ran(void);   // DLAA or DLSS ran in the frame being recorded (vk_fxaa.c then stays off)

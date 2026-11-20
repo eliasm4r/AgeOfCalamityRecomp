@@ -66,15 +66,35 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 
 ### 5. Frame pacing
 
-- Default and only mode today: the game as on the Switch, **30 fps** (present interval 2, clocks untouched).
-- 60 fps needs the three frame-step clocks patched together: the KIDS task, the battle frame-rate block at
-  `main+0x269e150` and the KTGL device configuration. Changing only the present interval doubles the game speed.
-- 40 fps is not trivial: the game computes "vsyncs per update" as an integer of 60 / cap.
+- Default: the game as on the Switch, **30 fps** (present interval 2).
+- **60 fps** (`frame_rate.c`): the game's frame-rate block at `main+0x269e150` is `{fps, vsyncs per update, fps, fps
+  as a float}`, `{30, 2, 30, 30.0}` as shipped. The game's own setter writes `60/n, n, 60/n, 60/n` from a request
+  `(n << 4) | 1`; the game turns frame counts into seconds by dividing by the float and steps by the vsyncs per update.
+  The host writes `{60, 1, 60, 60.0}` at every present and presents every vsync instead of every second one (the
+  window's interval 2 is replaced). Measured: a scripted 3 s run in the Hyrule Field battle covers the same distance,
+  and the dialogue lands at the same second, at 30 and at 60 fps (shots each second of world time). Changing only the
+  present interval doubles the game speed.
+- **120, 144 and 240 fps**: the vsyncs per update are whole numbers, so above 60 the game gets the frame's real time
+  instead (TotK's real-time step: mean of the last 5 display intervals, restarted after a 0.25 s gap). 159
+  instructions read +0x154; the 104 that convert it to a float in a straight line (no branch or branch target between
+  load and ucvtf/scvtf) read +0x158 as 16.16 fixed point (`recomp/patches-v130.txt`, set `vsync`; +0x158's one reader
+  moved to +0x150, the setter's two writes dropped). The 55 integer readers get whole vsyncs that add up to the same
+  time (1, 0, 1, 0... at 120). The rate fields must hold the setting's rate: with them at 60 and a 120 Hz present the
+  game holds itself at 60. Before the patch the intro cutscene ran faster at 120; with it the cutscene's shots land
+  at the same second at 60 and 120 (90 s, shots every 3 s of world time). A global speed factor at main+0x263a8e8
+  (1.0) multiplies 68 of the readers; it is left to the game.
+- Cost above 60 (5800X + RTX 4070, recorded Hyrule Field battle, 1080p, no DLAA): 120 in cutscenes, 85-110 in the
+  battle. The main thread (pinned to virtual core 0) is the limit: it runs about 68 % of the frame and waited 20-24 %
+  for its core. Job workers allowed on every core now take core 0 last and lose ties for it to a thread pinned there
+  (`kernel.c` core_take, core_grant): +5 to +10 fps. The replay's DLAA hook scanned every scene draw's constants for a
+  diagnostic count, half the replay's busy time (8.6 ms -> 5 ms a frame); it stops at the camera now.
+- Cost at 60 fps (Ryzen 7 5800X + RTX 4070, 1080p, Hyrule Field battle with the player running and attacking): 59-60 fps,
+  short dips to 46-56 fps while a cutscene or an area loads.
 
 ### 6. Toolchain
 
 - Clang + LLD (the generated C uses `__int128`, `musttail` and vector types), Ninja, Python, .NET (translator), Vulkan
-  headers, SDL3, libopus, libvpx, zstd, VMA.
+  headers, SDL3, libopus, libvpx, VMA.
 - Build on the PC, play anywhere: WSL2 or Linux builds the Deck folder, MSYS2 builds the Windows one.
 
 ### 7. Content rules
@@ -107,6 +127,7 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
 | NVN front end | `nvn_api_*.c`, `nvn_obj.h`, `nvn_tex.c` |
 | Vulkan back end | `vk_*.c`, `gfx_*.c` |
 | Input, window, menu | `input*.c`, `gfx_window_*.c`, `ui/` (Dear ImGui) |
+| Xbox and PlayStation button prompts | `prompts.c` (swaps the button textures at upload), `tools/make_prompts.py` (draws them) |
 | Platform | `platform/linux.c`, `platform/win32.c`, `platform/platform.h` |
 | CPU of the generated code | `cpu.h`, `simd.h`, `simd_fp.h`, `fma.c` |
 
@@ -146,7 +167,7 @@ steamdeck/
 ```
 
 - The executable needs **GLIBC_2.29** at most; Vulkan, audio, X11/Wayland and the libraries SDL3 uses come from
-  SteamOS. Opus, libvpx and zstd are built in.
+  SteamOS. Opus and libvpx are built in.
 - On the Deck: Desktop Mode, copy the folder, run `sh install-shortcut.sh` once, then add the game as a non-Steam game
   and play in Game Mode.
 - Updating: run `dist` again and copy `AgeOfCalamityRecomp` (the rest only changes with the game); saves and `settings.ini` stay.
@@ -161,7 +182,7 @@ and Minus+Plus opens the full menu. B closes it.
 
 | Row | Values | Note |
 |---|---|---|
-| Frame rate | **30** (default); 60 shows greyed out | the game moves a fixed step per frame, so it runs at 30 until the 60 fps patch exists |
+| Frame rate | **30** (default), 60, 120, 144 or 240 | each step up needs more processor time; all run at the right speed |
 | Console mode | **Handheld** (Deck default) / TV | the Switch operation mode; switched live, like docking a Switch |
 | Performance overlay | off / FPS / full | same as a short L3+R3 press |
 
@@ -316,6 +337,12 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   (`if (c) x = y`); 11 shaders hit it, among them the heart-recovery effect that showed as a white rectangle.
 - **Cost of a battle** (i5-11400H + RTX 3050): steady 30 fps; GPU 6.7 ms, replay 7.8 ms, game thread busy for the whole
   33 ms frame (CPU bound).
+- **Button icons**: every prompt icon comes from one atlas, G1T `3226a433` in `asset/ScreenLayout.rdb.bin` (1024x1024
+  BC3, linear blocks); the game uploads it from guest memory (`vk_texture.c` upload). Text and icons are drawn into a
+  2048x2048 RGBA text atlas each menu frame (font pages are CPU-rendered 1024x768 RGBA from the G1N fonts in
+  `asset/RRPreview.rdb.bin*`). Menu textures arrive through `nvnTextureWriteTexels`. The trapezoid L/R tab art also
+  sits in G1T `8d1f8cb8` (512x256), but no upload of it was seen on the Allies screen: the tabs there still come from
+  an unknown texture.
 - The KTGL main command buffer gets 3 MiB of control memory and a 16 MiB command ring once; the main loop waits for the
   previous frame on its own fence queue (`main+0x157a390`).
 
@@ -329,6 +356,10 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   with them left at 1080p, so a smaller output keeps them there.
 - The KTGL 2D projection reads the target size from `[target+0x78]` (`main+0x17def58`, `0x17df7c8`, `0x17e103c`,
   `0x17e1e58`).
+- Scene larger than the output: 145 % (2784x1566) reaches the battle, 148 % and more crash as the second intro movie
+  starts. A resource loader (`main+0x18d3040`) gets null from a fixed heap (a linear allocator, then a fallback through
+  its vtable +0x48), and `main+0x191cd7c` reads `[null+0x104]`. A 4 GiB application pool does not help. The menu offers
+  up to 140 %.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

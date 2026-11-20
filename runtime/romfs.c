@@ -22,10 +22,6 @@
 // hash, no manifest). A path several overlays give is served by one: a player mod higher in the order beats a lower
 // one, any player mod beats the ACR_ROMFS_MODS manifest, which beats romfs-patches (overlay_contest). A mod path that
 // matches a RomFS path only without case is served under the RomFS spelling.
-//
-// The resource size table: with a player mod enabled, the game's table is rebuilt at start with the tables the mods
-// ship merged in and the entries of the mods' files raised to what they need (restbl_overlay), and served from
-// <profile>/mods/ in place of the game's or a mod's table.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,13 +33,11 @@
 #include "input_map.h"
 #include "layout.h"
 #include "mods.h"
+#include "prompts.h"
 #include "romfs_config.h"
 #include "romfs_path.h"
 #include "platform/platform.h"
-#include "restbl.h"
 #include "sha256.h"
-
-#include <zstd.h>
 
 #define NH 65536                     // RomFS handle slots
 #define READ_CHUNK (64u << 20)       // largest single read
@@ -237,17 +231,16 @@ static uint32_t overlay_slot(uint64_t i) {
 }
 
 // ---- overlays
-// Loads and checks one overlay folder. A failed check stops the game, except with optional set (the Xbox prompts
-// folder): the folder is dropped, the reason logged, and 0 returned. Returns 1 when the folder is loaded or has no
-// manifest. prio: the Overlay field (0 for the port's own folders, 1 for the ACR_ROMFS_MODS manifest).
-static int overlay_load(const char *dir, int optional, int prio) {
-#define BAD(...) do { if (!optional) rt_fatal(__VA_ARGS__); rt_log(__VA_ARGS__); goto bad; } while (0)
+// Loads and checks one overlay folder; a failed check stops the game. A folder without a manifest loads nothing.
+// prio: the Overlay field (0 for the port's own folders, 1 for the ACR_ROMFS_MODS manifest).
+static void overlay_load(const char *dir, int prio) {
+#define BAD(...) rt_fatal(__VA_ARGS__)
     char path[2100];
     need(snprintf(path, sizeof path, "%s/manifest.tsv", dir) < (int)sizeof path, "overlay path");
     FILE *m = fopen(path, "rb");
     if (!m) {
         rt_log("RomFS overlay: none (%s)", path);
-        return 1;
+        return;
     }
     char line[8192];
     size_t first = noverlay;
@@ -282,10 +275,8 @@ static int overlay_load(const char *dir, int optional, int prio) {
         PlatFile *f = open_read(file);
         if (!f) BAD("RomFS overlay: %s missing", file);
         Identity id = identity_of(f);
-        if (id.size != size) {
-            plat_file_close(f);
+        if (id.size != size)
             BAD("RomFS overlay: %s has %llu bytes, its manifest says %llu", file, (unsigned long long)id.size, size);
-        }
         sha_range(f, 0, size, hex, 0);
         plat_file_close(f);
         if (strcmp(hex, sha)) BAD("RomFS overlay: %s has SHA-256 %s, its manifest says %s", file, hex, sha);
@@ -307,15 +298,6 @@ static int overlay_load(const char *dir, int optional, int prio) {
                                       noverlay - first - 16);
     if (noverlay > first) rt_log("RomFS overlay: %s checked, %zu files, %.1f MiB hashed in %.2f s", dir,
                                  noverlay - first, hashed / 1048576.0, now_s() - t0);
-    return 1;
-bad:
-    fclose(m);
-    for (size_t k = first; k < noverlay; k++) {
-        free((void *)overlays[k].path);
-        free((void *)overlays[k].name);
-    }
-    noverlay = first;
-    return 0;
 #undef BAD
 }
 
@@ -366,51 +348,6 @@ static int other_version(const char *path) {
     return 0;
 }
 
-// ---- the resource size table's inputs: the tables the overlays carry, before overlay_contest keeps one of them
-static char restbl_rel[256];   // the RomFS path of the game's table, "" when it has none
-typedef struct {
-    char *file;
-    int mod, other;   // mod: ModInfo index + 1, 0 for the port's folders; other: made for another game version
-} Shipped;
-static Shipped *shipped;
-static size_t nshipped;
-
-static int ends_with(const char *s, const char *tail) {
-    size_t n = strlen(s), k = strlen(tail);
-    return n >= k && !strcmp(s + n - k, tail);
-}
-
-// 1 when rel is a resource size table of any game version.
-static int is_restbl(const char *rel) {
-    return !strncmp(rel, "System/Resource/ResourceSizeTable.", 34) && ends_with(rel, ".rsizetable.zs");
-}
-
-static void shipped_add(const char *file, int mod, int other) {
-    Shipped *grown = realloc(shipped, (nshipped + 1) * sizeof *shipped);
-    char *copy = strdup(file);
-    need(grown && copy, "resource size table list");
-    shipped = grown;
-    shipped[nshipped++] = (Shipped){copy, mod, other};
-}
-
-// The game's table: the one System/Resource/ResourceSizeTable.*.rsizetable.zs of the RomFS.
-static void restbl_find(void) {
-    for (uint64_t i = lower("System/Resource/ResourceSizeTable."); i < file_count; i++) {
-        const char *n = entry_name(entry(i));
-        if (strncmp(n, "System/Resource/ResourceSizeTable.", 34)) break;
-        if (is_restbl(n) && strlen(n) < sizeof restbl_rel) {
-            snprintf(restbl_rel, sizeof restbl_rel, "%s", n);
-            return;
-        }
-    }
-}
-
-// The tables the overlays carry for this game version, every one of them (overlay_contest keeps one).
-static void restbl_collect(void) {
-    for (size_t k = 0; k < noverlay; k++)
-        if (restbl_rel[0] && !strcmp(overlays[k].name, restbl_rel)) shipped_add(overlays[k].path, overlays[k].mod, 0);
-}
-
 typedef struct { int k, prio; const char *dir, *rel; } ModWalk;
 
 static void mod_walk(int k, int prio, const char *dir, const char *rel);
@@ -437,7 +374,6 @@ static int mod_walk_cb(const char *leaf, int kind, uint64_t size, void *ctx) {
     }
     uint64_t i = index_any_case(path);
     if (i == UINT64_MAX && other_version(path)) {
-        if (is_restbl(path)) shipped_add(file, w->k + 1, 1);   // its entries for this mod's files still apply
         m->other_version++;
         return 1;
     }
@@ -550,216 +486,18 @@ static void added_init(void) {
     rt_log("RomFS overlay: %zu files added to the RomFS", nadded);
 }
 
-// RomFS file `rel` as the game would read it: from an overlay that replaces it (*base), else from the image. malloc'd;
-// NULL when it is missing, unreadable or 16 MiB or more (logged with `keeps`, what the game does without it).
-static void *read_served(const char *rel, Overlay **base, size_t *n, const char *keeps) {
-    uint64_t i = lower(rel);
-    *base = NULL;
-    if (i >= file_count || strcmp(entry_name(entry(i)), rel)) {
-        rt_log("RomFS: %s missing; %s", rel, keeps);
-        return NULL;
-    }
-    for (size_t k = 0; k < noverlay; k++)
-        if (overlays[k].index == i) *base = &overlays[k];
-    PlatFile *f = *base ? open_read((*base)->path) : image;
-    uint64_t off = *base ? 0 : entry(i).offset, size = *base ? (*base)->size : entry(i).size;
-    void *in = size && size < (16u << 20) && f ? malloc((size_t)size) : NULL;
-    int ok = in && read_at(f, in, (uint32_t)size, off) == (int64_t)size;
-    if (*base && f) plat_file_close(f);
-    if (!ok) {
-        free(in);
-        rt_log("RomFS: cannot read %s; %s", rel, keeps);
-        return NULL;
-    }
-    *n = (size_t)size;
-    return in;
-}
-
-// Serves out[0..out_n) (malloc'd, freed here) in place of RomFS file `rel` and of an overlay that replaces it (base):
-// written to <profile>/<sub>/<file name of rel>. `what` names the change in the log. 0 when it cannot be written.
-static int serve_generated(const char *rel, Overlay *base, void *out, size_t out_n, const char *sub, const char *what,
-                           const char *keeps) {
-    char dir[2100], file[2200];
-    const char *leaf = strrchr(rel, '/') ? strrchr(rel, '/') + 1 : rel;
-    need(snprintf(dir, sizeof dir, "%s/%s", rt_config()->profile, sub) < (int)sizeof dir, "generated overlay path");
-    need(snprintf(file, sizeof file, "%s/%s", dir, leaf) < (int)sizeof file, "generated overlay path");
-    plat_file_mkdir_p(dir);
-    int ok = plat_file_write(file, out, out_n);
-    free(out);
-    PlatFile *r = ok ? open_read(file) : NULL;
-    if (!r) {
-        rt_log("RomFS: cannot write %s; %s", file, keeps);
-        return 0;
-    }
-    Identity id = identity_of(r);
-    plat_file_close(r);
-    char *copy = strdup(file);
-    need(copy != NULL, "overlay path copy");
-    if (base) {
-        free(base->path);
-        base->path = copy;
-        base->size = out_n;
-        base->id = id;
-    } else {
-        if (noverlay == overlay_cap) {
-            overlay_cap = overlay_cap ? overlay_cap * 2 : 16;
-            overlays = realloc(overlays, overlay_cap * sizeof *overlays);
-            need(overlays != NULL, "overlay table");
-        }
-        char *name = strdup(rel);
-        need(name != NULL, "overlay path copy");
-        overlays[noverlay++] = (Overlay){lower(rel), out_n, copy, name, id};
-    }
-    rt_log("RomFS overlay: %s (%zu bytes, %s) replaces %s", file, out_n, what, base ? "the mod's file" : "the original");
-    return 1;
-}
-
-// ---- the resource size table (restbl.c)
-
-// The decompressed size of a file's bytes as the game unpacks them: the content size its zstd frame records (.zs;
-// the game's files and zstd's own tools write it), four times the bytes for a frame without one, else its size.
-static uint64_t content_size(PlatFile *f, uint64_t off, uint64_t size, const char *rel) {
-    if (!ends_with(rel, ".zs") || !f) return size;
-    uint8_t head[18];
-    uint32_t n = size < sizeof head ? (uint32_t)size : (uint32_t)sizeof head;
-    if (read_at(f, head, n, off) != n) return size;
-    unsigned long long c = ZSTD_getFrameContentSize(head, n);
-    return c == ZSTD_CONTENTSIZE_ERROR ? size : c == ZSTD_CONTENTSIZE_UNKNOWN ? size * 4 : c;
-}
-
-// A table from its zstd bytes; NULL when they are not one.
-static Restbl *restbl_unpack(const void *z, size_t n) {
-    unsigned long long raw = ZSTD_getFrameContentSize(z, n);
-    if (raw == ZSTD_CONTENTSIZE_UNKNOWN || raw == ZSTD_CONTENTSIZE_ERROR || raw > (64u << 20)) return NULL;
-    uint8_t *d = malloc((size_t)raw ? (size_t)raw : 1);
-    size_t got = d ? ZSTD_decompress(d, (size_t)raw, z, n) : 0;
-    Restbl *t = d && !ZSTD_isError(got) && got == raw ? restbl_parse(d, (size_t)raw) : NULL;
-    free(d);
-    return t;
-}
-
-// With a player mod (or the ACR_ROMFS_MODS manifest) serving files: the game's table with every shipped table of this
-// version merged in (an entry larger than the game's wins), the entries a mod's table for another version gives for
-// that mod's files, and each served mod file's entry raised to what its size needs (restbl_grow for a file the game
-// has, restbl_estimate for an added one). Never lowers the game's entries.
-static void restbl_overlay(void) {
-    int player = 0;
-    for (size_t k = 0; k < noverlay; k++) player |= overlays[k].mod || overlays[k].prio == 1;
-    if (!player || !restbl_rel[0]) return;
-    static const char keeps[] = "mod files that grew may fail to load";
-    double t0 = now_s();
-    uint64_t gi = lower(restbl_rel);
-    Entry ge = entry(gi);
-    void *gz = ge.size < (64u << 20) ? malloc((size_t)ge.size) : NULL;
-    Restbl *base = NULL, *out = NULL;
-    if (gz && read_at(image, gz, (uint32_t)ge.size, ge.offset) == (int64_t)ge.size) {
-        base = restbl_unpack(gz, (size_t)ge.size);
-        out = restbl_unpack(gz, (size_t)ge.size);
-    }
-    free(gz);
-    if (!base || !out) {
-        rt_log("RomFS: cannot read the resource size table %s; %s", restbl_rel, keeps);
-        restbl_free(base);
-        restbl_free(out);
-        return;
-    }
-    int tables = 0, merged = 0, raised = 0, estimated = 0;
-    for (size_t s = 0; s < nshipped; s++) {
-        uint64_t n = 0;
-        void *z = plat_file_read(shipped[s].file, &n);
-        Restbl *t = z ? restbl_unpack(z, (size_t)n) : NULL;
-        free(z);
-        if (!t) {
-            rt_log("RomFS: %s is not a resource size table; left out", shipped[s].file);
-            continue;
-        }
-        tables++;
-        if (!shipped[s].other) {
-            merged += restbl_merge(out, base, t);
-        } else {   // another version's table: only the entries of the files its mod serves
-            for (size_t k = 0; k < noverlay; k++) {
-                char key[4200];
-                const char *kp = restbl_key(overlays[k].name, key, sizeof key);
-                if (overlays[k].mod == shipped[s].mod) merged += restbl_take(out, t, &kp, 1);
-            }
-        }
-        restbl_free(t);
-    }
-    Overlay *served = NULL;
-    for (size_t k = 0; k < noverlay; k++) {
-        Overlay *o = &overlays[k];
-        if (o->index == gi) served = o;
-        if ((!o->mod && o->prio != 1) || o->index == gi) continue;
-        char key[4200];
-        restbl_key(o->name, key, sizeof key);
-        int mc = ends_with(o->name, ".mc");
-        PlatFile *f = open_read(o->path);
-        uint64_t now = mc ? o->size : content_size(f, 0, o->size, o->name);
-        if (f) plat_file_close(f);
-        uint32_t entry_size, want;
-        if (o->index != ADDED) {
-            if (!restbl_get(base, key, &entry_size)) continue;   // the game sizes it without the table (streamed)
-            Entry e = entry(o->index);
-            uint64_t was = mc ? e.size : content_size(image, e.offset, e.size, o->name);
-            want = restbl_grow(key, entry_size, was, now, mc);
-        } else {
-            want = restbl_estimate(key, mc ? now * 8 : now);   // a mesh codec file unpacks to several times its size
-            estimated += want != 0;
-        }
-        raised += want && restbl_raise(out, key, want);
-    }
-    restbl_free(base);
-    if (!merged && !raised && !served) {
-        restbl_free(out);
-        rt_log("RomFS: resource size table: the mods' files fit the game's entries (%.0f ms)", (now_s() - t0) * 1000);
-        return;
-    }
-    size_t rn = 0, zn = 0;
-    uint8_t *raw = restbl_write(out, &rn);
-    restbl_free(out);
-    size_t cap = raw ? ZSTD_compressBound(rn) : 0;
-    void *z = raw ? malloc(cap) : NULL;
-    if (z) zn = ZSTD_compress(z, cap, raw, rn, 3);
-    free(raw);
-    if (!z || ZSTD_isError(zn)) {
-        free(z);
-        rt_log("RomFS: cannot pack the merged resource size table; %s", keeps);
-        return;
-    }
-    if (serve_generated(restbl_rel, served, z, zn, "mods", "merged resource sizes", keeps))
-        rt_log("RomFS: resource size table: %d tables merged (%d entries), %d entries raised for mod files (%d "
-               "added files estimated), %.0f ms", tables, merged, raised, estimated, (now_s() - t0) * 1000);
-}
-
-// The player camera's pack with its stick speeds multiplied by ACR_STICK_SENS (camera_speed.c). The base is an
-// overlay that replaces the pack (a mod's camera stays), else the RomFS original; the dictionary is the RomFS's own.
-#define CAMPACK "Pack/Actor/PlayerCamera.pack.zs"
-static void camera_overlay(void) {
-    if (cam_speed_wanted() == 1.0f) return;
-    static const char keeps[] = "the camera keeps its own speed";
-    Overlay *base, *dic_base;
-    size_t n, dn;
-    void *in = read_served(CAMPACK, &base, &n, keeps), *out = NULL;
-    void *dic = in ? read_served("Pack/ZsDic.pack.zs", &dic_base, &dn, keeps) : NULL;
-    size_t out_n = 0;
-    int ok = in && dic && cam_pack_build(in, n, dic, dn, &out, &out_n);
-    free(in);
-    free(dic);
-    if (ok && serve_generated(CAMPACK, base, out, out_n, "camera", "camera speed", keeps)) cam_pack_served();
-}
-
-// The button prompts' folders (input_prompts_folder) and whether each had a manifest next to romfs-index.bin at start;
-// the one the settings asked for at start, the one overlay_init loaded (NULL: the game's own prompts) and why the first
-// did not load (ROMFS_PROMPTS_*). The menu compares them with the settings in effect (ui/menu.cpp prompts_note).
-static struct { const char *name; int ready; } prompts_folders[2];
+// The Xbox prompts' files (input_prompts_folder) and whether each was next to romfs-index.bin at start; the one the
+// settings asked for at start, the one overlay_init loaded (NULL: the game's own prompts) and why the first did not
+// load (ROMFS_PROMPTS_*). The menu compares them with the settings in effect (ui/menu.cpp prompts_note).
+static struct { const char *name; int ready; } prompts_files[4];
 static const char *prompts_wanted, *prompts_loaded;
 static int prompts_off;
 
 const char *romfs_prompts(void) { return prompts_loaded; }
 
 int romfs_prompts_ready(const char *folder) {
-    for (int i = 0; i < 2; i++)
-        if (folder && prompts_folders[i].name && !strcmp(prompts_folders[i].name, folder)) return prompts_folders[i].ready;
+    for (int i = 0; i < 4; i++)
+        if (folder && prompts_files[i].name && !strcmp(prompts_files[i].name, folder)) return prompts_files[i].ready != 0;
     return 0;
 }
 
@@ -767,110 +505,68 @@ int romfs_prompts_off(const char *folder) {
     return folder && prompts_wanted && !strcmp(folder, prompts_wanted) ? prompts_off : ROMFS_PROMPTS_OK;
 }
 
-// The first RomFS file that the overlays [a, b) and [c, d) both replace, or NULL.
-static const char *overlay_clash(size_t a, size_t b, size_t c, size_t d) {
-    for (size_t i = a; i < b; i++)
-        for (size_t j = c; j < d; j++)
-            if (overlays[i].index != ADDED && overlays[i].index == overlays[j].index &&
-                strcmp(overlays[i].name, restbl_rel))   // restbl_overlay merges both tables
-                return overlays[i].name;
-    return NULL;
-}
-
-// Drops the overlays [a, b), the ones after them moving down.
-static void overlay_drop(size_t a, size_t b) {
-    for (size_t k = a; k < b; k++) {
-        free((void *)overlays[k].path);
-        free((void *)overlays[k].name);
+// The prompts' file the settings ask for now; selects it in prompts.c (live: the game's button textures upload again,
+// vk_texture.c). Called at start and at every present; it only looks again when a setting changed.
+void romfs_prompts_tick(void) {
+    static unsigned seen = ~0u;
+    static PlatMutex mu = PLAT_MUTEX_INIT;   // the menu thread and the present
+    unsigned v = cfg_version();
+    if (__atomic_load_n(&seen, __ATOMIC_ACQUIRE) == v) return;
+    plat_mutex_lock(&mu);
+    if (seen != v) {
+        const char *layout = cfg_value("ACR_PAD_LAYOUT");
+        const char *want = input_prompts_folder(input_prompts_pick(cfg_value("ACR_PROMPTS"), layout), layout);
+        int slot = -1;
+        for (int i = 0; i < 4; i++)
+            if (want && prompts_files[i].name && !strcmp(want, prompts_files[i].name)) slot = i;
+        prompts_wanted = want;
+        prompts_off = !want ? ROMFS_PROMPTS_OK
+                      : slot < 0 || !prompts_files[slot].ready ? ROMFS_PROMPTS_MISSING
+                      : prompts_files[slot].ready < 0 ? ROMFS_PROMPTS_FAILED : ROMFS_PROMPTS_OK;
+        const char *now = want && prompts_off == ROMFS_PROMPTS_OK ? want : NULL;
+        if (now != prompts_loaded) {
+            rt_log("prompts: %s", now ? now : "the game's own buttons");
+            if (want && !now)
+                rt_log("prompts: prompts = %s, but %s is %s (run the setup again); Switch prompts stay",
+                       cfg_value("ACR_PROMPTS"), want, prompts_off == ROMFS_PROMPTS_FAILED ? "damaged" : "missing");
+        }
+        prompts_loaded = now;
+        prompts_select(now ? slot : -1);
+        __atomic_store_n(&seen, v, __ATOMIC_RELEASE);
     }
-    memmove(overlays + a, overlays + b, (noverlay - b) * sizeof *overlays);
-    noverlay -= b - a;
+    plat_mutex_unlock(&mu);
 }
 
 static void overlay_init(void) {
-    // ACR_ROMFS_PATCHES unset: romfs-patches next to romfs-index.bin if it has a manifest (tools/make_romfs_patches.py).
-    // A game resolution that is not 16:9 takes romfs-patches-<w>x<h> instead when it is there: the same overlay with
-    // the UI laid out for that shape (make_romfs_patches.py --aspect), when the game version has the camera aspect patch
-    // the layout goes with (res_wants_wide_overlay).
-    // With prompts = xbox, the Xbox prompts' folder for the pad layout in its place (input_prompts_folder): the same
-    // patches with Xbox button icons (make_romfs_patches.py --prompts). The game reads the archives once at boot, so
-    // the prompts stay until restart even though the layout itself changes live. Each folder replaces romfs-patches as
-    // a whole and the setup builds no folder of another shape with Xbox prompts, so a game resolution that is not 16:9
-    // keeps the Switch prompts. So does a RomFS mod (the ACR_ROMFS_MODS manifest or a player mod) that replaces one of
-    // the prompts' fonts: romfs-patches loads in their place, so the mod's file is not served beside prompts files made
-    // for the game's own. A mod's resource size table is no clash: restbl_overlay merges it with the prompts' one.
-    char def[2100], path[2100];
+    // The Xbox and PlayStation prompts' files (input_prompts_folder, tools/make_prompts.py), all loaded: prompts.c puts
+    // the one the settings ask for in place of the game's button atlas when the game uploads it, and a change of the
+    // setting uploads the atlas again (romfs_prompts_tick). ready: 1 loaded, -1 damaged, 0 missing.
+    char path[2100];
+    static const char *const layouts[2] = {"nintendo", "xbox"};   // one of each file
+    for (int i = 0; i < 4; i++) {
+        prompts_files[i].name = input_prompts_folder(i < 2 ? PROMPTS_XBOX : PROMPTS_PLAYSTATION, layouts[i & 1]);
+        int there = snprintf(path, sizeof path, "%s/%s", index_dir, prompts_files[i].name) < (int)sizeof path &&
+                    plat_file_exists(path);
+        prompts_files[i].ready = !there ? 0 : prompts_load(i, path) ? 1 : -1;
+        if (prompts_files[i].ready < 0) rt_log("prompts: %s is damaged (run the setup again)", path);
+    }
+    romfs_prompts_tick();
+    // ACR_ROMFS_PATCHES unset: romfs-patches next to romfs-index.bin if it has a manifest.
     const char *patches = cfg_get("ACR_ROMFS_PATCHES"), *mods = cfg_get("ACR_ROMFS_MODS");
-    int wide = 0;
-    unsigned out[2];
-    res_wanted(out);
-    if (!patches && res_wants_wide_overlay(out)) {
-        if (snprintf(def, sizeof def, "%s/romfs-patches-%ux%u/manifest.tsv", index_dir, out[0], out[1]) < (int)sizeof def &&
-            plat_file_exists(def)) {
-            def[strlen(def) - strlen("/manifest.tsv")] = 0;
-            patches = def, wide = 1;
-        } else {
-            rt_log("RomFS overlay: no romfs-patches-%ux%u for this game resolution, the UI keeps its 16:9 layout "
-                   "(tools/make_romfs_patches.py --aspect %ux%u)", out[0], out[1], out[0], out[1]);
-        }
+    char plain[2100];
+    if (!patches && snprintf(plain, sizeof plain, "%s/romfs-patches/manifest.tsv", index_dir) < (int)sizeof plain &&
+        plat_file_exists(plain)) {
+        plain[strlen(plain) - strlen("/manifest.tsv")] = 0;
+        patches = plain;
     }
-    static const char *const layouts[2] = {"nintendo", "xbox"};   // one of each folder
-    for (int i = 0; i < 2; i++) {
-        prompts_folders[i].name = input_prompts_folder(PROMPTS_XBOX, layouts[i]);
-        prompts_folders[i].ready =
-            snprintf(path, sizeof path, "%s/%s/manifest.tsv", index_dir, prompts_folders[i].name) < (int)sizeof path &&
-            plat_file_exists(path);
-    }
-    const char *layout = cfg_value("ACR_PAD_LAYOUT");
-    prompts_wanted = input_prompts_folder(input_prompts_pick(cfg_get("ACR_PROMPTS"), layout), layout);
-    prompts_off = !prompts_wanted                         ? ROMFS_PROMPTS_OK
-                  : wide                                  ? ROMFS_PROMPTS_SHAPE
-                  : patches                               ? ROMFS_PROMPTS_PATCHES
-                  : !romfs_prompts_ready(prompts_wanted)  ? ROMFS_PROMPTS_MISSING
-                                                          : ROMFS_PROMPTS_OK;
-    restbl_find();
-    size_t first = noverlay;
-    if (prompts_wanted && prompts_off == ROMFS_PROMPTS_OK) {
-        snprintf(path, sizeof path, "%s/%s", index_dir, prompts_wanted);   // fits: its manifest path did
-        if (overlay_load(path, 1, 0)) {
-            prompts_loaded = prompts_wanted;
-            rt_log("RomFS overlay: Xbox button prompts (%s)", path);
-        } else {
-            prompts_off = ROMFS_PROMPTS_FAILED;
-            rt_log("RomFS overlay: %s failed its check (run the setup again); romfs-patches loads instead", path);
-        }
-    } else if (prompts_wanted) {
-        rt_log("RomFS overlay: prompts = xbox, but %s; Switch prompts stay",
-               prompts_off == ROMFS_PROMPTS_SHAPE     ? "the game resolution takes its own UI layout"
-               : prompts_off == ROMFS_PROMPTS_PATCHES ? "ACR_ROMFS_PATCHES is set"
-                                                      : "their folder has no manifest.tsv (run the setup again)");
-    }
-    size_t prompts_end = noverlay;
-    char plain[2100];   // romfs-patches, when it has a manifest
-    int plain_ok = snprintf(plain, sizeof plain, "%s/romfs-patches/manifest.tsv", index_dir) < (int)sizeof plain &&
-                   plat_file_exists(plain);
-    if (plain_ok) plain[strlen(plain) - strlen("/manifest.tsv")] = 0;
-    if (!patches && !prompts_loaded && plain_ok) patches = plain;
-    if (patches && *patches && strcmp(patches, "0")) overlay_load(patches, 0, 0);
-    size_t mods_first = noverlay;
-    if (mods && *mods && strcmp(mods, "0")) overlay_load(mods, 0, 1);
+    if (patches && *patches && strcmp(patches, "0")) overlay_load(patches, 0);
+    if (mods && *mods && strcmp(mods, "0")) overlay_load(mods, 1);
     mods_overlay_init();
-    const char *clash = prompts_loaded ? overlay_clash(first, prompts_end, mods_first, noverlay) : NULL;
-    if (clash) {
-        rt_log("RomFS overlay: a RomFS mod replaces %s, which the Xbox prompts change too; Switch prompts stay", clash);
-        overlay_drop(first, prompts_end);
-        prompts_loaded = NULL;
-        prompts_off = ROMFS_PROMPTS_MODS;
-        if (plain_ok) overlay_load(plain, 0, 0);
-    }
-    restbl_collect();
     overlay_contest();
     mods_overlay_log();
-    restbl_overlay();
-    camera_overlay();
     added_init();
     if (noverlay) qsort(overlays, noverlay, sizeof *overlays, overlay_order);
-    for (size_t k = 1; k < noverlay; k++)   // overlay_contest left one per file; the generated ones replace in place
+    for (size_t k = 1; k < noverlay; k++)   // overlay_contest left one per file
         if (overlays[k].index == overlays[k - 1].index)
             rt_fatal("RomFS overlay: %s and %s replace the same file %s", overlays[k - 1].path, overlays[k].path,
                      overlays[k].name);
@@ -939,7 +635,7 @@ static void init_once(void *param) {
     const char *dir = rt_config()->romfs;
     need(snprintf(image_file, sizeof image_file, "%s/romfs.bin", dir) < (int)sizeof image_file, "image path");
     image = open_read(image_file);
-    if (!image) rt_fatal("RomFS image %s missing; put romfs.bin into the romfs folder next to totk or set ACR_ROMFS",
+    if (!image) rt_fatal("RomFS image %s missing; put romfs.bin into the romfs folder next to AgeOfCalamityRecomp or set ACR_ROMFS",
                          image_file);
     PlatFileId sz;
     need(plat_file_id(image, &sz), "image size");

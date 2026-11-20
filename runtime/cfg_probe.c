@@ -29,7 +29,7 @@ int probe_cfg(void) {
         "; another comment\r\n"
         "[frame rate]\r\n"
         "  fps60 = 0  \r\n"
-        "Realtime=0\r\n"
+        "Fxaa=0\r\n"
         "[Display]\r\n"
         "GPU_name = \"My GPU 1\"\r\n"
         "ACR_Locale = de-DE\r\n"
@@ -44,12 +44,12 @@ int probe_cfg(void) {
     CHECK(plat_file_write(path, ini, sizeof ini - 1), "write the probe ini");
     CHECK(cfg_load(path) == 1, "load the probe ini");
     CHECK(EQ(cfg_get("ACR_FPS60"), "0"), "value read, whitespace trimmed, lower-case key");
-    CHECK(EQ(cfg_get("ACR_REALTIME"), "0"), "key without spaces, mixed case");
+    CHECK(EQ(cfg_get("ACR_FXAA"), "0"), "key without spaces, mixed case");
     CHECK(EQ(cfg_get("ACR_GPU_NAME"), "My GPU 1"), "quoted value, section ignored");
     CHECK(EQ(cfg_get("ACR_LOCALE"), "de-DE"), "ACR_ prefix accepted in the file");
     CHECK(cfg_get("ACR_LANG") == NULL, "empty value is unset");
     CHECK(EQ(cfg_get("ACR_TRACE"), "b"), "later line wins");
-    CHECK(cfg_get("ACR_CLOTH_REALTIME") == NULL, "absent key is NULL");
+    CHECK(cfg_get("ACR_PCSS") == NULL, "absent key is NULL");
     CHECK(cfg_get("ACR_comment") == NULL, "comment is not a key");
     CHECK(EQ(cfg_get("ACR_NO_SUCH_SETTING"), "1"), "unknown key is still readable");
     plat_setenv("ACR_FPS60", "1");
@@ -304,7 +304,7 @@ int probe_cfg(void) {
           "pad layout: a set layout wins over the labels");
     CHECK(input_pad_layout_pick("xbox_prompts", 0) == PAD_LAYOUT_NINTENDO &&
               input_pad_layout_pick("Xbox_Prompts", 1) == PAD_LAYOUT_NINTENDO,
-          "pad layout: 0.1.9's xbox_prompts keeps the Nintendo positions (only the prompts change, romfs.c overlay_init)");
+          "pad layout: 0.1.9's xbox_prompts keeps the Nintendo positions (only the prompts change, prompts.c)");
     // Button prompts (input_map.c)
     CHECK(input_prompts_pick(NULL, "auto") == PROMPTS_NINTENDO && input_prompts_pick("", "xbox") == PROMPTS_NINTENDO &&
               input_prompts_pick("Xbox", "nintendo") == PROMPTS_XBOX && input_prompts_pick("nintendo", "xbox") == PROMPTS_NINTENDO,
@@ -313,20 +313,28 @@ int probe_cfg(void) {
           "prompts: 0.1.9's pad_layout = xbox_prompts means Xbox while prompts is unset");
     CHECK(!input_prompts_folder(PROMPTS_NINTENDO, "nintendo") && !input_prompts_folder(PROMPTS_NINTENDO, "xbox"),
           "prompts: the game's own need no folder");
-    CHECK(EQ(input_prompts_folder(PROMPTS_XBOX, "nintendo"), "romfs-patches-xbox") &&
-              EQ(input_prompts_folder(PROMPTS_XBOX, "xbox_prompts"), "romfs-patches-xbox") &&
-              EQ(input_prompts_folder(PROMPTS_XBOX, "xbox"), "romfs-patches-xbox-label") &&
-              EQ(input_prompts_folder(PROMPTS_XBOX, "auto"), "romfs-patches-xbox-label") &&
-              EQ(input_prompts_folder(PROMPTS_XBOX, NULL), "romfs-patches-xbox-label"),
+    CHECK(EQ(input_prompts_folder(PROMPTS_XBOX, "nintendo"), "prompts-xbox.bin") &&
+              EQ(input_prompts_folder(PROMPTS_XBOX, "xbox_prompts"), "prompts-xbox.bin") &&
+              EQ(input_prompts_folder(PROMPTS_XBOX, "xbox"), "prompts-xbox-label.bin") &&
+              EQ(input_prompts_folder(PROMPTS_XBOX, "auto"), "prompts-xbox-label.bin") &&
+              EQ(input_prompts_folder(PROMPTS_XBOX, NULL), "prompts-xbox-label.bin"),
           "prompts: the face buttons by position for the Nintendo layout, by label for xbox and auto");
-    // romfs-patches-xbox shows A as B (tests/romfs_prompts_test.py checks the folders' contents). It is right exactly
+    CHECK(input_prompts_pick("PlayStation", "auto") == PROMPTS_PLAYSTATION &&
+              EQ(input_prompts_folder(PROMPTS_PLAYSTATION, "nintendo"), "prompts-ps.bin") &&
+              EQ(input_prompts_folder(PROMPTS_PLAYSTATION, "playstation"), "prompts-ps-label.bin") &&
+              EQ(input_prompts_folder(PROMPTS_PLAYSTATION, "auto"), "prompts-ps-label.bin") &&
+              EQ(input_prompts_folder(PROMPTS_XBOX, "playstation"), "prompts-xbox-label.bin"),
+          "prompts: PlayStation files, circle as A for the Nintendo layout, cross otherwise");
+    CHECK(input_pad_layout_pick("PlayStation", 1) == PAD_LAYOUT_XBOX,
+          "pad layout: PlayStation puts A on cross, the bottom button, whatever the labels");
+    // prompts-xbox.bin shows A as B (tools/make_prompts.py, tests/test_tools.py). It is right exactly
     // where the layout puts A on the east button, which an Xbox pad labels B.
     input_map_reset();
-    static const char *const layouts[] = {"nintendo", "xbox", "auto", "xbox_prompts"};
-    for (int i = 0; i < 4; i++) {
+    static const char *const layouts[] = {"nintendo", "xbox", "auto", "xbox_prompts", "playstation"};
+    for (int i = 0; i < 5; i++) {
         int a_east = input_map_pad_buttons((uint8_t[PAD_COUNT]){[PAD_EAST] = 1}, input_pad_layout_pick(layouts[i], 0)) == 1ull << B_A;
-        CHECK(a_east == EQ(input_prompts_folder(PROMPTS_XBOX, layouts[i]), "romfs-patches-xbox"),
-              "prompts: the folder names A as B exactly when the layout puts A on the button labelled B");
+        CHECK(a_east == EQ(input_prompts_folder(PROMPTS_XBOX, layouts[i]), "prompts-xbox.bin"),
+              "prompts: the file names A as B exactly when the layout puts A on the button labelled B");
     }
     uint8_t pd[PAD_COUNT] = {0};
     pd[PAD_SOUTH] = pd[PAD_NORTH] = 1;

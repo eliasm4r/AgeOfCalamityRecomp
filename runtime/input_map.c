@@ -289,20 +289,24 @@ void input_map_line(const InputMap *m, int action, char *out, size_t n) {
 
 int input_pad_layout_pick(const char *setting, int east_labelled_a) {
     if (setting && (!strcasecmp(setting, "nintendo") || !strcasecmp(setting, "xbox_prompts"))) return PAD_LAYOUT_NINTENDO;
-    if (setting && !strcasecmp(setting, "xbox")) return PAD_LAYOUT_XBOX;
+    if (setting && (!strcasecmp(setting, "xbox") || !strcasecmp(setting, "playstation"))) return PAD_LAYOUT_XBOX;
     return east_labelled_a ? PAD_LAYOUT_NINTENDO : PAD_LAYOUT_XBOX;
 }
 
 int input_prompts_pick(const char *prompts, const char *pad_layout) {
-    if (prompts && *prompts) return !strcasecmp(prompts, "xbox") ? PROMPTS_XBOX : PROMPTS_NINTENDO;
+    if (prompts && *prompts)
+        return !strcasecmp(prompts, "xbox") ? PROMPTS_XBOX : !strcasecmp(prompts, "playstation") ? PROMPTS_PLAYSTATION
+                                                                                                : PROMPTS_NINTENDO;
     return pad_layout && !strcasecmp(pad_layout, "xbox_prompts") ? PROMPTS_XBOX : PROMPTS_NINTENDO;
 }
 
 const char *input_prompts_folder(int prompts, const char *pad_layout) {
-    if (prompts != PROMPTS_XBOX) return NULL;
-    // The folders are read at start, before a pad is open: auto counts as Xbox, as for a pad without Nintendo labels.
+    if (prompts != PROMPTS_XBOX && prompts != PROMPTS_PLAYSTATION) return NULL;
+    // The files are read at start, before a pad is open: auto counts as Xbox, as for a pad without Nintendo labels.
     // A Nintendo-labelled pad under auto plays by label too (its A is on the button labelled A), so it matches as well.
-    return input_pad_layout_pick(pad_layout, 0) == PAD_LAYOUT_NINTENDO ? "romfs-patches-xbox" : "romfs-patches-xbox-label";
+    int by_position = input_pad_layout_pick(pad_layout, 0) == PAD_LAYOUT_NINTENDO;
+    if (prompts == PROMPTS_PLAYSTATION) return by_position ? "prompts-ps.bin" : "prompts-ps-label.bin";
+    return by_position ? "prompts-xbox.bin" : "prompts-xbox-label.bin";
 }
 
 uint64_t input_map_pad_buttons(const uint8_t down[PAD_COUNT], int layout) {

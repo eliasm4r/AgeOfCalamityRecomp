@@ -24,6 +24,7 @@
 #include "nvn_api.h"
 #include "nvn_hmap.h"
 #include "nvn_tex.h"
+#include "prompts.h"
 #include "tex.h"
 #include "vk.h"
 #include "vk_exec.h"
@@ -47,6 +48,7 @@ typedef struct Tex {
     uint32_t wgen;                // page generation of the last upload check
     uint32_t checked;             // submit_epoch of the last check from a draw binding
     int uploaded, released;
+    uint32_t prompts_gen;   // a texture of the game's buttons (prompts.c): the prompts_gen it was uploaded at, else 0
     uint32_t n_up;                // uploads of this entry (vk_texture_debug)
     int last_ch;                  // last vk_mem_changed result of make_fresh: 1 written, 0 clean, -1 not tracked
     struct Tex *next_at;          // other entries at the same storage address
@@ -795,6 +797,12 @@ static void upload(Tex *e) {
                 rg[k].bufferRowLength = w, rg[k].bufferImageHeight = h;
             } else {
                 rg[k].bufferRowLength = rb / (uint32_t)bpb * (uint32_t)bw, rg[k].bufferImageHeight = rows * (uint32_t)bh;
+                if (n == 1 && !is3d) {   // the textures of the game's buttons: the selected ones (prompts.c)
+                    uint32_t pg = prompts_gen();
+                    if (prompts_swap(w, h, d->format == NVN_FORMAT_RGBA_DXT5 || d->format == NVN_FORMAT_RGBA_DXT5_SRGB,
+                                     dst, raw))
+                        e->prompts_gen = pg;
+                }
             }
             free(tmp);
         }
@@ -884,6 +892,7 @@ static int storage_rewritten(const Tex *e, uint32_t since, uint32_t *now) {
 // A mirrored texture is uploaded on first use and again when its storage pages carry a newer write generation.
 static void make_fresh(Tex *e) {
     if (!e->pub.mirrored || e->pub.gpu_owned) return;
+    if (e->prompts_gen && e->prompts_gen != prompts_gen()) e->uploaded = 0;   // other prompts selected: upload again
     uint64_t size = e->t.L.size;
     if (!e->uploaded) {
         vk_mem_changed(e->pub.addr, size, 0, &e->wgen);   // resets the write bits before the storage is read
@@ -902,6 +911,7 @@ static void make_fresh(Tex *e) {
 // after it, during this replay) keeps its write-watch bit and is caught by the next submission's snapshot.
 static void make_fresh_snap(Tex *e) {
     if (!e->pub.mirrored || e->pub.gpu_owned) return;
+    if (e->prompts_gen && e->prompts_gen != prompts_gen()) e->uploaded = 0;   // other prompts selected: upload again
     uint32_t now;
     n_checks++;
     int ch = vk_mem_changed_snap(e->pub.addr, e->t.L.size, e->uploaded ? e->wgen : 0, submit_epoch, &now);

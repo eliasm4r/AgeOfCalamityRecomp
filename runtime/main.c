@@ -35,7 +35,7 @@ unsigned rt_trace;
 
 // Log file. Every game run also writes its log to logs\game.log next to AgeOfCalamityRecomp, so a player has one to attach to a report
 // and to read, whatever started it: a front end such as RecompLauncher sends stderr to a file of its own that the
-// player does not see, so a run with stderr in a file writes both (run_game.py and `2> file` keep theirs). Each start moves the earlier logs to totk.1.log .. totk.4.log. A file stops at 64 MiB
+// player does not see, so a run with stderr in a file writes both (run_game.py and `2> file` keep theirs). Each start moves the earlier logs to game.1.log .. game.4.log. A file stops at 64 MiB
 // (ACR_TRACE can write that much). Lines from before log_open wait in a static buffer: mem_init runs first so that
 // nothing else lands in the guest address space, and an earlier open would put the CRT's heap there.
 #define LOG_KEEP 5
@@ -107,10 +107,10 @@ static void log_open(int game) {
     if (cut && (size_t)(cut - dir) + sizeof "/logs" <= sizeof dir) {
         strcpy(cut, "/logs");
         plat_file_mkdir_p(dir);
-        for (int i = LOG_KEEP - 1; i > 0; i--) {   // totk.3.log -> totk.4.log, ..., game.log -> totk.1.log
-            if (i > 1) snprintf(from, sizeof from, "%s/totk.%d.log", dir, i - 1);
+        for (int i = LOG_KEEP - 1; i > 0; i--) {   // game.3.log -> game.4.log, ..., game.log -> game.1.log
+            if (i > 1) snprintf(from, sizeof from, "%s/game.%d.log", dir, i - 1);
             else snprintf(from, sizeof from, "%s/game.log", dir);
-            snprintf(to, sizeof to, "%s/totk.%d.log", dir, i);
+            snprintf(to, sizeof to, "%s/game.%d.log", dir, i);
             if (plat_file_exists(from)) plat_file_replace(from, to);
         }
         snprintf(g_log_path, sizeof g_log_path, "%s/game.log", dir);
@@ -217,7 +217,7 @@ static void crash_handler(const PlatCrash *x) {
     if (plat_xchg32(&busy, 1)) plat_exit(71);
     char d[160];
     uintptr_t rip = x->rip;
-    rt_logf("FATAL: %s (%#x) at host %p (astralchain+%#llx)", x->what, x->code, (void *)rip, (unsigned long long)x->offset);
+    rt_logf("FATAL: %s (%#x) at host %p (AgeOfCalamityRecomp+%#llx)", x->what, x->code, (void *)rip, (unsigned long long)x->offset);
     if (x->access >= 0)
         rt_logf(", %s address %#llx", x->access == 1 ? "writing" : x->access == 8 ? "executing" : "reading",
                 (unsigned long long)x->addr);
@@ -226,7 +226,7 @@ static void crash_handler(const PlatCrash *x) {
     if (f) rt_logf("  in lifted function f_%llx = %s\n", (unsigned long long)f, ldr_describe(f, d, sizeof d));
     for (int i = 0; i < x->nframes; i++) {   // abort and invalid parameter: where the host code called it
         uint64_t g = lifted_function(x->frames[i]);
-        rt_logf("  host frame %2d: astralchain+%#llx", i, (unsigned long long)(x->frames[i] - (rip - x->offset)));
+        rt_logf("  host frame %2d: AgeOfCalamityRecomp+%#llx", i, (unsigned long long)(x->frames[i] - (rip - x->offset)));
         if (g) rt_logf(" in lifted function f_%llx", (unsigned long long)g);
         rt_log_raw("\n", 1);
     }
@@ -540,7 +540,7 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "--probe-loader")) return probe_loader();
     if (!strcmp(mode, "--probe-cfg")) return probe_cfg();
 #ifdef _WIN32
-    if (!strcmp(mode, "--probe-dpi")) return probe_dpi();   // the Win32 DPI awareness of totk.manifest
+    if (!strcmp(mode, "--probe-dpi")) return probe_dpi();   // the Win32 DPI awareness of AgeOfCalamityRecomp.manifest
 #endif
     if (!strcmp(mode, "--probe-mods")) return probe_mods();
     if (!strcmp(mode, "--probe-kernel")) return probe_kernel();

@@ -550,8 +550,6 @@ static void ov_nfp_get_model_info(Cpu *c) {
     ret_x(c, 0);
 }
 
-static void ov_nfp_no_device(Cpu *c) { ret_x(c, NFP_R_DEVICE_NOT_FOUND); }
-
 // void err::ShowError(Result): the game's error dialog, logged
 static void ov_show_error(Cpu *c) {
     uint32_t r = (uint32_t)arg_x(c, 0);
@@ -1170,3 +1168,4 @@ HOST_OVERRIDE("_ZN2nn2pl22GetSharedFontLoadStateENS0_14SharedFontTypeE", ov_font
 HOST_OVERRIDE("_ZN2nn2pl20GetSharedFontAddressENS0_14SharedFontTypeE", ov_font_address);
 HOST_OVERRIDE("_ZN2nn2pl17GetSharedFontSizeENS0_14SharedFontTypeE", ov_font_size);
 HOST_OVERRIDE("_ZN2nn2pl13GetSharedFontEPiPNS0_14SharedFontDataEiNS_8settings12LanguageCodeE", ov_font_get);
+
