@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+### Fixed
+- **Endless loading at the first cutscene** with the 3D render scale at 125 % or 140 %: the game's GPU texture pool
+  has a fixed size and the larger scene filled it. Render scale now goes up to 100 %; a `settings.ini` with 125 or
+  140 is read as 100. Supersampling comes back once that pool can be grown.
+
 ## 0.1.0 (beta)
 
 First beta of AgeOfCalamityRecomp: Hyrule Warriors: Age of Calamity (update 1.3.0) built for Windows and the Steam

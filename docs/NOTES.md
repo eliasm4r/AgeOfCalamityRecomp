@@ -358,8 +358,13 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   `0x17e1e58`).
 - Scene larger than the output: 145 % (2784x1566) reaches the battle, 148 % and more crash as the second intro movie
   starts. A resource loader (`main+0x18d3040`) gets null from a fixed heap (a linear allocator, then a fallback through
-  its vtable +0x48), and `main+0x191cd7c` reads `[null+0x104]`. A 4 GiB application pool does not help. The menu offers
-  up to 140 %.
+  its vtable +0x48), and `main+0x191cd7c` reads `[null+0x104]`. A 4 GiB application pool does not help.
+- 125 % and 140 % reach the battle but the first story cutscene never finishes loading (a job thread polls
+  `main+0x15209c0` forever). The game's GPU texture pool (NVN `COMPRESSIBLE`) is a fixed 1510 MiB, set at
+  `main+0x8aecf8` (`mov w11, #0x5e600000`, next to 215 MiB at `0xd700000` and the 101 MiB shader pool): the same
+  size at 100 and 140 %, so the application pool's growth never reaches it. Growing it alone (even by 32 MiB) makes
+  `nnMain` give up right after the first `nvnMemoryPoolInitialize` (`main+0x4ee0`): its storage comes from another
+  fixed game heap. The menu offers up to 100 % until that heap is found.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

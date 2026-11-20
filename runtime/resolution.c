@@ -8,8 +8,12 @@
 //
 // Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
 // texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), ACR_RENDER_SCALE = the
-// scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 140.
-// Above 100 the scene is larger than the output (supersampling), and the game's final passes scale it down. 145 % is the
+// scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 100.
+// Above 100 (supersampling) the first cutscene of the story never finishes loading (125 and 140 %, 2026-11-20): the
+// game's GPU texture pool is a fixed 1510 MiB (heap configuration main+0x8aecf8) and the larger targets fill it; growing
+// that pool alone makes nnMain give up at start (its storage comes from another fixed game heap). Capped at 100 until
+// that heap is grown. Before that cutscene was found, 145 % was the
+// largest that reached the battle (2026-11-20, the same route from the title screen): from 148 % on, a resource the
 // largest that reached the battle (2026-11-20, the same route from the title screen): from 148 % on, a resource the
 // game loads as the second intro movie starts gets no memory (main+0x18d3040: its linear allocator is full and the
 // fallback allocator returns null; main+0x191cd7c reads it), whatever the size of the application pool (4 GiB tried):
@@ -74,11 +78,11 @@ static void decide(void) {
     } else if (strcmp(s, "game")) {
         char *end;
         double pct = strtod(s, &end);
-        if (end != s && !*end && pct >= 25 && pct <= 140) {
+        if (end != s && !*end && pct >= 25 && pct <= 100) {
             k = pct / 100.0;
             R.scene_set = 1;
         } else {
-            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..140; game", s);
+            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..100; game", s);
         }
     }
     double sw = R.ow * k, sh = R.oh * k;
