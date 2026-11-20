@@ -34,8 +34,8 @@ Deck from your own copy of the game.
   gets the camera's motion with a reprojection worked out in double precision, uses NVIDIA's transformer model
   (preset K), the real time between frames and a jitter sequence as long as NVIDIA asks for. Edges are smooth and
   details stay steady when the camera moves.
-- **FXAA** for every graphics card: the game keeps a copy of the picture just before the HUD, and that copy now goes
-  through an FXAA pass, so the edges of the 3D scene are smoothed while the HUD stays sharp. It is on by default and
+- **FXAA** for every graphics card: the picture goes through an FXAA pass just before the game draws the HUD, so the
+  edges of the 3D scene are smoothed while the HUD stays sharp. It is on by default and
   turns itself off while DLAA or DLSS runs.
 - **Render scale** up to 100 % works (the 3D scene at full 1920x1080). Above 100 % is no longer offered: the game
   crashes when its scene is larger than its output.

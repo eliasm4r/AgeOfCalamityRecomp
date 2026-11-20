@@ -1,14 +1,17 @@
-// FXAA on the 3D picture (ACR_FXAA, live; shaders/fxaa.frag), in the slot the game keeps for its own.
+// FXAA on the 3D picture (ACR_FXAA, live; shaders/fxaa.frag), where the game keeps the slot of its own.
 // Age of Calamity's frame ends its scene like Astral Chain's: after the tonemap writes the 8-bit output, one pass copies
 // the output into a scratch target of the same size and the next draws it back, then the HUD is drawn over the output
-// (measured with ACR_DUMP, frame 900 of the Hyrule Field battle: passes 198 and 199, both one full-screen draw of the
-// game's copy shader). In Astral Chain the draw back was the game's FXAA; Age of Calamity ships with it switched off,
-// so it is a plain copy. Here that draw back is replaced by our FXAA reading the scratch target: the 3D picture is
-// anti-aliased, the HUD drawn afterwards stays sharp.
+// (measured with ACR_DUMP in the Hyrule Field battle: one full-screen draw of the game's copy shader each). In Astral
+// Chain that pair was the game's FXAA; Age of Calamity ships with it switched off. Neither copy is texel for texel: they
+// carry the game's screen transforms (dynamic resolution, camera zooms) in their vertex uniforms, the copy back undoing
+// what the copy out did (replacing either one showed the scene in a corner, or zoomed). So both stay the game's, and
+// FXAA runs on the output just before the copy out reads it: the replay's pass is closed, the output is copied into a
+// work image, FXAA draws from it back into the output, and the game's pass opens again. The HUD stays sharp.
 // The pair is recognised without shader hashes (they change with the translator): two consecutive passes, each with one
-// sRGB 8-bit colour target of the same size (different images) and a full-screen first draw of at most six vertices;
-// the copy out has no depth attached (the copy back keeps the output's). At most once a frame, and not in a frame DLAA
-// or DLSS ran (they already anti-alias the scene).
+// sRGB 8-bit colour target of the same size (different images) and a full-screen first draw of at most six vertices,
+// the copy out with no depth attached. Each pair seen names the scratch target; the next pass into it with no depth,
+// whose fragment shader samples an output-sized texture of the same kind, is a copy out, and that texture the output.
+// At most once a frame, and not in a frame DLAA or DLSS ran (they already anti-alias the scene).
 #include "vk_fxaa.h"
 
 #include <string.h>
@@ -35,6 +38,12 @@ static struct {
     uint32_t serial;          // its VkExec.pass_serial
     VkExecTarget src;         // its target
     int src_depthless;        // and it had no depth attached
+    VkImage scratch;          // the copy out's target in the last pair seen
+    VkImage work;             // a copy of the output for FXAA to read (the output's size and image format)
+    VmaAllocation work_mem;
+    VkImageView work_view;    // in the target's format
+    uint32_t work_w, work_h;
+    VkFormat work_fmt, work_view_fmt;
     uint64_t frame_read, frame_done;
     int on;
     uint64_t runs;
@@ -128,10 +137,69 @@ static int pipeline(VkCtx *c, const VkFormat fmt[3]) {
     return 1;
 }
 
+static void free_work(VkCtx *c) {
+    if (F.work_view) vkDestroyImageView(c->device, F.work_view, NULL);
+    if (F.work) vmaDestroyImage(c->vma, F.work, F.work_mem);
+    F.work_view = VK_NULL_HANDLE, F.work = VK_NULL_HANDLE, F.work_mem = NULL;
+}
+
+// The work image for an output of w x h in image format fmt, read through a view of format vfmt. It is in GENERAL from
+// its first use on (*fresh: not yet).
+static int ensure_work(VkCtx *c, uint32_t w, uint32_t h, VkFormat fmt, VkFormat vfmt, int *fresh) {
+    *fresh = 0;
+    if (F.work && F.work_w == w && F.work_h == h && F.work_fmt == fmt && F.work_view_fmt == vfmt) return 1;
+    if (F.work) {   // another output size or format: earlier frames may still read the old image
+        vk_queue_lock();
+        vkDeviceWaitIdle(c->device);
+        vk_queue_unlock();
+        free_work(c);
+    }
+    VkImageCreateInfo ii = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+                            .imageType = VK_IMAGE_TYPE_2D, .format = fmt, .extent = {w, h, 1}, .mipLevels = 1,
+                            .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+                            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
+    VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    if (vmaCreateImage(c->vma, &ii, &ai, &F.work, &F.work_mem, NULL) != VK_SUCCESS) {
+        F.work = VK_NULL_HANDLE;
+        rt_log("fxaa: no work image (%ux%u); FXAA is off", w, h);
+        return 0;
+    }
+    VkImageViewCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = F.work,
+                                .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = vfmt,
+                                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    if (vkCreateImageView(c->device, &vi, NULL, &F.work_view) != VK_SUCCESS) {
+        F.work_view = VK_NULL_HANDLE;
+        free_work(c);
+        return 0;
+    }
+    F.work_w = w, F.work_h = h, F.work_fmt = fmt, F.work_view_fmt = vfmt;
+    *fresh = 1;
+    return 1;
+}
+
+static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkPipelineStageFlags2 ss, VkAccessFlags2 sa,
+                    VkPipelineStageFlags2 ds, VkAccessFlags2 da) {
+    VkImageMemoryBarrier2 b = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = ss, .srcAccessMask = sa,
+                               .dstStageMask = ds, .dstAccessMask = da, .oldLayout = from,
+                               .newLayout = VK_IMAGE_LAYOUT_GENERAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                               .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = img,
+                               .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    VkDependencyInfo d = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1,
+                          .pImageMemoryBarriers = &b};
+    vkCmdPipelineBarrier2(cb, &d);
+}
+
 static int srgb8(VkFormat f) { return f == VK_FORMAT_R8G8B8A8_SRGB || f == VK_FORMAT_B8G8R8A8_SRGB; }
 
+// The source image can take a view of the target's format: the same, or its UNORM twin.
+static int same_kind(VkFormat img, VkFormat target) {
+    if (img == target) return 1;
+    return (target == VK_FORMAT_R8G8B8A8_SRGB && img == VK_FORMAT_R8G8B8A8_UNORM) ||
+           (target == VK_FORMAT_B8G8R8A8_SRGB && img == VK_FORMAT_B8G8R8A8_UNORM);
+}
+
 // A pass that can be either half of the pair: one sRGB 8-bit colour target (a whole 2D level, never in the feedback-loop
-// layout, so the copy out is read in GENERAL), its first draw full-screen.
+// layout), its first draw full-screen.
 static int candidate(const VkExec *ex, int32_t count) {
     const VkExecTarget *t = &ex->color[0];
     return ex->pass_ncolor == 1 && ex->pass_samples <= 1 && !ex->fbl_mask && t->image && t->img &&
@@ -147,36 +215,73 @@ int vk_fxaa_draw(VkExec *ex, int32_t count) {
     if (F.fence == ex->fence && F.serial == ex->pass_serial) return 0;   // a later draw of a pass already looked at
     if (!candidate(ex, count)) return 0;
     const VkExecTarget *t = &ex->color[0];
-    int pair = F.fence == ex->fence && F.serial + 1 == ex->pass_serial && F.src_depthless && F.src.image != t->image &&
-               F.src.width == t->width && F.src.height == t->height && F.src.format == t->format;
-    VkExecTarget src = F.src;
+    if (F.fence == ex->fence && F.serial + 1 == ex->pass_serial && F.src_depthless && F.src.image != t->image &&
+        F.src.width == t->width && F.src.height == t->height && F.src.format == t->format)
+        F.scratch = F.src.image;   // a copy back: the pass before it was the copy out
     F.fence = ex->fence, F.serial = ex->pass_serial, F.src = *t, F.src_depthless = !ex->depth.image;
-    if (!pair || frame == F.frame_done || vk_dlaa_ran()) return 0;
+    if (ex->depth.image || t->image != F.scratch || frame == F.frame_done || vk_dlaa_ran()) return 0;
+    // The copy out: its source is the texture of the fragment shader's slot 0 (stage 1), the output.
+    uint64_t h = ex->tex[1][0];
+    if (!h) return 0;
+    view_t tv;
+    int has_view = 0;
+    const VkTexImage *s = vk_texture_by_id(NVN_HANDLE_TEX(h), &tv, &has_view);
+    if (!s || !s->image || s->image == t->image || s->fb_learned || s->width != t->width || s->height != t->height ||
+        s->layers != 1 || s->samples > 1 || s->depth > 1 || !same_kind(s->format, t->format))
+        return 0;
     VkCtx *c = vk_ctx();
     if (!F.tried) init(c);
-    VkFormat fmt[3] = {ex->pass_color[0], ex->pass_depth, ex->pass_stencil};
-    if (!F.ok || !pipeline(c, fmt)) return 0;
-    VkImageView view = vk_exec_target_view(src.img, src.format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT,
-                                           src.level, src.base_layer, 1, 0);
+    VkFormat fmt[3] = {t->format, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};   // our own pass: the output alone
+    int fresh;
+    if (!F.ok || !pipeline(c, fmt) || !ensure_work(c, s->width, s->height, s->format, t->format, &fresh)) return 0;
+    // the output through a view of the target's format (colour images are created mutable, vk_texture.c)
+    VkImageView out = vk_exec_target_view(s, t->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1, 0);
     VkCommandBuffer cb = ex->cb;
+    uint32_t w = s->width, hgt = s->height;
+    vk_exec_pass_end(ex);
+    // the output, as the tonemap left it, into the work image
+    barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+    barrier(cb, F.work, fresh ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_MEMORY_READ_BIT, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkImageCopy rg = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                      .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {w, hgt, 1}};
+    vkCmdCopyImage(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, F.work, VK_IMAGE_LAYOUT_GENERAL, 1, &rg);
+    barrier(cb, F.work, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    // FXAA from the work image back into the output
+    VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = out,
+                                    .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
+    VkRenderingInfo ri = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO, .renderArea = {{0, 0}, {w, hgt}}, .layerCount = 1,
+                          .colorAttachmentCount = 1, .pColorAttachments = &ca};
+    vkCmdBeginRendering(cb, &ri);
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, F.pipe);
-    VkDescriptorImageInfo ii = {F.sampler, view, VK_IMAGE_LAYOUT_GENERAL};
-    VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
-                              .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii};
-    rec_push(F.push, cb, VK_PIPELINE_BIND_POINT_GRAPHICS, F.layout, 0, 1, &w);   // through the recorder thread (vk_rec.h)
-    float rcp[2] = {1.0f / (float)src.width, 1.0f / (float)src.height};
+    VkDescriptorImageInfo ii = {F.sampler, F.work_view, VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet wr = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1,
+                               .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii};
+    rec_push(F.push, cb, VK_PIPELINE_BIND_POINT_GRAPHICS, F.layout, 0, 1, &wr);   // through the recorder thread (vk_rec.h)
+    float rcp[2] = {1.0f / (float)w, 1.0f / (float)hgt};
     vkCmdPushConstants(cb, F.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof rcp, rcp);
-    VkViewport v = {0, 0, (float)ex->pass_w, (float)ex->pass_h, 0, 1};
-    VkRect2D s = {{0, 0}, {ex->pass_w, ex->pass_h}};
+    VkViewport v = {0, 0, (float)w, (float)hgt, 0, 1};
+    VkRect2D sc = {{0, 0}, {w, hgt}};
     vkCmdSetViewportWithCount(cb, 1, &v);
-    vkCmdSetScissorWithCount(cb, 1, &s);
+    vkCmdSetScissorWithCount(cb, 1, &sc);
     vkCmdDraw(cb, 3, 1, 0, 0);
-    ex->recorded += 6;
+    vkCmdEndRendering(cb);
+    barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT);
+    ex->recorded += 14;
+    // the game's copy out goes on in its pass, opened again, with everything bound again
     ex->dirty |= VK_EXEC_DIRTY_ALL;
-    vk_exec_draw_new_cb();   // our pipeline, descriptors and dynamic state replaced the game's: the next draw binds again
+    vk_exec_draw_new_cb();
+    vk_exec_pass_begin(ex);
+    F.serial = ex->pass_serial;   // its pass serial moved: the copy back must still follow it
     F.frame_done = frame;
     if (++F.runs == 1 || F.runs % 1800 == 0)
-        rt_log("fxaa: %llu frames on the game's copy-back pass (%ux%u, format %d; frame %llu)", (unsigned long long)F.runs,
-               t->width, t->height, (int)t->format, (unsigned long long)frame);
-    return 1;
+        rt_log("fxaa: %llu frames before the game's copy out (%ux%u, format %d; frame %llu)", (unsigned long long)F.runs,
+               w, hgt, (int)t->format, (unsigned long long)frame);
+    return 0;   // the game's draw goes on
 }
