@@ -2363,8 +2363,33 @@ static void guest_chain(const RtThread *t, const Cpu *c, const char *tag) {
     if (frames) rt_log("%s:    called from %s", tag, line);
 }
 
+// A guest word, or ~0u when the address is not readable guest memory.
+static uint32_t diag_word(uint64_t a) {
+    RtMemoryInfo mi;
+    if (mem_query(a, &mi) || !(mi.perm & 1) || a + 4 > mi.base + mi.size) return ~0u;
+    return LD32(a);
+}
+
+// The game's frame pacer (main+0x166d9a0): it sleeps until freq / [x19+0x30] ticks have passed, so a small value there
+// stalls everything that waits for its job (a hang at 60 fps, 2026-11-20). SleepThread keeps x19/x27 as the pacer left them.
+static void pacer_report(const Cpu *c, const char *tag) {
+    uint64_t lr = c->x[30] - 0x7000000000ull;
+    if (lr < 0x166d9a0 || lr >= 0x166de00) return;
+    uint64_t x19 = c->x[19], x27 = c->x[27];
+    rt_log("%s:    frame pacer: x19 %#llx fps [x19+0x30] %u; x27 %#llx saved fps [x27+0xd8] %u, [x27+0xc8] %u; x20 %llu x26 %llu",
+           tag, (unsigned long long)x19, diag_word(x19 + 0x30), (unsigned long long)x27, diag_word(x27 + 0xd8),
+           diag_word(x27 + 0xc8), (unsigned long long)c->x[20], (unsigned long long)c->x[26]);
+}
+
 void kern_threads_report(const char *tag) {
     static const char *const kind[] = {"run", "lock", "condvar", "address", "sync"};
+    {   // frame_rate.c's block {fps, vsyncs per update, fps, fps as a float}
+        uint32_t f = diag_word(0x700269e15cull);
+        float ff;
+        memcpy(&ff, &f, 4);
+        rt_log("%s: fps block main+0x269e150: %u %u %u %.2f", tag, diag_word(0x700269e150ull), diag_word(0x700269e154ull),
+               diag_word(0x700269e158ull), ff);
+    }
     char n1[96], n2[96], q[512] = "";
     int ql = 0;
     for (RtThread *w = g_core_wait; w && ql < (int)sizeof q - 24; w = w->cnext)
@@ -2390,6 +2415,7 @@ void kern_threads_report(const char *tag) {
                    rt_guest_name(c->pc, n1, sizeof n1), (unsigned long long)c->x[30],
                    rt_guest_name(c->x[30], n2, sizeof n2), (unsigned long long)c->sp, t->fiber ? " (fiber)" : "");
             guest_chain(t, c, tag);
+            pacer_report(c, tag);
         }
     }
 }

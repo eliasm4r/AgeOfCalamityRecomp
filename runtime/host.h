@@ -233,6 +233,7 @@ void diag_start(void);                                     // starts the recorde
 void diag_frame(uint64_t frame);                           // perf_present
 void diag_audio(const float *lr, int frames);              // the mixed output, interleaved stereo, any thread
 void diag_read(uint64_t bytes);                            // RomFS bytes read
+void diag_open(const char *what, const char *path);       // a file opened (fs_trace), the last ones go in a report
 const char *diag_record_path(void);                        // input.c: this run's default input recording, or NULL
 void diag_attack_button(int y);                            // input.c: the regular attack button's state, every poll
 void diag_exit(void);

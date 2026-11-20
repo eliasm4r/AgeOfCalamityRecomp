@@ -328,6 +328,26 @@ void diag_audio(const float *lr, int frames) {
 
 void diag_read(uint64_t bytes) { plat_add64(&g_read_bytes, (int64_t)bytes); }
 
+// The last files opened, for a report (which resource a stuck load was on). Writers race only on a torn line.
+enum { DG_OPENS = 24 };
+static struct { uint64_t ns; char what[8], path[120]; } g_opens[DG_OPENS];
+static uint64_t g_n_opens;
+
+void diag_open(const char *what, const char *path) {
+    uint64_t i = __atomic_fetch_add(&g_n_opens, 1, __ATOMIC_RELAXED) % DG_OPENS;
+    g_opens[i].ns = kern_now_ns();
+    snprintf(g_opens[i].what, sizeof g_opens[i].what, "%s", what ? what : "?");
+    snprintf(g_opens[i].path, sizeof g_opens[i].path, "%s", path ? path : "(null)");
+}
+
+static void opens_report(void) {
+    uint64_t n = __atomic_load_n(&g_n_opens, __ATOMIC_RELAXED), first = n > DG_OPENS ? n - DG_OPENS : 0;
+    rt_log("diag: last %llu files opened (of %llu), newest last:", (unsigned long long)(n - first), (unsigned long long)n);
+    for (uint64_t i = first; i < n; i++)
+        rt_log("diag:    %7.1f s %-5s %s", rt_guest_start_ns ? (double)(g_opens[i % DG_OPENS].ns - rt_guest_start_ns) / 1e9 : 0.0,
+               g_opens[i % DG_OPENS].what, g_opens[i % DG_OPENS].path);
+}
+
 int diag_thumb_wanted(uint64_t frame) {
     if (!g_thumbs_on) return 0;
     uint64_t now = kern_now_ns(), last = __atomic_load_n(&g_thumb_last_ns, __ATOMIC_RELAXED);
@@ -414,6 +434,7 @@ static void report(const char *why, const char *slug, const char *thread_tag) {
                s->lit, s->presents ? s->draws / s->presents : 0, (double)s->audio, s->read_kib, s->skip_pipe,
                s->skip_shader, s->zero_views, s->movies, s->main_st, s->cores, s->rumbles);
     }
+    opens_report();
     char mv[768];
     if (movie_diag(mv, sizeof mv)) rt_log("diag: movie decoders: %s", mv);
     else rt_log("diag: movie decoders: none live (a cutscene now is drawn by the game, not a video)");

@@ -703,6 +703,7 @@ void fs_init(void) {
 // ---- the RomFS interface (fs.h)
 void fs_trace(const char *what, const char *path) {
     static double t0;
+    diag_open(what, path);
     if (!(rt_trace & RT_TRACE_FS)) return;
     if (!t0) t0 = now_s();
     rt_log("fs %8.3f %s %s", now_s() - t0, what, path ? path : "(null)");

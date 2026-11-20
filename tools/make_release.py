@@ -260,9 +260,10 @@ def main() -> int:
         # Linux parts, made in WSL: hactool, the Linux translator, and the Windows wheels (pip download)
         s = wsl_path(stage)
         hsrc = wsl_path(ROOT / "toolchain/hactool-1.4.0/hactool-1.4.0")
+        # On Linux build_xlate.py's exe "xlate" lands inside its project folder "xlate/": take it from publish/
         wsl(args.wsl_distro, f"cd '{wsl_path(ROOT)}' && "
                              f"bash tools/build_hactool_linux.sh '{hsrc}' '{s}/hactool-linux' && "
-                             f"mkdir -p '{s}/xlate-linux' && cp ~/AgeOfCalamityRecomp-build/xlate/xlate ~/AgeOfCalamityRecomp-build/xlate/xlate.id "
+                             f"mkdir -p '{s}/xlate-linux' && cp ~/AgeOfCalamityRecomp-build/xlate/publish/xlate ~/AgeOfCalamityRecomp-build/xlate/xlate.id "
                              f"'{s}/xlate-linux/' && rm -rf '{s}/wheels' && ~/.venvs/AgeOfCalamityRecomp/bin/python -m pip download -q "
                              f"--only-binary=:all: --platform win_amd64 --python-version 3.13 --implementation cp "
                              f"-d '{s}/wheels' {' '.join(WHEELS)}")
