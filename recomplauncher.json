@@ -52,9 +52,32 @@
         { "label": "60 %", "set": { "display/render_scale": "60" } },
         { "label": "67 %", "set": { "display/render_scale": "67" } },
         { "label": "85 %", "set": { "display/render_scale": "85" } },
-        { "label": "100 %", "set": { "display/render_scale": "100" } }
+        { "label": "100 %", "set": { "display/render_scale": "100" } },
+        { "label": "125 %", "set": { "display/render_scale": "125" } },
+        { "label": "140 %", "set": { "display/render_scale": "140" } }
       ],
       "defaults": { "display/render_scale": "game" }
+    },
+    {
+      "id": "frame_rate", "label": "Frame rate",
+      "help": "30 is the Switch's own rate, 60 is steady on a recent PC. 120, 144 and 240 are experimental and depend on the processor.",
+      "choices": [
+        { "label": "30", "set": { "frame rate/fps_limit": "30" } },
+        { "label": "60", "set": { "frame rate/fps_limit": "60" } },
+        { "label": "120 (experimental)", "set": { "frame rate/fps_limit": "120" } },
+        { "label": "144 (experimental)", "set": { "frame rate/fps_limit": "144" } },
+        { "label": "240 (experimental)", "set": { "frame rate/fps_limit": "240" } }
+      ],
+      "defaults": { "frame rate/fps_limit": "30" }
+    },
+    {
+      "id": "fxaa", "label": "FXAA",
+      "help": "Light anti-aliasing that works on every graphics card.",
+      "choices": [
+        { "label": "Off", "set": { "display/fxaa": "0" } },
+        { "label": "On", "set": { "display/fxaa": "1" } }
+      ],
+      "defaults": { "display/fxaa": "1" }
     },
     {
       "id": "dlaa", "label": "NVIDIA DLAA",
@@ -180,14 +203,14 @@
       "defaults": { "audio/mute_background": "0" }
     },
     {
-      "id": "pad_layout", "label": "Button layout",
-      "help": "Which button is A. Nintendo: the right one, as on a Switch (circle on a PlayStation controller). Xbox: the bottom one. Automatic: Nintendo for Nintendo and PlayStation controllers, Xbox for the others.",
+      "id": "prompts", "label": "Button prompts",
+      "help": "Which controller's buttons the game shows.",
       "choices": [
-        { "label": "Automatic", "set": { "input/pad_layout": "auto" } },
-        { "label": "Nintendo (A right)", "set": { "input/pad_layout": "nintendo" } },
-        { "label": "Xbox (A bottom)", "set": { "input/pad_layout": "xbox" } }
+        { "label": "Nintendo", "set": { "input/prompts": "nintendo" } },
+        { "label": "Xbox", "set": { "input/prompts": "xbox" } },
+        { "label": "PlayStation", "set": { "input/prompts": "playstation" } }
       ],
-      "defaults": { "input/pad_layout": "auto" }
+      "defaults": { "input/prompts": "nintendo" }
     },
     {
       "id": "vibration", "label": "Vibration",
