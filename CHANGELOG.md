@@ -32,7 +32,6 @@
   every frame: about 115 MiB at 1080p, 3 ms of an RTX 4070 (11 ms with a 3840x2160 scene). Only the flushed ranges
   are copied now, 20 MiB a frame at 1080p. This weighs most where copies to the card are slow, such as the AMD cards
   of issue #4 (GPU at 99 % for little power).
-
 - **Unlit picture with a black rectangle after "New game" at render scales above 100 %**: while a new game loads, the
   game copies the last picture into a texture of the scene's size, with a rectangle of the output's size. A larger
   scene got the picture in its top left corner only, and the rest still held the colours of the last scene, shown
