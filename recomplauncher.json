@@ -44,6 +44,19 @@
       "defaults": { "display/fullscreen": "0" }
     },
     {
+      "id": "output_res", "label": "Game resolution",
+      "help": "The size the game draws its picture and interface in; 1920 x 1080 is the game's own. 2560 x 1440 and 3840 x 2160 draw the interface sharp on large screens, for more GPU work. 1280 x 720 matches the Steam Deck's screen.",
+      "choices": [
+        { "label": "960 x 540", "set": { "display/output_res": "960x540" } },
+        { "label": "1280 x 720", "set": { "display/output_res": "1280x720" } },
+        { "label": "1600 x 900", "set": { "display/output_res": "1600x900" } },
+        { "label": "1920 x 1080", "set": { "display/output_res": "1920x1080" } },
+        { "label": "2560 x 1440", "set": { "display/output_res": "2560x1440" } },
+        { "label": "3840 x 2160", "set": { "display/output_res": "3840x2160" } }
+      ],
+      "defaults": { "display/output_res": "1920x1080" }
+    },
+    {
       "id": "render_scale", "label": "Render scale",
       "help": "Size of the 3D scene relative to the game resolution: higher is sharper and heavier. Game keeps the Switch's own size.",
       "choices": [
