@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+- **"hactool could not open base.nsp" while the files check said all was good**: at each start hactool also reads
+  the key files in the player's own `.switch` folder (`%USERPROFILE%\.switch`, `~/.switch`), left there by other
+  Switch tools, and stops on a line it rejects (Lockpick's `master_kek_source` with an extra `00`, a key of another
+  length, a rights ID twice in `title.keys`) before opening anything. The check reads the `prod.keys` of the game
+  folder, so it saw nothing wrong. Every hactool run of the setup now uses the keys of the game folder only. Each NSP
+  is checked against its file table once extracted (hactool ends with code 0 when a file could not be written, e.g.
+  a full disk), a run cut short extracts again, and hactool's output goes to `build/v130/extract-base.log` (key
+  values hidden), in the diagnostic report too, with its last line in the error.
+
 ## 0.2.0
 
 ### Fixed

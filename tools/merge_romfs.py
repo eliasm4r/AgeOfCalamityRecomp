@@ -4,12 +4,15 @@ The launcher runs this on Windows and Linux:
 
   python tools/merge_romfs.py [--game-dir "Game Files"] [--keys <prod.keys>]
 
-1. prepares build/v130/tmp/hactool-home/.switch/{prod,title}.keys (tools/extract.py hactool-home; values never shown);
+1. prepares build/v130/tmp/hactool-home/.switch/{prod,title}.keys (tools/extract.py hactool-home; values never shown),
+   the home of every hactool run, so key files of the player's own (~/.switch) are never read;
 2. opens the base and update NSPs where they are, or, when a path is not plain ASCII (the Windows hactool does not
    open those), hard-links them under ASCII names (copied when the dump is on another disk);
-3. extracts the NCAs of both NSPs (~11 GB temporary) and merges section 1 of the update's program NCA (BKTR) over the
-   base, checking the six IVFC levels (-y);
+3. extracts the NCAs of both NSPs (~11 GB temporary; checked against each NSP's file table) and merges section 1 of
+   the update's program NCA (BKTR) over the base, checking the six IVFC levels (-y);
 4. deletes the temporary files and the copied keys, only once the image exists.
+
+hactool's output goes to build/v130/extract-{base,update}.log and merge.log, key values hidden.
 
 Needs ~23 GB free during the merge (temporary NCAs + the 10.9 GiB image). hactool comes from prebuilt/hactool/ (the
 launcher package) or toolchain/hactool-1.4.0-win/ (development on Windows).
@@ -21,6 +24,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import nx  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = ROOT / "build" / "v130"
@@ -54,9 +60,7 @@ def hactool() -> Path:
 def find_nsps(game_dir: Path, keys: Path) -> tuple[Path, Path]:
     """The base and update 1.3.0 NSPs, found by their contents (tools/extract.py scan: title id and version from the
     .cnmt), whatever the file name."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     import extract
-    import nx
     pkgs = [p for p in extract.scan(game_dir, nx.load_keys(keys)) if p["container"] == "nsp"]
     out = []
     for role, what in (("base", "of the base game (01002B00111A2000)"), ("update", "of update 1.3.0 (01002B00111A2800)")):
@@ -72,8 +76,9 @@ def link_or_copy(src: Path, dst: Path) -> Path:
     characters), else dst, hard-linked or, on another disk, copied (11 GB for the base game)."""
     if str(src).isascii():
         return src
-    if dst.exists():
-        return dst
+    if dst.exists() and dst.stat().st_size == src.stat().st_size:
+        return dst   # linked, or copied whole, by an earlier run
+    dst.unlink(missing_ok=True)   # a copy cut short by an earlier run
     try:
         os.link(src, dst)   # same disk: copies nothing
         return dst
@@ -87,9 +92,45 @@ def link_or_copy(src: Path, dst: Path) -> Path:
     return dst
 
 
-def run_hactool(args: list, env=None, log=None) -> int:
-    p = subprocess.run([str(hactool())] + args, env=env, stdout=log or subprocess.DEVNULL, stderr=subprocess.STDOUT)
+def hactool_env() -> dict:
+    """The environment of every hactool run: the home of step 1 in place of the player's. At each start, whatever the
+    command, hactool reads $HOME/.switch/{prod,title}.keys (else %USERPROFILE%/.switch, then $XDG_CONFIG_HOME/switch)
+    and ends with code 1 on a line it rejects: Lockpick's master_kek_source with an extra 00, a key of another length,
+    a rights ID twice in title.keys. Key files of other Switch tools there stopped the extraction of base.nsp while the
+    check, which reads the game folder's prod.keys, said all was good (reported 2026-11-22)."""
+    env = {k: v for k, v in os.environ.items() if k.upper() not in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME")}
+    env.update(HOME=str(HAC_HOME), USERPROFILE=str(HAC_HOME))
+    return env
+
+
+def run_hactool(args: list, log: Path) -> int:
+    """Runs hactool (hactool_env) and writes its output to log, the values of keys it quotes hidden."""
+    p = subprocess.run([str(hactool())] + args, env=hactool_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    text = p.stdout.decode("utf-8", errors="replace")
+    text = re.sub(r"Key \(([^)\n]*)\)", lambda m: f"Key (<{len(m.group(1))} characters, not shown>)", text)
+    text = re.sub(r'\(value "[^"\n]*"\)', "(value not shown)", text)
+    log.write_text(text, encoding="utf-8")
     return p.returncode
+
+
+def last_line(log: Path) -> str:
+    """hactool's last line in log: what stopped it."""
+    lines = [l.strip() for l in log.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip()]
+    return lines[-1] if lines else "no output"
+
+
+def extraction_gap(nsp: Path, d: Path) -> str:
+    """"" when d holds every file of the NSP at its size, else the first one that is not: hactool goes on with code 0
+    when it cannot create a file, and does not check its writes (a full disk)."""
+    with nsp.open("rb") as f:
+        _, entries = nx.container_entries(f, nsp.stat().st_size)
+    for name, _, size in entries:
+        p = d / name
+        if not p.is_file():
+            return f"{name} is missing"
+        if p.stat().st_size != size:
+            return f"{name} has {p.stat().st_size} of its {size} bytes"
+    return ""
 
 
 def main() -> int:
@@ -116,13 +157,23 @@ def main() -> int:
     base_nsp, update_nsp = find_nsps(args.game_dir, keys)
     nsps = {"base": link_or_copy(base_nsp, inp / "base.nsp"), "update": link_or_copy(update_nsp, inp / "update.nsp")}
 
-    # 3. NCAs of both NSPs (the base is ~11 GB) and the merge
+    # 3. NCAs of both NSPs (the base is ~11 GB) and the merge. Each NSP is extracted into <name>.part, renamed once
+    # every file is there at its size: a run cut short extracts again instead of merging half-written NCAs.
     for name in ("base", "update"):
-        d = TMP / name
+        d, part = TMP / name, TMP / f"{name}.part"
+        if d.is_dir() and extraction_gap(nsps[name], d):   # left incomplete by an earlier version of this script
+            shutil.rmtree(d)
         if not d.is_dir():
             print(f"Extracting {name}.nsp ...", flush=True)
-            if run_hactool(["-t", "pfs0", f"--outdir={d}", str(nsps[name])]):
-                fail(f"hactool could not open {name}.nsp")
+            shutil.rmtree(part, ignore_errors=True)
+            log = WORK / f"extract-{name}.log"
+            code = run_hactool(["-t", "pfs0", "--disablekeywarns", f"--outdir={part}", str(nsps[name])], log)
+            gap = "" if code else extraction_gap(nsps[name], part)
+            if code or gap:
+                shutil.rmtree(part, ignore_errors=True)
+                fail(f"hactool could not extract {name}.nsp ({f'code {code}: {last_line(log)}' if code else gap}). "
+                     f"See {log}")
+            part.rename(d)
     base_nca = max((TMP / "base").glob("*.nca"), key=lambda p: p.stat().st_size)
     upd_nca = max((TMP / "update").glob("*.nca"), key=lambda p: p.stat().st_size)
     print(f"base program NCA:   {base_nca.name}")
@@ -131,11 +182,8 @@ def main() -> int:
     # For a BKTR section hactool ignores --romfs; only --section1 writes the image (the final RomFS level, without the
     # hash levels). -y checks the six IVFC levels.
     print("Merging the RomFS (base + 1.3.0); this takes a few minutes ...", flush=True)
-    env = dict(os.environ, HOME=str(HAC_HOME), USERPROFILE=str(HAC_HOME))
-    with open(LOG, "wb") as log:
-        code = run_hactool(["-x", "-y", "--disablekeywarns", "--suppresskeys", "-k",
-                            str(HAC_HOME / ".switch" / "prod.keys"), f"--basenca={base_nca}", f"--section1={OUT}",
-                            str(upd_nca)], env=env, log=log)
+    code = run_hactool(["-x", "-y", "--disablekeywarns", "--suppresskeys", "-k", str(HAC_HOME / ".switch" / "prod.keys"),
+                        f"--basenca={base_nca}", f"--section1={OUT}", str(upd_nca)], LOG)
     text = LOG.read_text(encoding="utf-8", errors="replace")
     # Nintendo's RSA signatures (fixed-key, NPDM, ACID) say nothing about the data: the release hactool.exe marks them
     # GOOD and the Linux build (tools/build_hactool_linux.sh) FAIL. Integrity comes from the six IVFC levels.

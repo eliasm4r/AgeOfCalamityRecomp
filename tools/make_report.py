@@ -114,6 +114,8 @@ def main() -> int:
         if logs.is_dir():
             for f in sorted(logs.glob("*.log"))[-5:]:
                 add_file(z, f, f"forge/{f.name}")
+        for f in sorted((ROOT / "build" / "v130").glob("*.log")):   # hactool's output (tools/merge_romfs.py)
+            add_file(z, f, f"forge/v130/{f.name}")
         for d in ("windows", "steamdeck"):
             game = ROOT / "dist" / d
             if (game / "settings.ini").is_file():
