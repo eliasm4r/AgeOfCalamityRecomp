@@ -237,3 +237,20 @@ void res_sizes(unsigned out[2], unsigned scene[2]) {
     out[0] = R.on ? R.ow : BASE_W, out[1] = R.on ? R.oh : BASE_H;
     scene[0] = R.on ? R.sw : SCENE_W, scene[1] = R.on ? R.sh : SCENE_H;
 }
+
+// The game's dynamic resolution: in a battle the game lowers the scene's height when frames run late (recomp/
+// patches-v130.txt, set dynres): in a charge across Hyrule Field at 60 fps it went down to 567 of 810 (70 %) for a few
+// seconds, a softer picture. ACR_DYNAMIC_RES=off (the Screen tab) switches the set on, so the game keeps its full height
+// every frame; game (default) leaves it off. Both apply at the next frame.
+void res_present(void) {
+    static unsigned seen = ~0u;
+    static int set = -2;
+    unsigned v = cfg_version();
+    if (v == seen) return;
+    seen = v;
+    if (set == -2) set = rt_patch_set("dynres");
+    int off = !strcmp(cfg_value("ACR_DYNAMIC_RES"), "off");
+    if (set < 0 || rt_patch_enabled(set) == off) return;
+    rt_patch_switch(set, off);
+    rt_log("resolution: dynamic resolution %s", off ? "off: the scene keeps its full height" : "the game's");
+}

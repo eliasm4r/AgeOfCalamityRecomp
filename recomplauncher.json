@@ -75,6 +75,15 @@
       "defaults": { "display/render_scale": "game" }
     },
     {
+      "id": "dynamic_res", "label": "Dynamic resolution",
+      "help": "In heavy fights the game draws the 3D scene smaller for a moment to keep its frame rate. Off keeps it at full size: sharper, for more GPU work.",
+      "choices": [
+        { "label": "Game", "set": { "display/dynamic_res": "game" } },
+        { "label": "Off (full size)", "set": { "display/dynamic_res": "off" } }
+      ],
+      "defaults": { "display/dynamic_res": "game" }
+    },
+    {
       "id": "frame_rate", "label": "Frame rate",
       "help": "30 is the Switch's own rate, 60 is steady on a recent PC. 120, 144 and 240 are experimental and depend on the processor.",
       "choices": [

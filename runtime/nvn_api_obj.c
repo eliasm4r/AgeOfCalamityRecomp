@@ -752,6 +752,7 @@ NVN_API(nvnQueuePresentTexture) {
     int idx = (int)arg_x(c, 2);
     movie_tick(c);   // ov_movie.c: hand over decoded movie frames that are due; needs the core, so before the wait
     ov_operation_mode_test_tick();   // ov_system.c: ACR_TEST_OPMODE (test hook; one load when unset)
+    res_present();                   // resolution.c: ACR_DYNAMIC_RES (one load when unchanged)
     ov_peek_tick();                  // ov_system.c: ACR_PEEK (diagnosis; one load when unset)
     romfs_prompts_tick();            // romfs.c: the button prompts setting, live (one load when unchanged)
     ov_scan_tick();                  // ov_system.c: ACR_SCAN_F32 (diagnosis; one load when unset)
