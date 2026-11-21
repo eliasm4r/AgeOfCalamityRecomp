@@ -186,11 +186,27 @@ ships only this project's own code and turns your files into the game on your PC
 </details>
 
 <details>
-<summary><b>Why no 120 or 144 fps on my 144 Hz screen?</b></summary>
+<summary><b>Can it run at 120 or 144 fps on my 144 Hz screen?</b></summary>
 <br>
 
-The game steps its world by whole 60 Hz vsyncs: two per frame at 30 fps (as on the Switch), one at 60 fps. So 30 and
-60 are the rates it can run at the right speed. 60 fps needs about twice the processor time of 30.
+Frame rate offers 120, 144 and 240 fps as experimental. The game steps its world by whole 60 Hz vsyncs (two per frame
+at 30 fps, as on the Switch, one at 60), so above 60 the recompilation feeds it the real time of each frame instead.
+The game's main thread is the limit there: busy battles stay under 120 fps on a Ryzen 7 5800X. 60 fps needs about
+twice the processor time of 30.
+</details>
+
+<details>
+<summary><b>Can I bring my save from a Switch or an emulator?</b></summary>
+<br>
+
+The game keeps its whole save in one file, `svdt`, and this recompilation keeps it as a plain file too, in
+`dist/<platform>/profile/save/<folder>/svdt` (the folder name is the profile's user ID; on Windows the install folder
+holds `dist`). Start the game once so the folder exists, close it, copy your old `svdt` over that one, then start
+again. Keep a copy of both files first: the setup never touches saves, but this replaces yours.
+
+Where to find the old one: on a Switch, save managers such as JKSV export it; in Ryujinx, *Open User Save Directory*
+on the game's right-click menu; in yuzu-based emulators, *Open Save Data Location*. Use a save from update 1.3.0 or
+older. This has not been tried with every emulator yet: if the game refuses the save, please open an issue.
 </details>
 
 <details>
