@@ -23,6 +23,9 @@
 // (2x speed at 60), 0.5 when it follows the rate. A smoothed or accelerating cursor fails the passes' constant-step test
 // (the user's test 7: the cursor was 2x by eye and the passes did not find it); this one does not need a constant step.
 // The trap then watches the stick-driven words (those with ratio near 1 first). File: stick-<present>.txt.
+// ACR_STEPSCAN_RATES=a,b compares two other rates (60,120: what runs fast above 60).
+// ACR_STEPSCAN_TARGETS=<hex>,<hex>... skips the passes and traps those words at once (writes, or reads with
+// ACR_STEPSCAN_READS=1): a second run of the same script names the code that steps the words the first one found.
 // Results: <log dir>/stepscan-<present>.txt (every word found at both rates: its step per frame at 30 and 60 and the
 // ratio) and the first FIXED words in the log. Ratio 1.0 = fixed step per frame (suspect), 0.5 = follows the rate.
 #include <math.h>
@@ -76,7 +79,16 @@ static uint32_t ntrk;
 static uint32_t *trk_v[2][6];   // per rate: values at right +10, +20, +30, left +10, +20, +30
 static int trk_rate;
 static uint64_t trk_t0;
-static int rate_i;              // 0: 30 fps, 1: 60 fps
+static int rate_i;              // 0: the first rate, 1: the second
+// ACR_STEPSCAN_RATES=<a>,<b>: the two rates compared (default 30,60; 60,120 finds what runs fast above 60). A word
+// that follows the rate steps a/b as much per frame at b; a fixed step per frame keeps the ratio 1.
+static int rate_hz[2] = {30, 60};
+static double follow_ratio(void) { return (double)rate_hz[0] / rate_hz[1]; }
+static void rates_read(void) {
+    const char *e = cfg_get("ACR_STEPSCAN_RATES");
+    int a, b;
+    if (e && sscanf(e, "%d,%d", &a, &b) == 2 && a >= 30 && b > a && b <= 240) rate_hz[0] = a, rate_hz[1] = b;
+}
 static uint64_t presents, wait_until, step_t;
 
 static int region_ok(const RtMemoryInfo *mi) {
@@ -274,9 +286,10 @@ static void report(void) {
     size_t len = strlen(path);
     snprintf(path + len, sizeof path - len, "/stepscan-%llu.txt", (unsigned long long)presents);
     FILE *f = fopen(path, "w");
-    if (f) fprintf(f, "# stepscan: guest words stepping by a constant amount per frame at 30 and at 60 fps\n"
-                      "# address kind step_per_frame_30 step_per_frame_60 ratio value_now\n"
-                      "# ratio ~1.0: same step per frame at both rates (fixed step, runs 2x at 60); ~0.5: follows the rate\n");
+    if (f) fprintf(f, "# stepscan: guest words stepping by a constant amount per frame at %d and at %d fps\n"
+                      "# address kind step_per_frame_%d step_per_frame_%d ratio value_now\n"
+                      "# ratio ~1.0: same step per frame at both rates (fixed step, too fast at %d); ~%.2f: follows the rate\n",
+                   rate_hz[0], rate_hz[1], rate_hz[0], rate_hz[1], rate_hz[1], follow_ratio());
     for (int k = 0; k < 2; k++) qsort(res[k], nres[k], sizeof *res[k], by_addr);
     uint32_t i = 0, j = 0, fixed = 0, real = 0, other = 0, logged = 0;
     uint64_t others[32], fixeds[64];
@@ -288,7 +301,7 @@ static void report(void) {
         i++, j++;
         if (a->kind != b->kind || a->step == 0) continue;
         double ratio = b->step / a->step;
-        int cls = fabs(ratio - 1.0) < 0.1 ? 1 : fabs(ratio - 0.5) < 0.05 ? 2 : 0;
+        int cls = fabs(ratio - 1.0) < 0.1 ? 1 : fabs(ratio - follow_ratio()) < 0.1 * follow_ratio() ? 2 : 0;
         fixed += cls == 1, real += cls == 2, other += cls == 0;
         char val[32];
         if (a->kind == 1) {
@@ -306,16 +319,16 @@ static void report(void) {
         if (cls == 1 && nfixed < (int)(sizeof fixeds / sizeof *fixeds)) fixeds[nfixed++] = a->addr;
         if (cls == 1 && logged < 60) {
             logged++;
-            rt_log("stepscan: FIXED %#llx %s %g per frame at 30 and %g at 60 (now %s)", (unsigned long long)a->addr,
-                   a->kind == 1 ? "int" : "float", a->step, b->step, val);
+            rt_log("stepscan: FIXED %#llx %s %g per frame at %d and %g at %d (now %s)", (unsigned long long)a->addr,
+                   a->kind == 1 ? "int" : "float", a->step, rate_hz[0], b->step, rate_hz[1], val);
         }
     }
     if (f) fclose(f);
     ntargets = 0;
     for (int k = 0; k < nother && ntargets < (int)(sizeof targets / sizeof *targets); k++) targets[ntargets++] = others[k];
     for (int k = 0; k < nfixed && ntargets < (int)(sizeof targets / sizeof *targets); k++) targets[ntargets++] = fixeds[k];
-    rt_log("stepscan: done: %u words fixed per frame (ratio 1), %u follow the rate (0.5), %u other; list in %s", fixed,
-           real, other, f ? path : "(file not written)");
+    rt_log("stepscan: done: %u words fixed per frame (ratio 1), %u follow the rate (%.2f), %u other; list in %s", fixed,
+           real, follow_ratio(), other, f ? path : "(file not written)");
 }
 
 
@@ -419,7 +432,7 @@ static int start_rate(int i) {
     rate_i = i;
     const char *st = cfg_get("ACR_STEPSCAN_STICK");
     stick_on = !(st && !strcmp(st, "0"));
-    frame_step_force_hz(i ? 60 : 30);
+    frame_step_force_hz(rate_hz[i]);
     state = 1;
     wait_until = presents + SETTLE;
     step_t = 0;
@@ -470,7 +483,7 @@ static void track_snap(uint32_t *out) {
 
 static void track_rate(int r) {
     trk_rate = r;
-    frame_step_force_hz(r ? 60 : 30);
+    frame_step_force_hz(rate_hz[r]);
     stick_on = 0;
     input_force_lstick(1, 0, 0);   // still while the rate settles
     trk_t0 = presents + SETTLE;
@@ -497,7 +510,8 @@ static void track_start(void) {
                 stick_off(), finish();
                 return;
             }
-    rt_log("stepscan: stick track of %u words: right %d presents then left, at 30 then 60 fps", ntrk, TRACK_SEG);
+    rt_log("stepscan: stick track of %u words: right %d presents then left, at %d then %d fps", ntrk, TRACK_SEG, rate_hz[0],
+           rate_hz[1]);
     state = 3;
     track_rate(0);
 }
@@ -549,8 +563,9 @@ static void track_report(void) {
     snprintf(path + len, sizeof path - len, "/stick-%llu.txt", (unsigned long long)presents);
     FILE *f = fopen(path, "w");
     if (f) fprintf(f, "# stick track: words that moved with the stick (right, then back left)\n"
-                      "# address kind move_per_frame_30 move_per_frame_60 ratio value_30 value_60\n"
-                      "# ratio ~1: fixed step per frame (2x speed at 60); ~0.5: follows the rate\n");
+                      "# address kind move_per_frame_%d move_per_frame_%d ratio value_%d value_%d\n"
+                      "# ratio ~1: fixed step per frame (too fast at %d); ~%.2f: follows the rate\n",
+                   rate_hz[0], rate_hz[1], rate_hz[0], rate_hz[1], rate_hz[1], follow_ratio());
     static uint64_t fixed[4096], rest[4096];
     static double fmove[4096];
     static int fint[4096];
@@ -566,7 +581,7 @@ static void track_report(void) {
         double ratio = m1 / m0;
         total++;
         int fx = ratio > 0.75 && ratio < 1.35;
-        nfix += fx, nreal += ratio > 0.35 && ratio < 0.65;
+        nfix += fx, nreal += fabs(ratio - follow_ratio()) < 0.3 * follow_ratio();
         char a[32], b[32];
         if (kind == 2) {
             float x, y;
@@ -580,11 +595,11 @@ static void track_report(void) {
         if (fx && nf < 4096) fint[nf] = kind == 1, fmove[nf] = m0, fixed[nf++] = trk[i];
         else if (!fx && nr < 4096) rest[nr++] = trk[i];
         if (fx && logged++ < 40)
-            rt_log("stepscan: stick FIXED %#llx %s moves %g per frame at 30 and %g at 60 (now %s)",
-                   (unsigned long long)trk[i], kind == 2 ? "float" : "int", m0, m1, b);
+            rt_log("stepscan: stick FIXED %#llx %s moves %g per frame at %d and %g at %d (now %s)",
+                   (unsigned long long)trk[i], kind == 2 ? "float" : "int", m0, rate_hz[0], m1, rate_hz[1], b);
     }
     if (f) fclose(f);
-    rt_log("stepscan: stick track: %u words move with the stick, %u fixed per frame (2x at 60), %u follow the rate; "
+    rt_log("stepscan: stick track: %u words move with the stick, %u fixed per frame (too fast at the second rate), %u follow the rate; "
            "list in %s", total, nfix, nreal, f ? path : "(file not written)");
     // The game's copy of the stick: a float held at +a while the stick is right and -a while left (a near 0.75), at both
     // rates. Its readers are the code that moves the cursor and scrolls the map: the trap watches reads of it.
@@ -702,11 +717,30 @@ void stepscan_present(void) {
     }
     if (state == 0) {
         if (!go) return;
+        // ACR_STEPSCAN_TARGETS=<addr>,<addr>... (hex guest addresses, from an earlier scan of the same scripted run): no
+        // passes, the trap goes straight on them (writes; ACR_STEPSCAN_READS=1: reads), with the stick left alone.
+        const char *tg = cfg_get("ACR_STEPSCAN_TARGETS");
+        if (tg && *tg) {
+            ntargets = 0;
+            for (const char *q = tg; *q && ntargets < (int)(sizeof targets / sizeof *targets);) {
+                char *end;
+                unsigned long long a = strtoull(q, &end, 16);
+                if (end == q) break;
+                targets[ntargets++] = a;
+                q = *end == ',' ? end + 1 : end;
+            }
+            const char *rd = cfg_get("ACR_STEPSCAN_READS");
+            trap_reads = rd && atoi(rd);
+            rt_log("stepscan: trap on %d given words at present %llu", ntargets, (unsigned long long)presents);
+            trap_start();
+            return;
+        }
         ntargets = 0;
         track_free();
         trk = malloc(sizeof *trk * TRACK_MAX);
         uint64_t t0 = kern_now_ns();
-        rt_log("stepscan: start at present %llu: 30 fps then 60 fps", (unsigned long long)presents);
+        rates_read();
+        rt_log("stepscan: start at present %llu: %d fps then %d fps", (unsigned long long)presents, rate_hz[0], rate_hz[1]);
         if (!collect() || !start_rate(0)) {
             rt_log("stepscan: out of memory; stopped");
             stick_off(), finish();
@@ -736,7 +770,7 @@ void stepscan_present(void) {
                (t1 - t0) / 1e6, (t2 - t1) / 1e6, (t3 - t2) / 1e6, (unsigned long long)(cand_head - c0));
     if (t < 2 * K + nslices - 1) return;
     rt_log("stepscan: %d fps: %u words stepped the same amount twice (%u changed once; %.0f MiB left out as slow)",
-           rate_i ? 60 : 30, nres[rate_i], ncand, slow_bytes / 1048576.0);
+           rate_hz[rate_i], nres[rate_i], ncand, slow_bytes / 1048576.0);
     for (uint32_t k = 0; trk && k < ncand && ntrk < TRACK_MAX; k++) trk[ntrk++] = cand[k].addr;
     free_pass();
     if (rate_i == 0) {
