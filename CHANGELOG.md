@@ -59,7 +59,9 @@
   so a larger picture showed only its top left corner; they now take the game resolution. The 3D scene keeps at most
   3840x2160 pixels: at 3840x2160, 100 % draws it at full size, and Game (75 %) with DLSS or the game's FSR brings a
   2880x1620 scene up to 4K for less GPU work. DLSS also runs at these sizes (the game's scaling draw there is in its
-  1920x1080 layout units).
+  1920x1080 layout units). At these resolutions 100 % draws the scene 2 pixels smaller on each side (2558x1438 at
+  2560x1440): a scene of exactly the output's size had the passes of in-engine cutscenes drawn in its top left corner,
+  and a cutscene showed only the top left 56 % of its picture, enlarged.
 - **Two-player co-op with a second controller** (issue #1): the game saw a single controller, so "Two players" on the
   map found no one to join. A second connected controller is now player 2 (the game's controller 2, a full
   controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and

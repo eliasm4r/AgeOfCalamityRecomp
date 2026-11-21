@@ -396,6 +396,12 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   at most 2880x1620 pixels. On outputs other than 1920x1080 the game's scaling draw (scene to output) is a quad in the
   1920x1080 layout units, and DLSS (`vk_dlaa_scale_draw`) now accepts it. DLSS modes at 1280x720 still never reach the
   scaling draw (the DLAA point is not armed there; not looked into).
+- A scene of exactly the output's size above 1920x1080 (100 % at 2560x1440 or 3840x2160): the `output` set's test is a
+  per-axis size equality with the output, so the scene's own targets took the 1920x1080 layout too. Battles looked
+  whole, but in-engine cutscenes showed the top left 1440x810 of a 2560x1440 picture stretched: 0.5625 of each side
+  (two passes at 0.75), the same with DLAA off; Game (1920x1080 scene) and 99.8 % (2556x1438) were whole (shots once a
+  second through the second story battle's opening, each matched against 1920x1080 at Game as a whole and as top left
+  crops, 2026-11-21). `resolution.c` now draws such a scene 2 pixels smaller on each equal axis.
 - The 175 % stop and the 3840x2160 one were the heap's first pool: 215 MiB with NVN flags 0x22 (CPU uncached, GPU
   cached: buffers), set at `main+0x8aece8` (`mov w11, #0xd700000`). The object `main+0x151daf4` passed on is the
   movie player's (`[x20+0x4a0]`), whose buffer was never made. The end of the furthest buffer or texture made in that

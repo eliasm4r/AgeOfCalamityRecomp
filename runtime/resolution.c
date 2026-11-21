@@ -110,12 +110,23 @@ static void decide(void) {
     // Below 1920x1080 the KTGL's 2D projection and full-screen quads take the layout size for any target as large as
     // the output (recomp/patches-v130.txt, set output): a scene of the output's size would have its own passes caught by
     // that test and drawn at 2/3 (measured 2026-11-12 with 1280x720 at 100 %). 85 % is the largest scale clear of it;
-    // a larger scene (supersampling) is held there too, as it was never measured below 1920x1080. Above 1920x1080 a
-    // scene of the output's size draws whole (2560x1440 at 100 %, 2026-11-21).
+    // a larger scene (supersampling) is held there too, as it was never measured below 1920x1080.
     if ((R.ow < BASE_W || R.oh < BASE_H) && R.sw >= R.ow && R.sh >= R.oh) {
         R.sw = ((unsigned)(R.ow * 0.85 + 0.5) + 1) & ~1u;
         R.sh = ((unsigned)(R.oh * 0.85 + 0.5) + 1) & ~1u;
         rt_log("resolution: a scene as large as an output below 1920x1080 is not supported; %ux%u (85 %%)", R.sw, R.sh);
+    }
+    // Above 1920x1080 the test is the same: a target whose width (or height) equals the output's takes the layout's
+    // 1920 (or 1080) for that axis. A scene of exactly the output's size (100 %) played battles whole, but the passes of
+    // in-engine cutscenes drew in its top left 1920x1080 twice over: at 2560x1440 the screen showed the top left
+    // 1440x810 of the picture stretched (0.5625 of each side, matched shot for shot against 1920x1080, 2026-11-21).
+    // Such a scene is drawn 2 pixels smaller on that axis (2558x1438 at 2560x1440), which no test takes for the output;
+    // the game's scaling draw, or DLSS with DLAA on, brings it to the output (2556x1438: the cutscene whole).
+    if (R.ow > BASE_W || R.oh > BASE_H) {
+        int w = R.sw == R.ow, h = R.sh == R.oh;
+        if (w) R.sw -= 2;
+        if (h) R.sh -= 2;
+        if (w || h) rt_log("resolution: a scene of the output's size draws at %ux%u (the output test, above)", R.sw, R.sh);
     }
 }
 
