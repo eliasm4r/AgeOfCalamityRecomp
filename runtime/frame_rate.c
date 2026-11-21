@@ -30,12 +30,20 @@
 
 #define STEP_MAX_S (1.0 / 15.0)    // longest step; a longer frame slows the game down
 #define STEP_SAMPLES 5
+#define UPD_SAMPLES 32             // presents over which the updates per present are counted (above 60 fps)
 #define STEP_RESET_S 0.25          // a gap this long (loading) restarts the average
 
 static double step_now;   // the step the game used this frame (whole vsyncs: interval / 60)
+// ACR_TRACE=perf: game seconds the updates stepped by the float vsyncs (fps_block): each update since the last present
+// read the vsyncs written then
+static double upd_game_s, upd_vs_last;
+static uint32_t upd_seen;
 static uint64_t last_ns;
 
 #define FPS_BLOCK 0x700269e150ull   // main+0x269e150
+// main+0x2780448: the game's update count, +1 per update of its update thread (main+0x166d980; found with
+// runtime/stepscan.c). The game updates on that thread at the pace of its rate fields, apart from the presents.
+#define GAME_UPDATES 0x7002780448ull
 
 // ACR_FPS_LIMIT: 30, or 60 to 240 (one game update per frame, see SPEED_SCALE). "display" gives 60, other rates below
 // 60 give 30.
@@ -98,18 +106,36 @@ static void fps_block(double dt) {
     int n = frame_step_interval(), fps = n == 2 ? 30 : fps_hz;
     double vs = n;
     if (fps > 60) {
-        // TotK's frame_rate.c: the mean of the last 5 display intervals, restarted after a gap (a load), clamped
-        static double samples[STEP_SAMPLES];
+        // As TotK's frame_rate.c, the real time of the last presents, restarted after a gap (a load), clamped; but per
+        // game update, not per present: the game updates at the pace of its rate fields (the setting), so below the
+        // limit it makes more updates than presents (240 set, 120 shown: 230 updates a second), and a present's time
+        // stepped by each of them ran the whole game about twice as fast (issue #1; measured 1.91 at 240). The step
+        // is the time of the last UPD_SAMPLES presents over the updates made in it (over 5 it came out 2 % long: the
+        // update count is 1, 2 or 3 a present). Each value written here is read by the updates until the next
+        // present, so the integer vsyncs below still add up to the time on average.
+        static double samples[UPD_SAMPLES];
+        static uint32_t upd_samples[UPD_SAMPLES], upd_last;
         static unsigned count, next;
-        if (dt <= 0 || dt > STEP_RESET_S) {
+        uint32_t upd = *(volatile uint32_t *)(uintptr_t)GAME_UPDATES, k = upd - upd_last;
+        upd_last = upd;
+        if (dt <= 0 || dt > STEP_RESET_S || k > 16) {
             count = next = 0;
             dt = 1.0 / fps;
+            k = 1;
         }
-        samples[next] = dt, next = (next + 1) % STEP_SAMPLES;
-        if (count < STEP_SAMPLES) count++;
+        samples[next] = dt, upd_samples[next] = k, next = (next + 1) % UPD_SAMPLES;
+        if (count < UPD_SAMPLES) count++;
+        // ACR_STEP_BY_PRESENT=1: the former step, the mean of the last 5 presents' time per update (diagnosis)
+        static int by_present = -1;
+        if (by_present < 0) by_present = cfg_get("ACR_STEP_BY_PRESENT") && !strcmp(cfg_get("ACR_STEP_BY_PRESENT"), "1");
         double sum = 0;
-        for (unsigned k = 0; k < count; k++) sum += samples[k];
-        vs = sum / count * 60.0;
+        uint32_t ups = 0;
+        unsigned use = by_present && count > STEP_SAMPLES ? STEP_SAMPLES : count;
+        for (unsigned i = 0; i < use; i++) {
+            unsigned j = (next + UPD_SAMPLES - 1 - i) % UPD_SAMPLES;   // the newest first
+            sum += samples[j], ups += upd_samples[j];
+        }
+        vs = sum * 60.0 / (by_present ? use : ups ? ups : use);
         if (vs < 60.0 / FPS_MAX) vs = 60.0 / FPS_MAX;
         if (vs > STEP_MAX_S * 60.0) vs = STEP_MAX_S * 60.0;
         acc += vs;
@@ -118,6 +144,9 @@ static void fps_block(double dt) {
     } else {
         acc = 0;
     }
+    uint32_t now_upd = *(volatile uint32_t *)(uintptr_t)GAME_UPDATES;
+    if (now_upd - upd_seen < 64) upd_game_s += (now_upd - upd_seen) * upd_vs_last / 60.0;
+    upd_seen = now_upd, upd_vs_last = vs;
     uint32_t *b = (uint32_t *)(uintptr_t)FPS_BLOCK;
     if (b[0] != (uint32_t)fps) {
         static int logs;
@@ -149,11 +178,15 @@ static void fps_block(double dt) {
 
 // ---- ACR_TRACE=perf speed lines
 static uint64_t win_t0, win_frames, win_hist[4];   // win_hist: frames by present interval 1, 2, 3+ ([0] unused)
+static uint32_t win_upd0;
+static double win_upd_game0;
 static double win_game;
 
 static void speed_report(uint64_t now, double step, int interval) {
     if (!win_t0) {
         win_t0 = now;
+        win_upd0 = *(volatile uint32_t *)(uintptr_t)GAME_UPDATES;
+        win_upd_game0 = upd_game_s;
         return;
     }
     win_frames++;
@@ -161,9 +194,14 @@ static void speed_report(uint64_t now, double step, int interval) {
     win_hist[interval < 1 ? 1 : interval > 3 ? 3 : interval]++;
     if (win_frames < 120) return;
     double wall = (double)(now - win_t0) * 1e-9;
-    rt_log("fps: %llu frames in %.3f s (%.1f fps), %.3f s game stepped, speed %.3f; interval 1/2/3+ %llu/%llu/%llu",
+    uint32_t upd = *(volatile uint32_t *)(uintptr_t)GAME_UPDATES;
+    rt_log("fps: %llu frames in %.3f s (%.1f fps), %.3f s game stepped, speed %.3f; interval 1/2/3+ %llu/%llu/%llu; "
+           "%u game updates (%.1f a second), %.3f s of game time by them (speed %.3f)",
            (unsigned long long)win_frames, wall, (double)win_frames / wall, win_game, win_game / wall,
-           (unsigned long long)win_hist[1], (unsigned long long)win_hist[2], (unsigned long long)win_hist[3]);
+           (unsigned long long)win_hist[1], (unsigned long long)win_hist[2], (unsigned long long)win_hist[3],
+           upd - win_upd0, (upd - win_upd0) / wall, upd_game_s - win_upd_game0, (upd_game_s - win_upd_game0) / wall);
+    win_upd0 = upd;
+    win_upd_game0 = upd_game_s;
     win_t0 = now;
     win_frames = 0;
     win_game = 0;
@@ -191,8 +229,26 @@ static void world_clock(double dt, double step) {
     atomic_store_explicit(&world_us, w + (int64_t)(step * 1e6 + 0.5), memory_order_relaxed);
 }
 
+// ACR_FPS_AT=<world seconds>:<fps> (test runs): the frame rate changes to <fps> at that world time, so a scripted run
+// can go through its menus at one rate and measure a scene at another.
+static void fps_at(void) {
+    static int state;   // 0 not read, 1 waiting, 2 done or off
+    static double at;
+    static int hz;
+    if (state == 0) {
+        const char *e = cfg_get("ACR_FPS_AT");
+        state = e && sscanf(e, "%lf:%d", &at, &hz) == 2 && hz >= 30 ? 1 : 2;
+    }
+    if (state == 1 && frame_step_world_us() >= (int64_t)(at * 1e6)) {
+        state = 2;
+        rt_log("frame rate: ACR_FPS_AT: %d fps from %.1f s of world time", hz, at);
+        frame_step_force_hz(hz);
+    }
+}
+
 void frame_step_present(uint64_t display_ns, int interval) {
     stepscan_present();
+    fps_at();
     double dt = last_ns ? (double)(display_ns - last_ns) * 1e-9 : 0;
     fps_block(dt);
     if (interval > 0) step_now = interval == 1 && fps_hz > 60 ? (dt > 0 ? dt : 1.0 / fps_hz) : interval / 60.0;

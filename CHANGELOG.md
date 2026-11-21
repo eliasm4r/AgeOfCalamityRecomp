@@ -11,6 +11,11 @@
   30 frames per second at any frame rate (patch set `event`, `ACR_PATCH_EVENT=0` turns it off); checked on the
   opening cutscene of the second story battle, shot for shot against 30 fps. Cutscenes still animate at 30 frames a
   second, as on the Switch.
+- **The whole game too fast at 120, 144 and 240 fps** when the frame rate stays under the limit (issue #1): the game
+  updates at the pace of the limit on its own thread, so it made more updates than frames shown (240 set, 120 shown:
+  about 230 updates a second), and each update stepped a whole frame's time: the game ran up to twice as fast. Each
+  update now steps the time shown divided by the updates made in it; measured speed 1.00 at 120, 144 and 240 (it was
+  1.91 at 240), and the cutscene above keeps the 30 fps timing at 240.
 
 ## 0.1.1
 
