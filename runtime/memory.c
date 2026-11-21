@@ -242,7 +242,7 @@ void mem_init(void) {
         .alias = {alias, ALIAS_SIZE},
         .kernel = {RT_KERNEL_BASE, RT_KERNEL_SIZE},
         .hostfn = {RT_HOSTFN_BASE, RT_HOSTFN_SIZE},
-        .pool = pool ? strtoull(pool, NULL, 0) : DEFAULT_POOL + res_heap_extra_bytes(),   // resolution.c
+        .pool = pool ? strtoull(pool, NULL, 0) : DEFAULT_POOL + res_heap_extra_bytes() + res_texpool_extra_bytes(),   // resolution.c
     };
     if (!L.pool) rt_fatal("memory: ACR_APP_POOL is 0");
 }

@@ -364,7 +364,14 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   `main+0x8aecf8` (`mov w11, #0x5e600000`, next to 215 MiB at `0xd700000` and the 101 MiB shader pool): the same
   size at 100 and 140 %, so the application pool's growth never reaches it. Growing it alone (even by 32 MiB) makes
   `nnMain` give up right after the first `nvnMemoryPoolInitialize` (`main+0x4ee0`): its storage comes from another
-  fixed game heap. The menu offers up to 100 % until that heap is found.
+  fixed game heap.
+- That heap: `nnMain` allocates one GPU heap of a fixed **0x72204008** bytes (`main+0x8ad378`, `mov w1, #0x4008` and
+  `movk w1, #0x7220, lsl #16`; size kept at `[main+0x2b5f550]`, heap at `[main+0x2b5f4d8]`, its allocator object at
+  `main+0x2b5f9e8`, the one `[main+0x2b5fd40]` points to). `main+0x8b00c0` takes the three pools from it in order
+  (`main+0x8b1684`, `0x8b1774`, `0x8b17ec`, each a 4 KiB header then the pool) through that allocator's vtable +0x40:
+  215 + 1510 + 101 MiB + 3 headers fill it exactly. The `texpool` patch set reads both sizes from the patch page and
+  grows them by the same amount (the targets' growth, `res_heap_extra_bytes`), and the application pool grows by that
+  much more: at 140 % the pool is 1786 MiB and the game starts.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

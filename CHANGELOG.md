@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Render scale 125 % and 140 % are back** (supersampling, issue of 0.1.0): the game keeps its GPU textures in a pool
+  of 1510 MiB, cut from a GPU heap of fixed size, and the larger scene filled it, so a story cutscene of the first
+  battle loaded forever. Both now grow with the scene (patch set `texpool`, `ACR_PATCH_TEXPOOL=0` turns it off): 1786
+  MiB at 140 %.
+
 ## 0.1.1
 
 ### Fixed

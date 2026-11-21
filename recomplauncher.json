@@ -52,7 +52,9 @@
         { "label": "60 %", "set": { "display/render_scale": "60" } },
         { "label": "67 %", "set": { "display/render_scale": "67" } },
         { "label": "85 %", "set": { "display/render_scale": "85" } },
-        { "label": "100 %", "set": { "display/render_scale": "100" } }
+        { "label": "100 %", "set": { "display/render_scale": "100" } },
+        { "label": "125 %", "set": { "display/render_scale": "125" } },
+        { "label": "140 %", "set": { "display/render_scale": "140" } }
       ],
       "defaults": { "display/render_scale": "game" }
     },

@@ -14,6 +14,16 @@ site output main 8d9490 d280f008 @page:x8 f9401108   # mov x8,#0x780 -> adrp x8,
 site output main 8d9498 f2c08708 d503201f            # movk x8,#0x438,lsl #32 -> nop
 site scene  main 8d94d0 d280b408 @page:x8 f9401508   # mov x8,#0x5a0 -> adrp x8,page ; ldr x8,[x8,#40]
 site scene  main 8d94d4 f2c06548 d503201f            # movk x8,#0x32a,lsl #32 -> nop
+# The game's GPU memory (runtime/resolution.c, a scene larger than the game's). nnMain sets aside one heap for its three
+# NVN memory pools, a fixed 0x72204008 bytes (main+0x8ad378: the size goes to [main+0x2b5f550], the heap to
+# [main+0x2b5f4d8]); main+0x8b00c0 then cuts the pools from it with the sizes of the heap configuration built at
+# main+0x8aec40: 215 MiB (flags 0x22), the 1510 MiB texture pool (0xa2, main+0x8aecf8) and 101 MiB of shaders (0x62).
+# The pools fill that heap to the page. A larger scene filled the texture pool and the first story cutscene waited for
+# memory forever at 125 and 140 %; growing the pool alone made nnMain stop at start (the heap could not hold it). Both
+# sizes now come from the patch page: +112 the texture pool's, +116 the heap's, grown by the same amount.
+set  texpool ACR_PATCH_TEXPOOL 0
+site texpool main 8ad37c 72ae4401 @page:x1 b9407421   # movk w1,#0x7220,lsl #16 -> adrp x1,page ; ldr w1,[x1,#116]
+site texpool main 8aecf8 52abcc0b @page:x11 b940716b  # mov w11,#0x5e600000 -> adrp x11,page ; ldr w11,[x11,#112]
 # 2D drawing on the output target (minimap and markers, masks, the scene picture). The 2D UI quads are in 1920x1080
 # layout units, and the KTGL builds the 2D projection from the target size ([target+0x78]): 2/width. With the output at
 # 1280x720 the minimap markers (one draw of program 14, 6.4-unit points at (1551..1839, 721..1044)) landed at
