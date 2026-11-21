@@ -345,6 +345,11 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   an unknown texture.
 - The KTGL main command buffer gets 3 MiB of control memory and a 16 MiB command ring once; the main loop waits for the
   previous frame on its own fence queue (`main+0x157a390`).
+- **Flushes of the buffer pool** (215 MiB, NVN flags 0x22, VRAM mirror): about 13 `nvnMemoryPoolFlushMappedRange` a
+  frame on the save route at 1080p, 8.4 MiB in all, spread from +36 to +150 MiB of the pool. Kept as one span, they
+  made the mirror copy about 115 MiB to the GPU every frame (117 MiB of sync copies a frame, 3 ms of an RTX 4070;
+  with a 3840x2160 scene 215 MiB and 11 ms, the frame at 47 fps with 10.4 ms of other GPU work). Kept as up to 16
+  ranges merged within 64 KiB (`fl_add`), the sync copies are 20 MiB a frame (`ACR_TRACE=perf`, `mem: mirror` line).
 
 ### Resolution
 

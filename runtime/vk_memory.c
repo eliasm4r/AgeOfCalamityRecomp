@@ -59,7 +59,8 @@ typedef struct PoolRec {
     uint32_t wb_sub;                   // replay: the last submission that wrote mirror bytes back to guest memory
     uint32_t mgen;                     // gen_lock: every page write stamped up to this generation is in the mirror
                                        // (or in a copy queued before its next use)
-    uint64_t fl_lo, fl_hi;             // flush_lock: nvnMemoryPoolFlushMappedRange bytes not copied yet (fl_hi 0: none)
+    uint32_t nfl;                      // flush_lock: nvnMemoryPoolFlushMappedRange ranges not copied yet (fl_add)
+    struct { uint64_t lo, hi; } fl[16];
     // Shadow storage (POOL_IMPORT in shadow mode, "shadow storage" below): buf is a host-visible copy of the guest pages.
     VmaAllocation salloc;
     uint8_t *smap;                     // its mapping; offsets as in buf (from import_lo)
@@ -1418,14 +1419,17 @@ static void mirror_sync(PoolRec *r) {
     r->mgen = gen_now;
     if (excl) plat_mutex_unlock(&gen_lock);
     else plat_mutex_unlock_shared(&gen_lock);
-    if (__atomic_load_n(&r->fl_hi, __ATOMIC_ACQUIRE)) {
+    if (__atomic_load_n(&r->nfl, __ATOMIC_ACQUIRE)) {
         plat_mutex_lock(&flush_lock);
-        uint64_t a = r->fl_lo, b = r->fl_hi;
-        r->fl_hi = 0;
+        uint32_t n = r->nfl;
+        for (uint32_t i = 0; i < n; i++) {
+            uint64_t a = r->fl[i].lo, b = r->fl[i].hi;
+            a = a > lo ? a & ~0xfffull : lo;
+            b = b < hi ? (b + 0xfff) & ~0xfffull : hi;
+            if (a < b) range_add(&pend, &npend, &cpend, r, a - lo, b - a);   // copy_ranges sorts and merges them
+        }
+        __atomic_store_n(&r->nfl, 0, __ATOMIC_RELEASE);
         plat_mutex_unlock(&flush_lock);
-        a = a > lo ? a & ~0xfffull : lo;
-        b = b < hi ? (b + 0xfff) & ~0xfffull : hi;
-        if (a < b) range_add(&pend, &npend, &cpend, r, a - lo, b - a);
     }
     mrep.syncs++;
     mrep.sync_t += qpc() - t0;
@@ -1460,6 +1464,27 @@ void vk_mem_gpu_wrote(const VkMemSpan *sp, uint64_t size) {
     range_add(&wbl, &nwbl, &cwbl, r, sp->offset, size);
 }
 
+// flush_lock: a flushed range joins the one it overlaps or nearly touches (FL_GAP), else takes a slot of its own; with
+// all slots taken it widens the nearest. One range spanning them all copied about 115 MiB a frame for 9 MiB of flushes
+// at 1080p, scattered over the game's 215 MiB buffer pool (230 MiB at a 3840x2160 scene), and the copies held the GPU
+// for 3 ms a frame there and 11 ms at 3840x2160 on an RTX 4070.
+#define FL_GAP 0x10000ull
+static void fl_add(PoolRec *r, uint64_t a, uint64_t b) {
+    uint32_t n = r->nfl, near = 0;
+    uint64_t best = UINT64_MAX;
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t gap = a > r->fl[i].hi ? a - r->fl[i].hi : r->fl[i].lo > b ? r->fl[i].lo - b : 0;
+        if (gap < best) best = gap, near = i;
+    }
+    if (best > FL_GAP && n < sizeof r->fl / sizeof r->fl[0]) {
+        r->fl[n].lo = a, r->fl[n].hi = b;
+        __atomic_store_n(&r->nfl, n + 1, __ATOMIC_RELEASE);
+        return;
+    }
+    if (a < r->fl[near].lo) r->fl[near].lo = a;
+    if (b > r->fl[near].hi) r->fl[near].hi = b;
+}
+
 void nvn_pool_flushed(const pool_t *p, uint64_t off, uint64_t size) {
     if (!vk_mirror_on || !size || !p->mem) return;
     plat_inc64(&m_flush_calls);
@@ -1470,11 +1495,7 @@ void nvn_pool_flushed(const pool_t *p, uint64_t off, uint64_t size) {
     if (r && r->mstate == MS_ON) {
         uint64_t a = (uintptr_t)p->mem + off, b = a + size;
         plat_mutex_lock(&flush_lock);
-        if (!r->fl_hi) r->fl_lo = a, r->fl_hi = b;
-        else {
-            if (a < r->fl_lo) r->fl_lo = a;
-            if (b > r->fl_hi) r->fl_hi = b;
-        }
+        fl_add(r, a, b);
         plat_mutex_unlock(&flush_lock);
     }
     plat_mutex_unlock_shared(&pool_lock);
