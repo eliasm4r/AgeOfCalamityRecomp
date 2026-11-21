@@ -408,6 +408,18 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   texture pool at 200 % holds up to 2077 MiB of its 2190. A 3840x2160 output and scene make a 4.3 GiB application
   pool, and the heap the SDK asks for no longer fit the 4 GiB heap region (`SetHeapSize` failed with `0xd401`), so
   `mem_init` sizes the region from the pool (5 GiB there, 4 GiB at any smaller size). A larger scene was never measured and is brought back to 3840x2160 pixels.
+- The held picture: loading after "New game" (among others), a capture node (`main+0x161df30`) copies the current
+  colour target into a texture of the scene's size every frame, and the next pass draws that texture over the output.
+  The copy is `main+0x17e1880(ctx, source, uv rect, target, position rect)`, called at `main+0x161e894` with one
+  rectangle for both (`[sp+0x40]`), built from `[source+0x58]` (KTGL texture objects keep their size there), the
+  output's 1920x1080, times a normalized rect (`[[x21+0x110]+0x151c..0x1528]`, 0, 0, 1, 1 here). The 2D projection is
+  the target's (`[[stack entry+0x50]+0x78]`, 2/3840 at 200 %), so the quad covered the target's top left 1920x1080
+  pixels. The texture is made at the address of the scene's G-buffer colour target, which nothing clears, so the
+  rest showed the last scene unlit (the black loading picture in the top left corner) at 150 and 200 %. At the game's
+  own scale the target (1440x810) is smaller and the copy crops the picture, as on the Switch. The `hold` set scales
+  the position rect by the target's size over the source's, at least 1, into `[sp+0x50]`. Found by logging the draws
+  whose 2D quad is smaller than a target of 2000 pixels or more, then a probe site writing the registers to the patch
+  page.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

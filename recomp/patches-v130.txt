@@ -56,6 +56,18 @@ site output main 161f394 294b5d18 fd402d10 @page:x17 fd401231 fd403632 7ef18e13 
 # of integers on the stack ([sp], [sp+4]).
 site output main 151e194 b94003e8 fd4003f0 @page:x17 fd401231 fd403632 7ef18e13 2e701e53 1e260268   # ldr w8,[sp] -> virtual width
 site output main 151e19c b94007e8 0e0c3e68                            # ldr w8,[sp,#4] -> mov w8,v19.s[1]
+# The held picture (runtime/resolution.c, a scene larger than the output). Loading after "New game", among others, the
+# game copies the last picture into a target of the scene's size every frame, then draws that target back over the
+# output: main+0x161e894 calls main+0x17e1880(ctx, source, uv rect, target, position rect) with one rectangle for both,
+# [sp+0x40] (x0, y0, x1, y1), built from the source's size ([source+0x58], the output's 1920x1080). On a larger target
+# the quad covered its top left 1920x1080 pixels only and the rest kept what the memory held before (the colours of the
+# G-buffer target the game had there): at 150 and 200 % the screen showed an unlit picture of the last scene under the
+# picture in its top left corner (2026-11-21). The position rect is now that rectangle times the target's size over the
+# source's on each axis, at least 1, at [sp+0x50] (free on this path: the other paths of the function write it before
+# reading it), so the copy covers the target as it does at 100 %; a smaller target keeps the game's 1:1 copy. x21 is
+# the target and x22 the source there (the rect's base); v16 and v17 are scratch (no use in the function).
+set  hold   ACR_PATCH_HOLD   0
+site hold   main 161e888 910103e4 fd402eb0 fd402ed1 2e21da10 2e21da31 2e31fe10 0f03f611 0e31f610 6e180610 3dc013f1 4e21da31 6e30de31 4e21aa31 3d8017f1 910143e4   # add x4,sp,#0x40 -> scaled copy at sp+0x50
 # Frame rates above 60 (runtime/frame_rate.c). The game steps by whole 60 Hz vsyncs: its frame-rate block at
 # main+0x269e150 is {fps, vsyncs per update, fps, fps as a float}, and 159 instructions read the vsyncs (+0x154). 104 of
 # them load it into a float register and convert it (ucvtf / scvtf) in a straight line, without a branch or a branch
