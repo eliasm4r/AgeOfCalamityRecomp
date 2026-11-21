@@ -30,6 +30,10 @@
   2880x1620 pixels (a larger one stops the game on loading a save): at 3840x2160, Game (75 %) gives exactly that and
   DLSS or the game's FSR brings it up to 4K. DLSS also runs at these sizes (the game's scaling draw there is in its
   1920x1080 layout units).
+- **Presentation on graphics cards without Mailbox** (AMD on Windows, issue #4): the game fell back to plain VSync,
+  which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
+  Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
+  shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
 
 ## 0.1.1
 
