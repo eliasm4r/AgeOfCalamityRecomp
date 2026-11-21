@@ -28,6 +28,11 @@ static PlatMutex lock = PLAT_MUTEX_INIT;
 static int state;                    // 0 not started, 1 running, -1 disabled or SDL failed
 static SDL_Gamepad *pad;
 static uint64_t next_scan;
+// Player 2 (co-op): the second connected gamepad, read on its own (no keyboard, no script, no binds of its own: the
+// same ACR_BIND_* pad rows and layout setting as player 1). ACR_PLAYER2=0: never opened.
+static SDL_Gamepad *pad2;
+static uint64_t next_scan2;
+static int pad2_rumble, pad2_east_a;
 static int pad_rumble;               // the open gamepad has rumble motors
 static volatile int32_t pad_labels[4];  // ... and the labels of its south, east, west, north buttons (PAD_LABEL_*), any thread
 static int pad_east_a;               // ... and plays by position under ACR_PAD_LAYOUT=auto (Nintendo layout): east labelled A, or a PlayStation pad
@@ -334,8 +339,16 @@ static float stick_dead_get(int s) {
 }
 
 // One gamepad stick through the dead zone; SDL's Y grows downwards, the Switch's upwards.
-static void stick(SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) {
-    input_pad_stick(SDL_GetGamepadAxis(pad, ax), -(int32_t)SDL_GetGamepadAxis(pad, ay), dead, out);
+static void stick_of(SDL_Gamepad *g, SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) {
+    input_pad_stick(SDL_GetGamepadAxis(g, ax), -(int32_t)SDL_GetGamepadAxis(g, ay), dead, out);
+}
+static void stick(SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) { stick_of(pad, ax, ay, dead, out); }
+
+// ACR_TEST_PADS_ONLY=1 (test runs): only the test gamepads are opened, never a real one (no rumble on the user's pad
+// whatever the SDL back ends see).
+static int test_pads_only(void) {
+    const char *e = cfg_get("ACR_TEST_PADS_ONLY");
+    return e && !strcmp(e, "1");
 }
 
 // Open the first gamepad when none is open or the open one went away; logs once per change.
@@ -347,9 +360,14 @@ static void scan_pads(void) {
         for (int i = 0; i < 4; i++) plat_xchg32(&pad_labels[i], PAD_LABEL_NONE);
         rt_log("input: gamepad disconnected");
     }
+    if (pad2 && SDL_GamepadConnected(pad2)) {   // player 1's gamepad went away: player 2's becomes player 1's
+        pad = pad2;
+        pad2 = NULL;
+    }
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
-    for (int i = 0; ids && i < n && !pad; i++) pad = SDL_OpenGamepad(ids[i]);
+    for (int i = 0; ids && i < n && !pad; i++)
+        if (!test_pads_only() || SDL_IsJoystickVirtual(ids[i])) pad = SDL_OpenGamepad(ids[i]);
     SDL_free(ids);
     if (!pad) return;
     pad_rumble = SDL_GetBooleanProperty(SDL_GetGamepadProperties(pad), SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
@@ -374,6 +392,39 @@ static void scan_pads(void) {
     rt_log("input: gamepad \"%s\" (%s, %s, east button %s)", SDL_GetGamepadName(pad), pad_rumble ? "rumble" : "no rumble",
            motion ? "gyro and accelerometer" : "no motion sensors",
            east == SDL_GAMEPAD_BUTTON_LABEL_A ? "labelled A" : east == SDL_GAMEPAD_BUTTON_LABEL_CIRCLE ? "circle" : "not labelled A");
+}
+
+static int player2_on(void) {
+    const char *e = cfg_get("ACR_PLAYER2");
+    return !(e && !strcmp(e, "0"));
+}
+
+// Under lock, state 1: open a second gamepad (not player 1's) when none is open or the open one went away.
+static void scan_pad2(void) {
+    if (pad2 && SDL_GamepadConnected(pad2)) return;
+    if (pad2) {
+        SDL_CloseGamepad(pad2);
+        pad2 = NULL;
+        rt_log("input: player 2 gamepad disconnected");
+    }
+    if (!pad || !player2_on()) return;
+    SDL_JoystickID one = SDL_GetGamepadID(pad);
+    int n = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&n);
+    for (int i = 0; ids && i < n && !pad2; i++)
+        if (ids[i] != one && (!test_pads_only() || SDL_IsJoystickVirtual(ids[i]))) pad2 = SDL_OpenGamepad(ids[i]);
+    SDL_free(ids);
+    if (!pad2) return;
+    pad2_rumble = SDL_GetBooleanProperty(SDL_GetGamepadProperties(pad2), SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
+    SDL_GamepadButtonLabel east = SDL_GetGamepadButtonLabel(pad2, SDL_GAMEPAD_BUTTON_EAST);
+    pad2_east_a = east == SDL_GAMEPAD_BUTTON_LABEL_A || east == SDL_GAMEPAD_BUTTON_LABEL_CIRCLE;
+    rt_log("input: player 2 gamepad \"%s\" (%s)", SDL_GetGamepadName(pad2), pad2_rumble ? "rumble" : "no rumble");
+}
+
+// Under lock, state 1: scan_pad2 at most every RESCAN_MS while player 2 has no connected gamepad
+static void rescan_pad2(void) {
+    uint64_t now_ms = plat_now_ns() / 1000000u;
+    if ((!pad2 || !SDL_GamepadConnected(pad2)) && now_ms >= next_scan2) next_scan2 = now_ms + RESCAN_MS, scan_pad2();
 }
 
 // Under lock: the layout of the open gamepad, picked again when a setting or the gamepad changed; logs each change.
@@ -415,13 +466,26 @@ static void binds_refresh(void) {
 // ACR_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
 // (-32768..32767, down is +y), attached before the first scan so it is the gamepad the game reads: drift and full
 // deflection go through the same mapping and dead zone as a real pad.
-static void test_pad_attach(void) {
-    static SDL_Joystick *joy;   // kept open: a virtual joystick's axes are set through an open handle
-    const char *e = cfg_get("ACR_TEST_PAD");
+// A test gamepad's motors: logged (the first value, each start and each stop), so a test run sees which player's
+// gamepad the game rumbles without a real one. userdata: 1 or 2, the ACR_TEST_PAD it is.
+static bool SDLCALL test_pad_rumble(void *userdata, Uint16 low, Uint16 high) {
+    static int on[3], logs;
+    int n = (int)(intptr_t)userdata, now = low || high;
+    if (n >= 1 && n <= 2 && now != on[n] && logs < 2000) {
+        logs++;
+        rt_log("input: test gamepad %d rumble %s (%u, %u) at %.2f s", n, now ? "on" : "off", low, high,
+               frame_step_world_us() / 1e6);
+    }
+    if (n >= 1 && n <= 2) on[n] = now;
+    return true;
+}
+
+static void test_pad_attach_one(const char *var, SDL_Joystick **keep) {
+    const char *e = cfg_get(var);
     int v[4];
     if (!e || !*e) return;
     if (sscanf(e, "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]) != 4) {
-        rt_log("input: ACR_TEST_PAD=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", e);
+        rt_log("input: %s=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", var, e);
         return;
     }
     SDL_VirtualJoystickDesc d;
@@ -430,8 +494,11 @@ static void test_pad_attach(void) {
     d.naxes = SDL_GAMEPAD_AXIS_COUNT;
     d.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
     d.name = RT_PORT_NAME " test gamepad";
+    d.Rumble = test_pad_rumble;
+    d.userdata = (void *)(intptr_t)(strcmp(var, "ACR_TEST_PAD2") ? 1 : 2);
     SDL_JoystickID id = SDL_AttachVirtualJoystick(&d);
-    joy = id ? SDL_OpenJoystick(id) : NULL;
+    SDL_Joystick *joy = id ? SDL_OpenJoystick(id) : NULL;
+    *keep = joy;   // kept open: a virtual joystick's axes are set through an open handle
     if (!joy) {
         rt_log("input: test gamepad not attached (%s)", SDL_GetError());
         return;
@@ -440,7 +507,14 @@ static void test_pad_attach(void) {
                                             SDL_GAMEPAD_AXIS_RIGHTY};
     for (int i = 0; i < 4; i++)
         SDL_SetJoystickVirtualAxis(joy, axes[i], (Sint16)(v[i] < -32768 ? -32768 : v[i] > 32767 ? 32767 : v[i]));
-    rt_log("input: test gamepad attached, sticks at %d,%d %d,%d", v[0], v[1], v[2], v[3]);
+    rt_log("input: test gamepad (%s) attached, sticks at %d,%d %d,%d", var, v[0], v[1], v[2], v[3]);
+}
+
+// ACR_TEST_PAD2: a second virtual gamepad the same way (player 2, co-op), attached after the first.
+static void test_pad_attach(void) {
+    static SDL_Joystick *joy[2];
+    test_pad_attach_one("ACR_TEST_PAD", &joy[0]);
+    test_pad_attach_one("ACR_TEST_PAD2", &joy[1]);
 }
 
 static void start(void) {
@@ -470,14 +544,18 @@ static void pick(int32_t *x, int32_t *y, int32_t kx, int32_t ky) {
 }
 
 // Under lock, state 1: the open gamepad's inputs by position (pd[PAD_*] != 0 held); 0 without a connected gamepad.
+static void physical_of(SDL_Gamepad *g, uint8_t pd[PAD_COUNT]) {
+    for (int p = PAD_SOUTH; p < PAD_ZL; p++) pd[p] = SDL_GetGamepadButton(g, pad_sdl[p]);
+    pd[PAD_ZL] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > TRIGGER_ON;
+    pd[PAD_ZR] = SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > TRIGGER_ON;
+    for (int p = PAD_ZR + 1; p < PAD_COUNT; p++) pd[p] = SDL_GetGamepadButton(g, pad_sdl[p]);   // false without paddles
+}
+
 static int pad_physical(uint8_t pd[PAD_COUNT]) {
     if ((!pad || !SDL_GamepadConnected(pad)) && plat_now_ns() / 1000000u >= next_scan) { next_scan = plat_now_ns() / 1000000u + RESCAN_MS; scan_pads(); }
     SDL_UpdateGamepads();
     if (!pad || !SDL_GamepadConnected(pad)) return 0;
-    for (int p = PAD_SOUTH; p < PAD_ZL; p++) pd[p] = SDL_GetGamepadButton(pad, pad_sdl[p]);
-    pd[PAD_ZL] = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > TRIGGER_ON;
-    pd[PAD_ZR] = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > TRIGGER_ON;
-    for (int p = PAD_ZR + 1; p < PAD_COUNT; p++) pd[p] = SDL_GetGamepadButton(pad, pad_sdl[p]);   // false without paddles
+    physical_of(pad, pd);
     return 1;
 }
 
@@ -490,6 +568,92 @@ static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     stick(SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, stick_dead_get(0), sl);
     stick(SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, stick_dead_get(1), sr);
     return 1;
+}
+
+static volatile int32_t g_block, g_menu;   // defined with input_block and input_menu below
+
+// ACR_TEST_P2_PRESS=<tick>:<button>[:<hold>];... (test runs): player 2's buttons pressed at those 60 Hz ticks of game
+// time (frame_step_ticks, as untimed ACR_INPUT_SCRIPT lines), script button names, held 8 ticks by default. A time
+// "@<ms>" is milliseconds of the world clock instead (frame_step_world_us, as timed script lines), its hold too (150 ms
+// by default). SUP, SDOWN, SLEFT, SRIGHT push the left stick all the way.
+static uint64_t test_p2_presses(int32_t sl[2]) {
+    static int n = -1;
+    static struct { uint64_t at, hold; int bit, timed; } ev[64];
+    static const struct { const char *name; int bit, x, y; } sticks[] = {
+        {"SUP", -1, 0, 32767}, {"SDOWN", -2, 0, -32767}, {"SLEFT", -3, -32767, 0}, {"SRIGHT", -4, 32767, 0}};
+    if (n < 0) {
+        n = 0;
+        const char *e = cfg_get("ACR_TEST_P2_PRESS");
+        for (const char *q = e; q && *q && n < 64;) {
+            int timed = *q == '@';
+            if (timed) q++;
+            unsigned long long at = 0, hold = timed ? 150 : 8;
+            char name[16] = {0};
+            int used = 0;
+            if (sscanf(q, "%llu:%15[A-Z]%n", &at, name, &used) < 2) break;
+            q += used;
+            if (*q == ':') hold = strtoull(q + 1, (char **)&q, 10);
+            int bit = -100;
+            for (size_t k = 0; k < sizeof script_buttons / sizeof *script_buttons; k++)
+                if (!strcmp(name, script_buttons[k].name)) bit = script_buttons[k].bit;
+            for (size_t k = 0; k < sizeof sticks / sizeof *sticks; k++)
+                if (!strcmp(name, sticks[k].name)) bit = sticks[k].bit;
+            if (bit != -100) ev[n].at = at, ev[n].hold = hold, ev[n].timed = timed, ev[n++].bit = bit;
+            while (*q == ';' || *q == ' ') q++;
+        }
+        if (n) rt_log("input: %d test presses for player 2", n);
+    }
+    uint64_t b = 0, t = frame_step_ticks();
+    int64_t w = frame_step_world_us();
+    for (int i = 0; i < n; i++) {
+        uint64_t now = ev[i].timed ? (w < 0 ? 0 : (uint64_t)w / 1000) : t;
+        if ((ev[i].timed && w < 0) || now < ev[i].at || now >= ev[i].at + ev[i].hold) continue;
+        if (ev[i].bit >= 0) {
+            b |= 1ull << ev[i].bit;
+        } else {
+            for (size_t k = 0; k < sizeof sticks / sizeof *sticks; k++)
+                if (sticks[k].bit == ev[i].bit) sl[0] = sticks[k].x, sl[1] = sticks[k].y;
+        }
+    }
+    return b;
+}
+
+// Player 2's gamepad (co-op): its Switch bits and sticks, 0 without a second connected gamepad. Nothing while a menu
+// or a text entry is open, as for player 1.
+int input_poll_player2(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry) {
+    uint64_t b = 0;
+    int32_t sl[2] = {0, 0}, sr[2] = {0, 0};
+    int ok = 0;
+    plat_mutex_lock(&lock);
+    if (!state) start();
+    if (state == 1 && pad) {
+        rescan_pad2();
+        SDL_UpdateGamepads();
+        if (pad2 && SDL_GamepadConnected(pad2) && player2_on()) {
+            uint8_t pd[PAD_COUNT] = {0};
+            physical_of(pad2, pd);
+            b = input_map_pad_buttons(pd, input_pad_layout_pick(cfg_value("ACR_PAD_LAYOUT"), pad2_east_a));
+            stick_of(pad2, SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, stick_dead_get(0), sl);
+            stick_of(pad2, SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, stick_dead_get(1), sr);
+            ok = 1;
+        }
+    }
+    plat_mutex_unlock(&lock);
+    b |= test_p2_presses(sl);
+    if (g_block == 1 || g_menu == 1) b = 0, sl[0] = sl[1] = sr[0] = sr[1] = 0;
+    stick_bits(&b, sl[0], sl[1], B_SL_LEFT);
+    stick_bits(&b, sr[0], sr[1], B_SR_LEFT);
+    *buttons = b; *lx = sl[0]; *ly = sl[1]; *rx = sr[0]; *ry = sr[1];
+    return ok;
+}
+
+int input_player2_connected(void) {
+    plat_mutex_lock(&lock);
+    if (!state) start();
+    if (state == 1) rescan_pad2();   // the game asks this before it reads player 2: the gamepad is opened here first
+    int ok = state == 1 && pad2 && SDL_GamepadConnected(pad2) && player2_on();
+    plat_mutex_unlock(&lock);
+    return ok;
 }
 
 int input_pad_stick_percent(double pct[2]) {
@@ -698,6 +862,14 @@ int input_capture(int reset, int *id) {
 
 int input_rumble_triggers_enabled(void) {
     return cfg_bool("ACR_RUMBLE_TRIGGERS");
+}
+
+int input_rumble2(uint16_t low, uint16_t high, uint32_t ms) {
+    int ok = 0;
+    plat_mutex_lock(&lock);
+    if (state == 1 && pad2 && pad2_rumble && player2_on()) ok = SDL_RumbleGamepad(pad2, low, high, ms);
+    plat_mutex_unlock(&lock);
+    return ok;
 }
 
 int input_rumble(uint16_t low, uint16_t high, uint32_t ms) {

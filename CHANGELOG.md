@@ -34,6 +34,11 @@
   which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
   Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
   shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
+- **Two-player co-op with a second controller** (issue #1): the game saw a single controller, so "Two players" on the
+  map found no one to join. A second connected controller is now player 2 (the game's controller 2, a full
+  controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
+  rumbles for its own player. If player 1's controller is unplugged, player 2's takes its place. `ACR_PLAYER2=0`
+  keeps the second controller out of the game.
 
 ## 0.1.1
 

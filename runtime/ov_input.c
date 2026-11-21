@@ -29,10 +29,17 @@ enum { STYLE_FULL_KEY = 1, STYLE_HANDHELD = 2, ATTR_CONNECTED = 1 };
 static PlatMutex lock = PLAT_MUTEX_INIT;
 static uint32_t styles = STYLE_FULL_KEY;
 static int enabled, allowed = 1, mouse_ready, keyboard_ready;
+// Player 2 (co-op): npad id 1, a full-key controller fed by the second gamepad (input_poll_player2), docked only.
+// allowed2: the game's supported id list holds 1; dropped2: the game disconnected it (DisconnectNpad), until its
+// controller applet asks for two players again.
+enum { PLAYER2_ID = 1 };
+static int allowed2 = 1, dropped2;
 static int64_t sample;
 
 static uint32_t pad_id(void) { return ov_handheld() ? 0x20u : 0u; }
 static uint32_t pad_style(void) { return ov_handheld() ? STYLE_HANDHELD : STYLE_FULL_KEY; }
+// Under lock: player 2 is there for the game (connected, supported, not dropped, docked)
+static int p2_live(void) { return !ov_handheld() && enabled && allowed2 && !dropped2 && input_player2_connected(); }
 
 static const uint32_t *need_id(Cpu *c, int i, const char *fn) {
     const uint32_t *id = arg_p(c, i);
@@ -55,10 +62,11 @@ static void ov_supported_ids(Cpu *c) {
     const uint32_t *ids = arg_p(c, 0);
     uint64_t n = arg_x(c, 1);
     if (n > 10 || (!ids && n)) rt_fatal("nn::hid::SetSupportedNpadIdType: invalid id list (%llu ids)", (unsigned long long)n);
-    int ok = 0;
-    for (uint64_t i = 0; i < n; i++) ok |= ids[i] == pad_id();
+    int ok = 0, ok2 = 0;
+    for (uint64_t i = 0; i < n; i++) ok |= ids[i] == pad_id(), ok2 |= ids[i] == PLAYER2_ID;
     plat_mutex_lock(&lock);
     allowed = ok;
+    allowed2 = ok2;
     plat_mutex_unlock(&lock);
 }
 
@@ -74,6 +82,7 @@ static void ov_style_set(Cpu *c) {
     uint32_t id = *need_id(c, 0, "GetNpadStyleSet");
     plat_mutex_lock_shared(&lock);
     uint32_t v = enabled && allowed && id == pad_id() ? styles & pad_style() : 0;
+    if (id == PLAYER2_ID && id != pad_id() && p2_live()) v = styles & STYLE_FULL_KEY;
     plat_mutex_unlock_shared(&lock);
     ret_x(c, v);
 }
@@ -84,10 +93,17 @@ static int npad_state(uint32_t want, uint32_t id, NpadState *s) {
     plat_mutex_lock(&lock);
     *s = (NpadState){.sampling = ++sample};
     int live = want && enabled && allowed && id == pad_id() && want == pad_style() && (styles & want);
+    int live2 = !live && id == PLAYER2_ID && want == STYLE_FULL_KEY && (styles & want) && p2_live();
     plat_mutex_unlock(&lock);
     if (live) {
         s->attributes = ATTR_CONNECTED;
         input_poll(&s->buttons, &s->lx, &s->ly, &s->rx, &s->ry);
+    }
+    if (live2 && input_poll_player2(&s->buttons, &s->lx, &s->ly, &s->rx, &s->ry)) {
+        s->attributes = ATTR_CONNECTED;
+        static volatile int32_t logged;
+        if (!plat_xchg32(&logged, 1)) rt_log("hid: the game reads player 2's controller (npad id %u)", id);
+        return 1;
     }
     return live;
 }
@@ -155,24 +171,43 @@ static void ov_hold_type(Cpu *c) {
 // void DisconnectNpad(const NpadIdType &id): only the controller in use (handheld mode disconnects player 1)
 static void ov_disconnect(Cpu *c) {
     uint32_t id = *need_id(c, 0, "DisconnectNpad");
+    if (id == PLAYER2_ID && id != pad_id()) {
+        plat_mutex_lock(&lock);
+        dropped2 = 1;
+        plat_mutex_unlock(&lock);
+        rt_log("hid: the game disconnected player 2");
+        return;
+    }
     if (id != pad_id()) return;
     plat_mutex_lock(&lock);
     allowed = 0;
     plat_mutex_unlock(&lock);
 }
 
-// Result ShowControllerSupport(ControllerSupportResultInfo *out, const ControllerSupportArg &arg): the one controller
-// is already connected, so the applet returns at once with one player on it.
+// The controller applet (ShowControllerSupport): ControllerSupportArg starts with the minimum and maximum player counts
+// (int8 each). The controllers are already connected, so it returns at once: player 1, and player 2 when the game takes
+// two players and a second gamepad is connected (that brings back a player 2 the game disconnected).
+static int controller_support(const int8_t *arg) {
+    int lo = arg ? arg[0] : 1, hi = arg ? arg[1] : 1;
+    plat_mutex_lock(&lock);
+    if (hi >= 2) dropped2 = 0;
+    int players = hi >= 2 && p2_live() ? 2 : 1;
+    plat_mutex_unlock(&lock);
+    rt_log("hid: controller applet for %d to %d players: %d connected", lo, hi, players);
+    return players;
+}
+
+// Result ShowControllerSupport(ControllerSupportResultInfo *out, const ControllerSupportArg &arg)
 static void ov_controller_support(Cpu *c) {
     ControllerSupportResult *out = arg_p(c, 0);
-    if (out) *out = (ControllerSupportResult){.players = 1, .selected = pad_id()};
+    int players = controller_support(arg_p(c, 1));
+    if (out) *out = (ControllerSupportResult){.players = (int8_t)players, .selected = pad_id()};
     ret_x(c, 0);
 }
 
-// Result ShowControllerSupport(const ControllerSupportArg &arg): the one controller is connected and supported;
-// nothing to show.
+// Result ShowControllerSupport(const ControllerSupportArg &arg)
 static void ov_controller_support_1(Cpu *c) {
-    (void)c;
+    controller_support(arg_p(c, 0));
     ret_x(c, 0);
 }
 
@@ -360,19 +395,22 @@ static const uint32_t *need_handle(const void *p, const char *fn) {
     return p;
 }
 
-// The vibration device (0 left, 1 right) a handle names on the connected controller, or -1 (logged once).
+// The vibration device a handle names: 0 left, 1 right on player 1's controller, 2 and 3 on player 2's; -1 (logged
+// once) for another.
 static int vibration_side(const uint32_t *h, const char *fn) {
     uint32_t v = *need_handle(h, fn), dev = v >> 16 & 0xff;
     if ((v & 0xff) == pad_style_index() && (v >> 8 & 0xff) == pad_id() && dev < 2) return (int)dev;
+    if ((v & 0xff) == STYLE_INDEX_FULL_KEY && (v >> 8 & 0xff) == PLAYER2_ID && PLAYER2_ID != pad_id() && dev < 2)
+        return 2 + (int)dev;
     static volatile int32_t warned;
     once(&warned, "hid: vibration call for handle %#x, not a device of the connected controller: ignored", v);
     return -1;
 }
 
 static PlatMutex vib_lock = PLAT_MUTEX_INIT;
-static VibrationValue vib_last[2] = {{0, 160, 0, 320}, {0, 160, 0, 320}};   // vib_lock
-static uint64_t vib_at[2], sent_at;                                          // vib_lock
-static uint16_t sent_low, sent_high;                                         // vib_lock
+static VibrationValue vib_last[4] = {{0, 160, 0, 320}, {0, 160, 0, 320}, {0, 160, 0, 320}, {0, 160, 0, 320}};   // vib_lock
+static uint64_t vib_at[4], sent_at[2];                                       // vib_lock; per side, per player
+static uint16_t sent_low[2], sent_high[2];                                   // vib_lock
 static int vib_allowed = 1;                                                  // vib_lock: PermitVibration
 
 static float clamp01(float v) { return v > 0 ? (v < 1 ? v : 1) : 0; }   // NaN -> 0
@@ -383,11 +421,12 @@ static float light_share(float f) { return f > 160 ? (f < 320 ? log2f(f / 160) :
 // Switch HD rumble -> SDL_RumbleGamepad. Each side's two bands split by frequency between the heavy (low) and the light
 // (high) motor (light_share) and add up as energy per motor (root of the summed squares); the stronger side drives each
 // motor. A side the game has not updated for 250 ms is silent. Each send lasts 250 ms and is renewed every 50 ms while
-// the game streams, so the pad stops by itself when the game stops sending (pause, freeze). Under vib_lock.
-static void rumble_update(uint64_t now) {
+// the game streams, so the pad stops by itself when the game stops sending (pause, freeze). Under vib_lock. player 0
+// or 1: its two sides are vib_last[2 * player ..].
+static void rumble_player(int player, uint64_t now) {
     float heavy = 0, light = 0;
     rumble_cfg();
-    for (int s = 0; s < 2 && vib_allowed; s++) {
+    for (int s = 2 * player; s < 2 * player + 2 && vib_allowed; s++) {
         if (!vib_at[s] || now - vib_at[s] > RUMBLE_STALE_NS) continue;
         const VibrationValue *v = &vib_last[s];
         float al = clamp01(v->amp_low), ah = clamp01(v->amp_high), sl = light_share(v->freq_low), sh = light_share(v->freq_high);
@@ -397,10 +436,15 @@ static void rumble_update(uint64_t now) {
         if (l > light) light = l;
     }
     uint16_t lo = motor(clamp01(heavy)), hi = motor(clamp01(light));
-    int changed = lo != sent_low || hi != sent_high, on = lo || hi;
-    if (changed ? on && now - sent_at < RUMBLE_MIN_GAP_NS : !on || now - sent_at < RUMBLE_REFRESH_NS) return;
-    input_rumble(lo, hi, on ? RUMBLE_MS : 0);
-    sent_low = lo, sent_high = hi, sent_at = now;
+    int changed = lo != sent_low[player] || hi != sent_high[player], on = lo || hi;
+    if (changed ? on && now - sent_at[player] < RUMBLE_MIN_GAP_NS : !on || now - sent_at[player] < RUMBLE_REFRESH_NS) return;
+    if (player) input_rumble2(lo, hi, on ? RUMBLE_MS : 0);
+    else input_rumble(lo, hi, on ? RUMBLE_MS : 0);
+    sent_low[player] = lo, sent_high[player] = hi, sent_at[player] = now;
+}
+static void rumble_update(uint64_t now) {
+    rumble_player(0, now);
+    rumble_player(1, now);
 }
 
 static void play(int side, const VibrationValue *v) {
@@ -410,20 +454,20 @@ static void play(int side, const VibrationValue *v) {
     if (!isfinite(c.amp_low) || !isfinite(c.amp_high) || !isfinite(c.freq_low) || !isfinite(c.freq_high)) c = vib_neutral;
     static volatile int32_t first, first_on;
     if (!plat_xchg32(&first, 1))
-        rt_log("hid: first vibration value from the game: %s %.2f@%.0f Hz %.2f@%.0f Hz", side ? "right" : "left",
+        rt_log("hid: first vibration value from the game: %s %.2f@%.0f Hz %.2f@%.0f Hz", side & 1 ? "right" : "left",
                (double)c.amp_low, (double)c.freq_low, (double)c.amp_high, (double)c.freq_high);
     if ((c.amp_low > 0.01f || c.amp_high > 0.01f) && !plat_xchg32(&first_on, 1))
-        rt_log("hid: first non-zero vibration from the game: %s %.2f@%.0f Hz %.2f@%.0f Hz", side ? "right" : "left",
+        rt_log("hid: first non-zero vibration from the game: %s %.2f@%.0f Hz %.2f@%.0f Hz", side & 1 ? "right" : "left",
                (double)c.amp_low, (double)c.freq_low, (double)c.amp_high, (double)c.freq_high);
     uint64_t now = kern_now_ns();
     plat_mutex_lock(&vib_lock);
-    {   // diag.c: the start of a vibration (both sides were at rest) marks a hit given or taken
+    if (side < 2) {   // diag.c: the start of a vibration (both sides were at rest) marks a hit given or taken (player 1)
         int was = vib_last[0].amp_low > 0.01f || vib_last[0].amp_high > 0.01f || vib_last[1].amp_low > 0.01f || vib_last[1].amp_high > 0.01f;
         if (!was && (c.amp_low > 0.01f || c.amp_high > 0.01f)) diag_rumble(c.amp_low > c.amp_high ? c.amp_low : c.amp_high);
     }
     vib_last[side] = c;
     vib_at[side] = now;
-    rumble_update(now);
+    rumble_player(side / 2, now);
     plat_mutex_unlock(&vib_lock);
 }
 
@@ -470,7 +514,7 @@ static void ov_vib_info(Cpu *c) {
     VibrationDeviceInfo *out = arg_p(c, 0);
     if (!out) rt_fatal("nn::hid::detail::GetVibrationDeviceInfo: null output");
     int side = vibration_side(arg_p(c, 1), "GetVibrationDeviceInfo");
-    *out = side >= 0 ? (VibrationDeviceInfo){1, (uint32_t)side + 1} : (VibrationDeviceInfo){0, 0};
+    *out = side >= 0 ? (VibrationDeviceInfo){1, (uint32_t)(side & 1) + 1} : (VibrationDeviceInfo){0, 0};
     ret_x(c, 0);
 }
 
