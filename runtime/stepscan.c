@@ -64,7 +64,8 @@ static uint64_t slow_bytes, skip_until;
 #define TRAP_PRESENTS 150
 #define TRAP_HITS 256
 static uint64_t targets[64];
-static int ntargets, trap_left, trap_reads;   // trap_reads: the trap watches reads (the stick words)
+static int ntargets, trap_left, trap_reads;
+static int stick_on;   // the scan holds the left stick (ACR_STEPSCAN_STICK=0: no)   // trap_reads: the trap watches reads (the stick words)
 static uint64_t hit_t[TRAP_HITS], hit_ip[TRAP_HITS];
 static volatile uint32_t hit_n[TRAP_HITS];
 static volatile int32_t nhits, hits_logged, hit_lock;
@@ -292,8 +293,8 @@ static void report(void) {
                    rate_hz[0], rate_hz[1], rate_hz[0], rate_hz[1], rate_hz[1], follow_ratio());
     for (int k = 0; k < 2; k++) qsort(res[k], nres[k], sizeof *res[k], by_addr);
     uint32_t i = 0, j = 0, fixed = 0, real = 0, other = 0, logged = 0;
-    uint64_t others[32], fixeds[64];
-    int nother = 0, nfixed = 0;
+    uint64_t others[32], fixeds[64], fixfs[64];
+    int nother = 0, nfixed = 0, nfixf = 0;
     while (i < nres[0] && j < nres[1]) {
         const Res *a = &res[0][i], *b = &res[1][j];
         if (a->addr < b->addr) { i++; continue; }
@@ -316,7 +317,8 @@ static void report(void) {
         // trapped: the words that step neither like a fixed step nor with the rate first (the map cursor was one: 2x
         // by eye, 0.3 by the scan, as it turns at the edges), then the fixed ones
         if (cls == 0 && nother < (int)(sizeof others / sizeof *others)) others[nother++] = a->addr;
-        if (cls == 1 && nfixed < (int)(sizeof fixeds / sizeof *fixeds)) fixeds[nfixed++] = a->addr;
+        if (cls == 1 && a->kind == 1 && nfixed < (int)(sizeof fixeds / sizeof *fixeds)) fixeds[nfixed++] = a->addr;
+        if (cls == 1 && a->kind == 2 && nfixf < (int)(sizeof fixfs / sizeof *fixfs)) fixfs[nfixf++] = a->addr;
         if (cls == 1 && logged < 60) {
             logged++;
             rt_log("stepscan: FIXED %#llx %s %g per frame at %d and %g at %d (now %s)", (unsigned long long)a->addr,
@@ -324,9 +326,22 @@ static void report(void) {
         }
     }
     if (f) fclose(f);
+    // Without the stick (ACR_STEPSCAN_STICK=0: a cutscene) the fixed float words go first: a clock in seconds that
+    // steps 1/30 per update whatever the rate. With it, the other words first, then the fixed ints and floats.
+    // ACR_STEPSCAN_FIRST=int: the fixed ints alone (frame counters).
     ntargets = 0;
-    for (int k = 0; k < nother && ntargets < (int)(sizeof targets / sizeof *targets); k++) targets[ntargets++] = others[k];
-    for (int k = 0; k < nfixed && ntargets < (int)(sizeof targets / sizeof *targets); k++) targets[ntargets++] = fixeds[k];
+    const int cap = (int)(sizeof targets / sizeof *targets);
+    const char *first = cfg_get("ACR_STEPSCAN_FIRST");
+    if (first && !strcmp(first, "int")) {
+        for (int k = 0; k < nfixed && ntargets < cap; k++) targets[ntargets++] = fixeds[k];
+    } else {
+        if (!stick_on)
+            for (int k = 0; k < nfixf && ntargets < cap; k++) targets[ntargets++] = fixfs[k];
+        for (int k = 0; k < nother && ntargets < cap; k++) targets[ntargets++] = others[k];
+        for (int k = 0; k < nfixed && ntargets < cap; k++) targets[ntargets++] = fixeds[k];
+        if (stick_on)
+            for (int k = 0; k < nfixf && ntargets < cap; k++) targets[ntargets++] = fixfs[k];
+    }
     rt_log("stepscan: done: %u words fixed per frame (ratio 1), %u follow the rate (%.2f), %u other; list in %s", fixed,
            real, follow_ratio(), other, f ? path : "(file not written)");
 }
@@ -417,7 +432,7 @@ static void trap_tick(void) {
 // The left stick at STICK_TILT (75 %; 25 % did not move the map cursor) to the right for both passes (ACR_STEPSCAN_STICK=0: untouched): on the map the cursor then
 // moves at a constant speed, the step to find.
 #define STICK_TILT 24576
-static int stick_on, stick_dir = 1, stick_ph;
+static int stick_dir = 1, stick_ph;
 
 // Right then left, STICK_FLIP presents each way: the cursor keeps moving instead of resting on the map's edge, and the
 // game's copy of the stick (a float near +-0.75) differs between every copy and compare, so the track follows it.
@@ -780,5 +795,17 @@ void stepscan_present(void) {
         return;
     }
     report();
-    track_start();
+    if (stick_on) {
+        track_start();
+        return;
+    }
+    // no stick: no stick track; the trap goes on the words the passes found
+    free_pass();
+    free(cand), cand = NULL;
+    for (int k = 0; k < 2; k++) free(res[k]), res[k] = NULL, nres[k] = 0;
+    track_free();
+    free_all();
+    frame_step_force_hz(0);
+    state = 0;
+    trap_start();
 }
