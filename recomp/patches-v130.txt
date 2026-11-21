@@ -265,6 +265,17 @@ site vsync main fa5da4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
 # as TotK's patch set cursor. x12 and s4 are scratch there (x12 is loaded again before its next use, s4 unused).
 set  cursor ACR_PATCH_CURSOR 1
 site cursor main ce4fdc bd41e183 bd41e183 @page:x12 bd400184 1e240863   # ldr s3,[x12,#0x1e0] ; *= [page] (fmul s3,s3,s4)
+# Cutscenes (in-engine events): the event manager main+0x857510 steps the event's clock, a count of 30 Hz frames, by one
+# per update (main+0x857d7c: elapsed + 1, main+0x857da0: frames left - 1). The event script (main+0x192a410 runs it)
+# gets that frame and poses the actors, the camera and the dialogue at it (main+0x1646810 -> main+0x1437d10 sets a
+# motion's frame, and its time as frame / 30): at 60 fps the cutscenes ran twice as fast (GitHub issues #1 and #2).
+# Found with runtime/stepscan.c in the opening cutscene of the second story battle: the clock pair stepped +1 and -1
+# per frame at 30 and at 60 fps. The step is now the 30 Hz frames of this update, page +4 (runtime/frame_rate.c: 1 at
+# 30 fps, 0 and 1 in turn at 60), loaded once at the first site and used by both. The game holds the clock the same
+# way while an event waits ([sp+0x28] > 0). x12 is free there (no use of it up to main+0x857f40, after two calls).
+set  event ACR_PATCH_EVENT 1
+site event main 857d7c 1100054a @page:x12 b940058c 0b0c014a   # add w10,w10,#1 -> ldr w12,[page+4] ; add w10,w10,w12
+site event main 857da0 5100054a 4b0c014a                      # sub w10,w10,#1 -> sub w10,w10,w12
 
 # main: 1090 spin waits
 spin main 8de78 8deac   # 6 instructions; loads

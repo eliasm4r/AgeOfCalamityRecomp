@@ -6,6 +6,11 @@
 - **World map cursor twice as fast at 60 fps** (issues #1 to #3): the cursor moved by a fixed step per game update,
   so at 60 fps it crossed the map in 2 seconds instead of 5. Its step now follows the frame rate (patch set `cursor`,
   `ACR_PATCH_CURSOR=0` turns it off). The same holds for the other menus that move a pointer with the stick.
+- **In-engine cutscenes twice as fast at 60 fps** (issues #1 and #2): a cutscene's clock counted one 30 fps frame
+  per game update, so at 60 fps the actors, the camera and the subtitles ran twice as fast. The clock now steps
+  30 frames per second at any frame rate (patch set `event`, `ACR_PATCH_EVENT=0` turns it off); checked on the
+  opening cutscene of the second story battle, shot for shot against 30 fps. Cutscenes still animate at 30 frames a
+  second, as on the Switch.
 
 ## 0.1.1
 

@@ -133,10 +133,17 @@ static void fps_block(double dt) {
     memcpy(&b[3], &f, sizeof f);
     // patch page +0: the 30 Hz ratio, the vsyncs of this update over the game's own 2 (set cursor: code that steps by a
     // fixed amount per update, recomp/patches-v130.txt)
+    // patch page +4: the 30 Hz frames this update steps, the vsyncs over 2 carried from frame to frame (set event: the
+    // cutscene clock counts 30 Hz frames): 1 at 30 fps, 0 and 1 in turn at 60
+    static double acc30;
     uint8_t *page = rt_patch_page();
     if (page) {
         float ratio = (float)(vs / 2.0);
         memcpy(page, &ratio, sizeof ratio);
+        acc30 += vs / 2.0;
+        int32_t step30 = (int32_t)acc30;
+        acc30 -= step30;
+        memcpy(page + 4, &step30, sizeof step30);
     }
 }
 
