@@ -379,6 +379,18 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   growth. 175 % (3360x1890, pool 2004 MiB, up to 1792 used) plays a new game's first battle but stops on loading a save:
   `main+0x151daf4` passes a null object (`[x24+0xb0]`) to `main+0x17bf930`, which reads `[null+0x48]`. 200 %
   (3840x2160) stops 18 s into the first battle on a null write in lifted game code.
+- Outputs above 1920x1080: the device setup `main+0x17c34f0` sizes the window's images from the configuration when the
+  device's byte `[x20+0x2a32]` is clear and a fixed 1920x1080 (`main+0x17c3770` `mov w10, #0x780`, `main+0x17c3784`
+  `mov w11, #0x438`) when it is set, as it is. The game drew a 2560x1440 picture into 1920x1080 window images, and the
+  screen showed its top left corner (the window crop the game sets is the output's size, so it was not the crop). The
+  `output` set reads both constants from patch page +120; `res_init` writes the output there when it is larger, else
+  1920x1080, so smaller outputs are unchanged. Measured: 2560x1440 with the scene at Game (1920x1080) and 100 %, and
+  3840x2160 at Game (2880x1620), play the second story battle; the HUD is drawn at the output size from its 1920x1080
+  layout. 3840x2160 at 100 % (a 3840x2160 scene, 1012 MiB of growth) first asked for more than the 4 GiB heap, and
+  with the heap raised stopped on loading a save like 175 % at 1080p: the scene size is the limit, so the scene keeps
+  at most 2880x1620 pixels. On outputs other than 1920x1080 the game's scaling draw (scene to output) is a quad in the
+  1920x1080 layout units, and DLSS (`vk_dlaa_scale_draw`) now accepts it. DLSS modes at 1280x720 still never reach the
+  scaling draw (the DLAA point is not armed there; not looked into).
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

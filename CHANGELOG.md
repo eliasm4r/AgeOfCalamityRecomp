@@ -11,6 +11,12 @@
 ### Added
 - **Render scale 150 %** (2880x1620 for a 1920x1080 picture): the larger scenes that stopped the game as the second
   intro movie started were the same full texture pool. 175 % and 200 % still stop on other limits of the game.
+- **Game resolution 2560x1440 and 3840x2160** (Screen tab): the game draws its picture and its HUD at that size, so
+  text, icons and the minimap stay sharp on a 1440p or 4K screen. The game made its window's images a fixed 1920x1080,
+  so a larger picture showed only its top left corner; they now take the game resolution. The 3D scene keeps at most
+  2880x1620 pixels (a larger one stops the game on loading a save): at 3840x2160, Game (75 %) gives exactly that and
+  DLSS or the game's FSR brings it up to 4K. DLSS also runs at these sizes (the game's scaling draw there is in its
+  1920x1080 layout units).
 
 ## 0.1.1
 

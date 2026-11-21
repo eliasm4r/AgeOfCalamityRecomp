@@ -6,9 +6,10 @@
 // game itself renders at the size asked for: on the Steam Deck 1280x720, shown texel for texel on the 1280x800 screen
 // in place of a 1.5x reduction of a 1080p frame, at less than half the pixels.
 //
-// Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
-// texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), ACR_RENDER_SCALE = the
-// scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 150.
+// Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 3840x2160: above
+// 1920x1080 the window's images take the output's size too, set output, and the HUD is drawn at that size from its
+// 1920x1080 layout), ACR_RENDER_SCALE = the scene's size relative to the output: "game" (default, 3/4, the game's
+// 1440x810 at 1080p) or a percentage up to 150, the scene keeping at most 2880x1620 pixels (SCENE_PIXELS).
 // Above 100 the scene is larger than the output (supersampling), and the game's final passes scale it down. The game's
 // GPU texture pool is a fixed 1510 MiB in a GPU heap of fixed size (set texpool below): at 125 and 140 % the larger
 // targets filled it and a story cutscene of the first battle waited for memory forever (0.1.1 capped the scale at 100),
@@ -16,8 +17,10 @@
 // got no memory for a texture; the first battle at 150 % takes up to 1568 MiB of it): with it grown, 150 % plays the
 // first battle and the second one's opening cutscene (2026-11-21). Above, other limits of the game's: 175 % (3360x1890)
 // plays a new game's first battle but stops on loading a save (main+0x151daf4 passes a null object to main+0x17bf930),
-// 200 % (3840x2160) stops 18 s into the first battle on a null write. The recorded first battle at 140 % held 59.8 fps
-// with DLAA, GPU 7 ms on an RTX 4070; 150 % draws 1.15 times the pixels of 140.
+// 200 % (3840x2160) stops 18 s into the first battle on a null write. A 3840x2160 scene stops the same way with a
+// 3840x2160 output (on loading a save, 2026-11-21): the limit is the scene's size, so a larger one is brought back to
+// 2880x1620 pixels, the largest that played (150 % of 1080p, and "game" at 3840x2160). The recorded first battle at
+// 140 % held 59.8 fps with DLAA, GPU 7 ms on an RTX 4070; 150 % draws 1.15 times the pixels of 140.
 // The game's own final passes scale the scene to the output; the present scales the output to the window.
 //
 // Patch page: +32 the output size and +40 the scene size, each {w, h} in one 64-bit word (width in the low half), the
@@ -39,6 +42,9 @@
 #define SCENE_H 810
 #define DTA_KIB 113664u      // DynamicTextureAllocatorMem, shipped
 #define SCENE_MAX 4096       // per side, as MacNativeGames' ACR_RENDER_RES
+#define SCENE_PIXELS (2880.0 * 1620.0)   // the largest scene that plays (header)
+#define OUT_MAX_W 3840
+#define OUT_MAX_H 2160
 
 static struct {
     int decided;
@@ -56,11 +62,11 @@ static void decide(void) {
     const char *o = cfg_value("ACR_OUTPUT_RES");
     unsigned w = 0, h = 0;
     char tail;
-    if (sscanf(o, "%ux%u%c", &w, &h, &tail) == 2 && w >= 960 && h >= 540 && w <= BASE_W && h <= BASE_H) {
+    if (sscanf(o, "%ux%u%c", &w, &h, &tail) == 2 && w >= 960 && h >= 540 && w <= OUT_MAX_W && h <= OUT_MAX_H) {
         R.ow = w & ~1u;
         R.oh = h & ~1u;
     } else {
-        rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..1920x1080; 1920x1080", o);
+        rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..3840x2160; 1920x1080", o);
     }
     const char *s = cfg_value("ACR_RENDER_SCALE");
     double k = (double)SCENE_W / BASE_W;
@@ -88,11 +94,19 @@ static void decide(void) {
     if (fit < 1.0) R.scene_set = 1;
     R.sw = ((unsigned)(sw * fit + 0.5) + 1) & ~1u;   // even sizes: the game halves the scene for its effect targets
     R.sh = ((unsigned)(sh * fit + 0.5) + 1) & ~1u;
+    if ((double)R.sw * R.sh > SCENE_PIXELS) {   // the same shape at the largest size that plays
+        double f = sqrt(SCENE_PIXELS / ((double)R.sw * R.sh));
+        R.sw = (unsigned)(R.sw * f) & ~1u;
+        R.sh = (unsigned)(R.sh * f) & ~1u;
+        R.scene_set = 1;
+        rt_log("resolution: a scene larger than 2880x1620 stops the game on loading a save; %ux%u", R.sw, R.sh);
+    }
     // Below 1920x1080 the KTGL's 2D projection and full-screen quads take the layout size for any target as large as
     // the output (recomp/patches-v130.txt, set output): a scene of the output's size would have its own passes caught by
     // that test and drawn at 2/3 (measured 2026-11-12 with 1280x720 at 100 %). 85 % is the largest scale clear of it;
-    // a larger scene (supersampling) is held there too, as it was never measured below 1920x1080.
-    if ((R.ow != BASE_W || R.oh != BASE_H) && R.sw >= R.ow && R.sh >= R.oh) {
+    // a larger scene (supersampling) is held there too, as it was never measured below 1920x1080. Above 1920x1080 a
+    // scene of the output's size draws whole (2560x1440 at 100 %, 2026-11-21).
+    if ((R.ow < BASE_W || R.oh < BASE_H) && R.sw >= R.ow && R.sh >= R.oh) {
         R.sw = ((unsigned)(R.ow * 0.85 + 0.5) + 1) & ~1u;
         R.sh = ((unsigned)(R.oh * 0.85 + 0.5) + 1) & ~1u;
         rt_log("resolution: a scene as large as an output below 1920x1080 is not supported; %ux%u (85 %%)", R.sw, R.sh);
@@ -152,6 +166,9 @@ void res_init(void) {
     // of a target as large as the output (recomp/patches-v130.txt, the output sites in main+0x17def58 and on)
     uint64_t layout = pack(BASE_W, BASE_H);
     memcpy(page + 104, &layout, 8);
+    // +120: the window's images, the output's size when it is larger than the game's 1920x1080, else that
+    uint64_t win = R.ow > BASE_W && R.oh > BASE_H ? out : layout;
+    memcpy(page + 120, &win, 8);
     rt_patch_switch(output, R.ow != BASE_W || R.oh != BASE_H);
     rt_patch_switch(scene, scene_on);
     int texpool = rt_patch_set("texpool");

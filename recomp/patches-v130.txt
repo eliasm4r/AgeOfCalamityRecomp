@@ -12,6 +12,12 @@ set  output ACR_PATCH_OUTPUT 0
 set  scene  ACR_PATCH_SCENE  0
 site output main 8d9490 d280f008 @page:x8 f9401108   # mov x8,#0x780 -> adrp x8,page ; ldr x8,[x8,#32]
 site output main 8d9498 f2c08708 d503201f            # movk x8,#0x438,lsl #32 -> nop
+# The window's images (the device setup main+0x17c34f0): the config's size when the device's byte [x20+0x2a32] is clear,
+# a fixed 1920x1080 when it is set, as it is here. With an output above 1920x1080 the game drew its picture into them
+# at that size and the screen showed its top left corner. Both constants now come from page +120 (width) and +124
+# (height): the output when it is larger, else the game's 1920x1080.
+site output main 17c3770 32190fea @page:x10 b940794a   # mov w10,#0x780 -> adrp x10,page ; ldr w10,[x10,#120]
+site output main 17c3784 5280870b @page:x11 b9407d6b   # mov w11,#0x438 -> adrp x11,page ; ldr w11,[x11,#124]
 site scene  main 8d94d0 d280b408 @page:x8 f9401508   # mov x8,#0x5a0 -> adrp x8,page ; ldr x8,[x8,#40]
 site scene  main 8d94d4 f2c06548 d503201f            # movk x8,#0x32a,lsl #32 -> nop
 # The game's GPU memory (runtime/resolution.c, a scene larger than the game's). nnMain sets aside one heap for its three
