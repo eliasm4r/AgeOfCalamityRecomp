@@ -44,6 +44,11 @@
 - **GPU busy in the performance overlay** now counts the copies made to the graphics card before each part of a frame
   (VRAM mirror). They were counted as idle time, so on an RX 6800 running at 99 % the overlay showed 3 to 5 ms of GPU
   work a frame (issue #4). At 1080p on an RTX 4070 the same scene reads 8.1 ms instead of 3.3 ms.
+- **Less GPU time a frame**: the game flushes about a dozen small ranges of its GPU buffer pool each frame (about
+  9 MiB at 1080p), and the runtime copied the whole span between the first and the last of them to the graphics card
+  every frame: about 115 MiB at 1080p, 3 ms of an RTX 4070 (11 ms with a 3840x2160 scene). Only the flushed ranges
+  are copied now, 20 MiB a frame at 1080p. This weighs most where copies to the card are slow, such as the AMD cards
+  of issue #4 (GPU at 99 % for little power).
 
 ## 0.1.1
 
