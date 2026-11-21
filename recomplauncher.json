@@ -54,7 +54,8 @@
         { "label": "85 %", "set": { "display/render_scale": "85" } },
         { "label": "100 %", "set": { "display/render_scale": "100" } },
         { "label": "125 %", "set": { "display/render_scale": "125" } },
-        { "label": "140 %", "set": { "display/render_scale": "140" } }
+        { "label": "140 %", "set": { "display/render_scale": "140" } },
+        { "label": "150 %", "set": { "display/render_scale": "150" } }
       ],
       "defaults": { "display/render_scale": "game" }
     },

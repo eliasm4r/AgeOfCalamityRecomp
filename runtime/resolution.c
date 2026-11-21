@@ -8,16 +8,16 @@
 //
 // Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 1920x1080: the
 // texture heaps are the game's, sized for 1920x1080, and larger targets were not measured), ACR_RENDER_SCALE = the
-// scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 140.
+// scene's size relative to the output: "game" (default, 3/4, the game's 1440x810 at 1080p) or a percentage up to 150.
 // Above 100 the scene is larger than the output (supersampling), and the game's final passes scale it down. The game's
 // GPU texture pool is a fixed 1510 MiB in a GPU heap of fixed size (set texpool below): at 125 and 140 % the larger
 // targets filled it and a story cutscene of the first battle waited for memory forever (0.1.1 capped the scale at 100),
-// so both grow with the scene. 145 % is the largest that reached the battle (2026-11-20, the same route from the title
-// screen): from 148 % on, a resource the game loads as the second intro movie starts gets no memory (main+0x18d3040:
-// its linear allocator is full and the fallback allocator returns null; main+0x191cd7c reads it), whatever the size of
-// the application pool (4 GiB tried): another of the game's fixed heaps holds something sized from the scene. 140 %
-// keeps a margin (the recorded first battle at 1080p held 59.8 fps with DLAA, GPU 7 ms on an RTX 4070). At 200 the game
-// crashed on leaving the title screen (a null write in main+0x1151520).
+// so both grow with the scene. The same pool stopped 148 % and more as the second intro movie started (main+0x18d3040
+// got no memory for a texture; the first battle at 150 % takes up to 1568 MiB of it): with it grown, 150 % plays the
+// first battle and the second one's opening cutscene (2026-11-21). Above, other limits of the game's: 175 % (3360x1890)
+// plays a new game's first battle but stops on loading a save (main+0x151daf4 passes a null object to main+0x17bf930),
+// 200 % (3840x2160) stops 18 s into the first battle on a null write. The recorded first battle at 140 % held 59.8 fps
+// with DLAA, GPU 7 ms on an RTX 4070; 150 % draws 1.15 times the pixels of 140.
 // The game's own final passes scale the scene to the output; the present scales the output to the window.
 //
 // Patch page: +32 the output size and +40 the scene size, each {w, h} in one 64-bit word (width in the low half), the
@@ -76,11 +76,11 @@ static void decide(void) {
     } else if (strcmp(s, "game")) {
         char *end;
         double pct = strtod(s, &end);
-        if (end != s && !*end && pct >= 25 && pct <= 140) {
+        if (end != s && !*end && pct >= 25 && pct <= 150) {
             k = pct / 100.0;
             R.scene_set = 1;
         } else {
-            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..140; game", s);
+            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..150; game", s);
         }
     }
     double sw = R.ow * k, sh = R.oh * k;
@@ -115,7 +115,8 @@ uint64_t res_heap_extra_bytes(void) { return ((res_heap_extra_kib() << 10) + 0x1
 
 // The game's texture pool and the GPU heap that holds it (recomp/patches-v130.txt, set texpool): 1510 MiB in a heap of
 // exactly the three pools. A scene larger than the game's grows both by the targets' growth (res_heap_extra_bytes),
-// which mem_init adds to the application pool once more.
+// the growth mem_init gives the application pool: the rest of the game's heap keeps its own size. (Counted twice in the
+// application pool, 175 % asked for more than the 4 GiB heap and the SDK stopped at SetHeapSize.)
 #define TEXPOOL_SIZE 0x5e600000u
 #define GPU_HEAP_SIZE 0x72204008u
 uint64_t res_texpool_extra_bytes(void) {

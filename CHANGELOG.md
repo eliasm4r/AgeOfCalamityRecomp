@@ -8,6 +8,10 @@
   battle loaded forever. Both now grow with the scene (patch set `texpool`, `ACR_PATCH_TEXPOOL=0` turns it off): 1786
   MiB at 140 %.
 
+### Added
+- **Render scale 150 %** (2880x1620 for a 1920x1080 picture): the larger scenes that stopped the game as the second
+  intro movie started were the same full texture pool. 175 % and 200 % still stop on other limits of the game.
+
 ## 0.1.1
 
 ### Fixed

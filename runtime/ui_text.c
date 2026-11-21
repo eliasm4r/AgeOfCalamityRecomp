@@ -65,7 +65,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                 "Steam Deck's screen and spares the GPU; below 1920 x 1080 the 3D scene can go up to 85 %.",
     [UI_MENU_RENDER_SCALE] = "3D render scale",
     [UI_MENU_RENDER_SCALE_DESC] = "Size of the 3D scene relative to the game resolution; the game's FSR scales it to "
-                                  "that size. 100 % draws it at full size; 125 and 140 % draw it larger and scale it down "
+                                  "that size. 100 % draws it at full size; 125 to 150 % draw it larger and scale it down "
                                   "(supersampling): the sharpest, for about twice the GPU work at 140 %. Above 100 % "
                                   "needs the 1920x1080 game resolution.",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (75 %)",

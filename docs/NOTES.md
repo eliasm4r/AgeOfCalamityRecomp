@@ -372,6 +372,13 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   215 + 1510 + 101 MiB + 3 headers fill it exactly. The `texpool` patch set reads both sizes from the patch page and
   grows them by the same amount (the targets' growth, `res_heap_extra_bytes`), and the application pool grows by that
   much more: at 140 % the pool is 1786 MiB and the game starts.
+- The 148 % stop was the same pool: the loader `main+0x18d3040` creates a texture for the second intro movie and gets
+  null when the pool is full. With it grown, 150 % (pool up to 1568 MiB used in the first battle) plays the first
+  battle and the second one's opening cutscene. Counting the growth once more in the application pool asked for more
+  than the 4 GiB heap at 175 % (`SetHeapSize` failed, `0xd401`), so the pool now comes out of the application pool's
+  growth. 175 % (3360x1890, pool 2004 MiB, up to 1792 used) plays a new game's first battle but stops on loading a save:
+  `main+0x151daf4` passes a null object (`[x24+0xb0]`) to `main+0x17bf930`, which reads `[null+0x48]`. 200 %
+  (3840x2160) stops 18 s into the first battle on a null write in lifted game code.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 
