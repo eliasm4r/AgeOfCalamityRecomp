@@ -63,14 +63,18 @@
                                                            // or the program hash changes (drops every stored input; 2:
                                                            // control section hashed up to CONTROL_HASHED)
 #define USE_MAGIC 0x4d554b54u                              // "TKUM", .use files
-#define USE_VERSION 1
+#define USE_VERSION 2                                      // written; 1 (one mask for texture and image slots) is read
 #define IN_MAGIC 0x49534b54u                               // "TKSI", .in files
 #define MAX_SVC 32                                         // translator processes
 
 typedef struct {                                           // which answers a shader's translation depends on
-    uint32_t slots;                                        // tex_type, img_type, img_format of these c2 slots
+    uint32_t slots;                                        // split: tex_type of these c2 slots (img_type, img_format too
+                                                           // where tex_type is 0: the translator falls back to them);
+                                                           // version 1 files: tex_type, img_type, img_format
     uint32_t attrs;                                        // attr_type (VS input Locations)
     uint32_t fouts;                                        // frag_out_type (FS output Locations)
+    uint32_t imgs;                                         // split: img_type, img_format of these c2 slots
+    uint32_t split;                                        // 1: texture and image slots apart (version 2 file)
 } UseMask;
 
 typedef struct UseEnt {                                    // code hash -> use mask; known 0 caches a disk miss
@@ -803,7 +807,7 @@ static uint32_t json_slot_mask(const char *js, const char *name) {
 }
 
 static UseMask use_of(const GfxShader *s) {
-    UseMask m = {json_slot_mask(s->reflection, "tex_queried") | json_slot_mask(s->reflection, "img_queried"), 0, 0};
+    UseMask m = {json_slot_mask(s->reflection, "tex_queried"), 0, 0, json_slot_mask(s->reflection, "img_queried"), 1};
     if (s->stage == GFX_STAGE_VS) m.attrs = s->in_mask;
     else if (s->stage == GFX_STAGE_FS) m.fouts = s->out_mask & 0xff;
     return m;
@@ -855,6 +859,14 @@ static int hex_byte(const char *c) {
 
 typedef struct { int n, bad; } UsePreload;
 
+// A .use file of n bytes: version 1 (20 bytes, one mask for the texture and image slots) or 2 (24 bytes, apart).
+static int use_parse(const uint32_t *u, uint64_t n, UseMask *m) {
+    if (!u || n < 20 || u[0] != USE_MAGIC) return 0;
+    if (u[1] == 1 && n == 20) return *m = (UseMask){u[2], u[3], u[4], u[2], 0}, 1;
+    if (u[1] == USE_VERSION && n == 24) return *m = (UseMask){u[2], u[3], u[4], u[5], 1}, 1;
+    return 0;
+}
+
 // One <64 hex digits>.use file of the cache directory into the table.
 static int use_preload_file(const char *name, void *ctx) {
     UsePreload *st = ctx;
@@ -870,11 +882,10 @@ static int use_preload_file(const char *name, void *ctx) {
     if (ok) {
         snprintf(p, sizeof p, "%s/%s", cache_dir, name);
         u = (uint32_t *)read_file(p, &len);
-        ok = u && len == 20 && u[0] == USE_MAGIC && u[1] == USE_VERSION;
+        ok = use_parse(u, len, &e.m);
     }
     UseFile **slot = ok ? use_file_slot(e.name) : NULL, *x;
     if (slot && !*slot && (x = malloc(sizeof *x))) {
-        e.m.slots = u[2], e.m.attrs = u[3], e.m.fouts = u[4];
         *x = e, *slot = x, st->n++;
     } else if (!ok) {
         st->bad++;
@@ -889,17 +900,18 @@ static void use_preload(void *arg) {
     uint64_t t0 = plat_now_ns();
     int n = 0, bad = 0;
     for (uint32_t i = 0; i < pack_n; i++) {   // the packed masks; the loose files below add the masks found since
-        uint32_t u[5];
+        uint32_t u[6];
+        UseMask m;
         UseFile **slot, *x;
         if (pack_ix[i].kind != PACK_USE) continue;
-        if (pack_ix[i].size != sizeof u || !pack_read_at(pack_ix[i].offset, u, sizeof u) || u[0] != USE_MAGIC ||
-            u[1] != USE_VERSION) {
+        if (pack_ix[i].size > sizeof u || !pack_read_at(pack_ix[i].offset, u, pack_ix[i].size) ||
+            !use_parse(u, pack_ix[i].size, &m)) {
             bad++;
             continue;
         }
         if (!*(slot = use_file_slot(pack_ix[i].name)) && (x = malloc(sizeof *x))) {
             memcpy(x->name, pack_ix[i].name, 32);
-            x->next = NULL, x->m.slots = u[2], x->m.attrs = u[3], x->m.fouts = u[4];
+            x->next = NULL, x->m = m;
             *slot = x, n++;
         }
     }
@@ -950,8 +962,7 @@ static int use_find(const uint8_t h[32], UseMask *m) {
         uint64_t n = 0;
         uint32_t *f = (uint32_t *)pack_read(PACK_USE, name, &n);
         if (!f) f = (uint32_t *)read_file(p, &n);
-        known = f && n == 20 && f[0] == USE_MAGIC && f[1] == USE_VERSION;
-        if (known) m->slots = f[2], m->attrs = f[3], m->fouts = f[4];
+        known = use_parse(f, n, m);
         free(f);
     }
     plat_mutex_lock(&cache_lock);
@@ -963,7 +974,7 @@ static int use_find(const uint8_t h[32], UseMask *m) {
 static void use_store(const uint8_t h[32], const UseMask *m) {
     char p[PATH_CAP + 80];
     use_path(h, p);
-    uint32_t f[5] = {USE_MAGIC, USE_VERSION, m->slots, m->attrs, m->fouts};
+    uint32_t f[6] = {USE_MAGIC, USE_VERSION, m->slots, m->attrs, m->fouts, m->imgs};
     plat_file_write_atomic(p, f, sizeof f);
     plat_mutex_lock(&cache_lock);
     use_put(h, 1, m);
@@ -1005,11 +1016,16 @@ static int build_code_hash(int stage, const uint8_t *control, const uint8_t *cod
 }
 
 // The answers with everything outside the mask zeroed; the translator ignores depth_minus_w (Program.cs).
+// Split masks: an image bound to a slot only the texture side reads stays out of the id (Program.cs reads a texture
+// slot's image answer only when it has no texture answer), so the image a dispatch before left bound there makes no
+// new id. Version 1 masks keep all three answers of every slot.
 static void mask_answers(const GfxShaderAnswers *a, const UseMask *m, GfxShaderAnswers *o) {
     memset(o, 0, sizeof *o);
     if (!a) return;
     for (int i = 0; i < 32; i++) {
-        if (m->slots >> i & 1) o->tex_type[i] = a->tex_type[i], o->img_type[i] = a->img_type[i], o->img_format[i] = a->img_format[i];
+        int tex = m->slots >> i & 1, img = m->split ? (m->imgs >> i & 1) || (tex && !a->tex_type[i]) : tex;
+        if (tex) o->tex_type[i] = a->tex_type[i];
+        if (img) o->img_type[i] = a->img_type[i], o->img_format[i] = a->img_format[i];
         if (m->attrs >> i & 1) o->attr_type[i] = a->attr_type[i];
     }
     for (int i = 0; i < 8; i++)
@@ -1656,7 +1672,10 @@ int gfx_shader_resources(const GfxShader *s, int kind, const GfxShaderRes **res)
 
 // The slots of the use mask: answers outside it select the same translation (mask_answers), so a caller may leave
 // their texture and image types zero. Parses the reflection: callers keep the result.
-uint32_t gfx_shader_slot_mask(const GfxShader *s) { return use_of(s).slots; }
+uint32_t gfx_shader_slot_mask(const GfxShader *s) {
+    UseMask m = use_of(s);
+    return m.slots | m.imgs;
+}
 
 uint32_t gfx_shader_inputs(const GfxShader *s, GfxShaderIo io[32]) {
     if (io) memcpy(io, s->in, sizeof s->in);
@@ -1724,6 +1743,14 @@ static int set_add(Set64 *s, uint64_t h) {                 // 1 if new
     return 1;
 }
 
+static int set_has(const Set64 *s, uint64_t h) {
+    h = h ? h : 1;
+    if (!s || !s->cap) return 0;
+    for (uint32_t j = (uint32_t)h & (s->cap - 1); s->v[j]; j = (j + 1) & (s->cap - 1))
+        if (s->v[j] == h) return 1;
+    return 0;
+}
+
 static int bytes_put(Bytes *b, const void *p, size_t n) {
     if (!n) return 1;
     if (b->n + n > b->cap) {
@@ -1755,8 +1782,10 @@ static void unpack_answers(const uint8_t *p, GfxShaderAnswers *a) {
     a->depth_minus_w = *p;
 }
 
-// Reads a record file's body (after its header) into *body; 0 when absent, and a file with another header is removed.
-static int rec_read(const char *path, const char *magic, uint32_t version, uint32_t rec_size, uint8_t **body, size_t *n) {
+// Reads a record file's body (after its header) into *body, of a version from v_min to v_max; 0 when absent, and a file
+// with another header is removed.
+static int rec_read_v(const char *path, const char *magic, uint32_t v_min, uint32_t v_max, uint32_t rec_size,
+                      uint8_t **body, size_t *n) {
     *body = NULL, *n = 0;
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
@@ -1765,7 +1794,7 @@ static int rec_read(const char *path, const char *magic, uint32_t version, uint3
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
     int ok = len >= (long)sizeof h && fread(&h, sizeof h, 1, f) == 1 && !memcmp(h.magic, magic, strlen(magic)) &&
-             h.version == version && h.rec_size == rec_size;
+             h.version >= v_min && h.version <= v_max && h.rec_size == rec_size;
     if (ok && len > (long)sizeof h) {
         *n = (size_t)len - sizeof h;
         ok = (*body = malloc(*n)) && fread(*body, 1, *n, f) == *n;
@@ -1776,6 +1805,10 @@ static int rec_read(const char *path, const char *magic, uint32_t version, uint3
         if (len > 0) rt_log("gfx_shader: %s has another format or version; it is rewritten", path), remove(path);
     }
     return ok;
+}
+
+static int rec_read(const char *path, const char *magic, uint32_t version, uint32_t rec_size, uint8_t **body, size_t *n) {
+    return rec_read_v(path, magic, version, version, rec_size, body, n);
 }
 
 // Walks shader-programs.bin records; returns the byte length of the whole records. fn may be NULL.
@@ -1896,7 +1929,289 @@ typedef struct {
     size_t n_ans;
     uint8_t (*iid)[32];                                    // per answers record: the resolved input id, zero on failure
     volatile int64_t next, done, missing, failed;
+    int refine;                                            // seed: split use masks and the refined variants too
+    const Set64 *played;                                   // input ids play met (shader-answers.bin): never dropped
+    Bytes extra;                                           // refined variants as shader-prepared.bin records (prep_lock)
+    volatile int64_t n_upgraded, n_replaced;
 } Prep;
+
+static PlatMutex prep_lock = PLAT_MUTEX_INIT;
+
+// ---- prepared variants (shader-prepared.bin next to pipeline-keys.bin)
+// "ACSPRP", version, record size; records: stage, priority, 2 zero bytes, input id. gfx_shader_prepare_seed writes
+// them in priority order, one per input id; gfx_shader_warm_list reads them at boot. Version 2 files hold the refined
+// variants too; version 1 files are still read (tools/make_build.py prepares again over one).
+#define PRP_VERSION 2
+#define PRP_REC 36
+
+// ---- refined variants (gfx_shader_prepare_seed)
+// The seed answers every texture slot 2D and every vertex input float, but play answers what is bound. On a first
+// launch (RTX 4070, 2026-11-21: a new game to the first battle, and the title to the second story battle) 122
+// variants met in play were not prepared (44 vertex, 26 fragment, 52 compute); they were translated while the frame
+// waited, and the first battle's first frame took 2.6 s. The seed variant's own translation tells what play binds:
+// - a queried texture slot (the translator asks a 1D fetch whether it reads a buffer) that the code only fetches
+//   from, never samples, holds a buffer in play (the light and decal lists: 298 of 301 such slots met in the two
+//   runs); in a vertex shader with several, the same with each one 2D in turn (the other 3);
+// - a queried slot the translation also declares 3D, cube, array or multisample: that type;
+// - an image slot: the type its instructions declare;
+// - a vertex input whose value the shader bitcasts and uses as an integer (bone and instance indices) comes from an
+//   integer vertex format: uint, sint when its only use is a signed conversion to float; and, with several, the same
+//   with each one float in turn (a mesh without that attribute binds none, answered float: 26 of the 41 vertex
+//   variants met with such inputs).
+// With the split use masks these cover all 122 in replays of the two runs, for 26,349 more variants than the 40,727
+// of the seed (17,647 fragment shaders reading light lists, 8,578 vertex, 124 compute). A wrong guess costs one
+// translation here. A fragment or compute shader's seed variant, 2D at a slot the refined one makes a buffer, is then
+// dropped (0 of 143 such slots met in play held a 2D texture; the light-list shaders' SPIR-V is large: 4.5 GB of
+// cache for these 17,741), unless play met it (shader-answers.bin); a draw that ever binds a 2D texture there gets it
+// translated then, as before.
+static uint8_t tex_code_of(uint16_t t) {   // Ryujinx SamplerType -> GFX_TEX_*
+    int arr = t & 0x100, ms = t & 0x200;
+    switch (t & 0xff) {
+    case 1: return arr ? GFX_TEX_1D_ARRAY : GFX_TEX_1D;
+    case 2: return GFX_TEX_BUFFER;
+    case 3: return ms ? (arr ? GFX_TEX_2D_MS_ARRAY : GFX_TEX_2D_MS) : arr ? GFX_TEX_2D_ARRAY : GFX_TEX_2D;
+    case 4: return GFX_TEX_3D;
+    case 5: return arr ? GFX_TEX_CUBE_ARRAY : GFX_TEX_CUBE;
+    }
+    return GFX_TEX_2D;
+}
+
+// The vertex input Locations of s used as integers (above), from its SPIR-V; *sint: those whose only integer use is
+// OpConvertSToF. A value is followed from the input through access chains, loads, extracts, copies, phis and the
+// function variables it is stored in, to a bitcast; the bitcast value (and what a variable it is stored in loads back)
+// counts by the instructions that use it, bitcasts aside.
+static uint32_t int_attr_hints(const GfxShader *s, uint32_t *sint) {
+    enum { OP_EXT_INST = 12, OP_FUNCTION = 54, OP_LOAD = 61, OP_STORE = 62, OP_COPY_MEMORY = 63, OP_ACCESS_CHAIN = 65,
+           OP_IN_BOUNDS_ACCESS_CHAIN = 66, OP_VECTOR_SHUFFLE = 79, OP_COMPOSITE_EXTRACT = 81, OP_COMPOSITE_INSERT = 82,
+           OP_COPY_OBJECT = 83, OP_IMAGE_WRITE = 99, OP_CONVERT_S_TO_F = 111, OP_BITCAST = 124, OP_CONTROL_BARRIER = 224,
+           OP_MEMORY_BARRIER = 225, OP_ATOMIC_STORE = 228, OP_PHI = 245, OP_LOOP_MERGE = 246, OP_RETURN_VALUE = 254,
+           OP_LINE = 8, OP_NO_LINE = 317 };
+    const uint32_t *w = s->spirv;
+    uint64_t n = s->words;
+    *sint = 0;
+    if (!w || n < 5 || w[3] > (1u << 20)) return 0;
+    uint32_t bound = w[3], conv = 0, other = 0;
+    // per id, masks of input Locations: f a value from the input, fv a function variable holding one; b a bitcast of
+    // one, bv a function variable holding that
+    uint32_t *loc = calloc(bound, 4), *f = calloc(bound, 4), *fv = calloc(bound, 4), *b = calloc(bound, 4);
+    uint32_t *bv = calloc(bound, 4);
+    if (!loc || !f || !fv || !b || !bv) goto out;
+    uint64_t body = n;                                     // the first function
+    for (uint64_t o = 5; o < n;) {
+        uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+        if (!wc || o + wc > n) break;
+        const uint32_t *a = w + o + 1;
+        if (op == OP_DECORATE && wc >= 4 && a[0] < bound && a[1] == DEC_LOCATION && a[2] < 32) loc[a[0]] = a[2] + 1;
+        else if (op == OP_VARIABLE && wc >= 4 && a[1] < bound && a[2] == SC_INPUT && loc[a[1]])
+            f[a[1]] = 1u << (loc[a[1]] - 1);
+        else if (op == OP_FUNCTION && body == n) body = o;
+        o += wc;
+    }
+    for (int pass = 0, changed = 1; changed && pass < 64; pass++) {
+        changed = 0;
+        for (uint64_t o = body; o < n;) {
+            uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+            if (!wc || o + wc > n) break;
+            const uint32_t *a = w + o + 1, na = wc - 1;
+            o += wc;
+            uint32_t dst = bound, df = 0, db = 0;
+            if (op == OP_STORE && na >= 2 && a[0] < bound && a[1] < bound) {
+                if ((fv[a[0]] | f[a[1]]) != fv[a[0]] || (bv[a[0]] | b[a[1]]) != bv[a[0]])
+                    fv[a[0]] |= f[a[1]], bv[a[0]] |= b[a[1]], changed = 1;
+                continue;
+            }
+            if (na < 3 || a[1] >= bound || a[2] >= bound) continue;
+            if (op == OP_ACCESS_CHAIN || op == OP_IN_BOUNDS_ACCESS_CHAIN || op == OP_COMPOSITE_EXTRACT ||
+                op == OP_COPY_OBJECT) {
+                dst = a[1], df = f[a[2]];
+            } else if (op == OP_LOAD) {
+                dst = a[1], df = f[a[2]] | fv[a[2]], db = bv[a[2]];
+            } else if (op == OP_BITCAST) {
+                dst = a[1], db = f[a[2]];
+            } else if (op == OP_PHI) {
+                dst = a[1];
+                for (uint32_t k = 2; k < na; k += 2) df |= a[k] < bound ? f[a[k]] : 0;
+            }
+            if (dst < bound && ((f[dst] | df) != f[dst] || (b[dst] | db) != b[dst]))
+                f[dst] |= df, b[dst] |= db, changed = 1;
+        }
+    }
+    for (uint64_t o = body; o < n;) {                      // the uses of the bitcast values
+        uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+        if (!wc || o + wc > n) break;
+        const uint32_t *a = w + o + 1, na = wc - 1;
+        o += wc;
+        // instructions without a result (stores, image writes, merges, branches, returns, barriers) are not uses
+        if (op == OP_BITCAST || op == OP_STORE || op == OP_COPY_MEMORY || op == OP_IMAGE_WRITE ||
+            op == OP_ATOMIC_STORE || op == OP_CONTROL_BARRIER || op == OP_MEMORY_BARRIER ||
+            (op >= OP_LOOP_MERGE && op <= OP_RETURN_VALUE + 1) || op == OP_LINE || op == OP_NO_LINE ||
+            op == OP_FUNCTION || op == OP_VARIABLE)
+            continue;
+        // operand ids from the third word (result type and id first); literals after them in a few
+        uint32_t from = op == OP_EXT_INST ? 4 : 2;
+        uint32_t to = op == OP_COMPOSITE_EXTRACT ? 3 : op == OP_VECTOR_SHUFFLE || op == OP_COMPOSITE_INSERT ? 4 : na;
+        for (uint32_t k = from; k < to && k < na; k++)
+            if (a[k] < bound && b[a[k]]) {
+                if (op == OP_CONVERT_S_TO_F) conv |= b[a[k]];
+                else other |= b[a[k]];
+            }
+    }
+    *sint = conv & ~other;
+out:
+    free(loc), free(f), free(fv), free(b), free(bv);
+    return conv | other;
+}
+
+// How the SPIR-V of s uses its texture bindings: TEX_USE_* per Binding below 256.
+enum { TEX_USE_FETCH = 1, TEX_USE_SAMPLE = 2 };
+static void texture_uses(const GfxShader *s, uint8_t use[256]) {
+    enum { OP_LOAD = 61, OP_ACCESS_CHAIN = 65, OP_IN_BOUNDS_ACCESS_CHAIN = 66, OP_COPY_OBJECT = 83, OP_SAMPLED_IMAGE = 86,
+           OP_IMAGE_SAMPLE_FIRST = 87, OP_IMAGE_SAMPLE_LAST = 94, OP_IMAGE_FETCH = 95, OP_IMAGE_GATHER = 96,
+           OP_IMAGE_DREF_GATHER = 97, OP_IMAGE = 100, DEC_BINDING = 33 };
+    const uint32_t *w = s->spirv;
+    uint64_t n = s->words;
+    memset(use, 0, 256);
+    if (!w || n < 5 || w[3] > (1u << 20)) return;
+    uint32_t bound = w[3];
+    uint16_t *tag = calloc(bound, sizeof *tag);            // binding + 1 an id derives from
+    if (!tag) return;
+    for (uint64_t o = 5; o < n;) {
+        uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+        if (!wc || o + wc > n) break;
+        const uint32_t *a = w + o + 1;
+        if (op == OP_DECORATE && wc >= 4 && a[0] < bound && a[1] == DEC_BINDING && a[2] < 256) tag[a[0]] = (uint16_t)(a[2] + 1);
+        o += wc;
+    }
+    for (int pass = 0, changed = 1; changed && pass < 8; pass++) {
+        changed = 0;
+        for (uint64_t o = 5; o < n;) {
+            uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+            if (!wc || o + wc > n) break;
+            const uint32_t *a = w + o + 1;
+            o += wc;
+            if ((op == OP_LOAD || op == OP_ACCESS_CHAIN || op == OP_IN_BOUNDS_ACCESS_CHAIN || op == OP_COPY_OBJECT ||
+                 op == OP_IMAGE || op == OP_SAMPLED_IMAGE) && wc >= 4 && a[1] < bound && a[2] < bound && tag[a[2]] &&
+                !tag[a[1]])
+                tag[a[1]] = tag[a[2]], changed = 1;
+        }
+    }
+    for (uint64_t o = 5; o < n;) {
+        uint32_t op = w[o] & 0xffff, wc = w[o] >> 16;
+        if (!wc || o + wc > n) break;
+        const uint32_t *a = w + o + 1;
+        o += wc;
+        int f = op == OP_IMAGE_FETCH ? TEX_USE_FETCH
+                : (op >= OP_IMAGE_SAMPLE_FIRST && op <= OP_IMAGE_SAMPLE_LAST) || op == OP_IMAGE_GATHER ||
+                          op == OP_IMAGE_DREF_GATHER
+                      ? TEX_USE_SAMPLE
+                      : 0;
+        if (f && wc >= 4 && a[2] < bound && tag[a[2]]) use[tag[a[2]] - 1] |= (uint8_t)f;
+    }
+    free(tag);
+}
+
+static const GfxShader *refined_add(Prep *p, int st, int prio, const uint8_t *control, const uint8_t *code,
+                                    uint32_t len, const uint8_t *c1, const GfxShaderAnswers *c) {
+    const GfxShader *s = gfx_shader_get(st, control, code, len, c1, c);
+    if (!s) return NULL;
+    uint8_t rec[PRP_REC] = {(uint8_t)st, (uint8_t)prio};
+    memcpy(rec + 4, s->iid, 32);
+    plat_mutex_lock(&prep_lock);
+    bytes_put(&p->extra, rec, sizeof rec);
+    plat_mutex_unlock(&prep_lock);
+    return s;
+}
+
+// A variant's cache files and stored inputs (the boot prewarm translates a stored input that has no cache files).
+static void variant_drop(const GfxShader *s) {
+    char hex[65], path[PATH_CAP + 80];
+    key_hex(s->key, hex);
+    snprintf(path, sizeof path, "%s/%s.spv", cache_dir, hex), plat_file_delete(path);
+    snprintf(path, sizeof path, "%s/%s.res.json", cache_dir, hex), plat_file_delete(path);
+    in_path(s->iid, path), plat_file_delete(path);
+}
+
+// The refined variants of a seed record (a: its answers, s: its translation). 1 when the seed variant is to be dropped
+// (above).
+static int prepare_refined(Prep *p, int st, int prio, const uint8_t *control, const uint8_t *code, uint32_t len,
+                            const uint8_t *c1, const GfxShaderAnswers *a, const GfxShader *s) {
+    UseMask m = use_of(s);
+    const GfxShaderRes *tex, *img;
+    int ntex = gfx_shader_resources(s, GFX_RES_TEX, &tex), nimg = gfx_shader_resources(s, GFX_RES_IMG, &img);
+    GfxShaderAnswers ref = *a;
+    uint8_t use[256];
+    uint32_t buf = 0;                                      // queried slots only fetched from: buffers
+    texture_uses(s, use);
+    for (int i = 0; i < 32; i++) {
+        if (m.slots >> i & 1) {
+            uint16_t other = 0;
+            int u = 0;
+            for (int k = 0; k < ntex; k++)
+                if (tex[k].slot == i) {
+                    if (tex[k].type != 3 && !other) other = tex[k].type;
+                    if (tex[k].binding < 256) u |= use[tex[k].binding];
+                }
+            if (other) ref.tex_type[i] = tex_code_of(other);
+            else if (u == TEX_USE_FETCH) ref.tex_type[i] = GFX_TEX_BUFFER, buf |= 1u << i;
+        }
+        if (m.imgs >> i & 1)
+            for (int k = 0; k < nimg; k++)
+                if (img[k].slot == i) {
+                    ref.img_type[i] = tex_code_of(img[k].type);
+                    break;
+                }
+    }
+    GfxShaderAnswers texs[34];
+    int nt = 0;
+    texs[nt++] = *a;
+    if (memcmp(&ref, a, sizeof ref)) texs[nt++] = ref;
+    int two = nt;                                          // the seed's and the refined texture answers
+    if (st == GFX_STAGE_VS && __builtin_popcount(buf) > 1)
+        for (uint32_t x = buf; x; x &= x - 1) {
+            texs[nt] = ref;
+            texs[nt++].tex_type[__builtin_ctz(x)] = GFX_TEX_2D;
+        }
+    int drop = 0;
+    for (int t = 1; t < nt; t++)
+        if (refined_add(p, st, prio, control, code, len, c1, &texs[t]) && t == 1 && buf && st != GFX_STAGE_VS) drop = 1;
+    if (st != GFX_STAGE_VS) return drop;
+    uint32_t sint, hint = int_attr_hints(s, &sint) & m.attrs;
+    if (!hint) return 0;
+    uint8_t ga[32] = {0};
+    for (uint32_t x = hint; x; x &= x - 1) {
+        int l = __builtin_ctz(x);
+        ga[l] = (uint8_t)(sint >> l & 1 ? GFX_TYPE_SINT : GFX_TYPE_UINT);
+    }
+    for (int fl = -1; fl < 32; fl++) {                     // every hinted input an integer, then each one float in turn
+        if (fl >= 0 && (!(hint >> fl & 1) || __builtin_popcount(hint) < 2)) continue;
+        for (int t = 0; t < two; t++) {
+            GfxShaderAnswers c = texs[t];
+            memcpy(c.attr_type, ga, sizeof ga);
+            if (fl >= 0) c.attr_type[fl] = GFX_TYPE_FLOAT;
+            refined_add(p, st, prio, control, code, len, c1, &c);
+        }
+    }
+    for (int t = two; t < nt; t++) {
+        GfxShaderAnswers c = texs[t];
+        memcpy(c.attr_type, ga, sizeof ga);
+        refined_add(p, st, prio, control, code, len, c1, &c);
+    }
+    return 0;
+}
+
+// A program whose use mask is a version 1 file gets the split one from its translation; its seed variant is then looked
+// up again (another input id when the program has image slots).
+static const GfxShader *prepare_upgrade(Prep *p, int st, const uint8_t *control, const uint8_t *code, uint32_t len,
+                                        const uint8_t *c1, const GfxShaderAnswers *a, const GfxShader *s) {
+    Req r;
+    UseMask m;
+    if (!req_init(&r, st, control, code, len, c1, a) || !use_find(r.code_hash, &m) || m.split) return s;
+    UseMask m2 = use_of(s);
+    use_store(r.code_hash, &m2);
+    plat_inc64(&p->n_upgraded);
+    const GfxShader *s2 = gfx_shader_get(st, control, code, len, c1, a);
+    return s2 ? s2 : s;
+}
 
 static int prg_cmp(const void *x, const void *y) { return memcmp(((const PrgIdx *)x)->rec + 12, ((const PrgIdx *)y)->rec + 12, 32); }
 
@@ -1924,8 +2239,15 @@ static void prep_worker(void *arg) {
         GfxShaderAnswers a;
         unpack_answers(r + 68, &a);
         const GfxShader *s = gfx_shader_get((int)st, control, code, len, c1, &a);
+        if (s && p->refine) s = prepare_upgrade(p, (int)st, control, code, len, c1, &a, s);
         if (!s) plat_inc64(&p->failed);
         else if (p->iid) memcpy(p->iid[i], s->iid, 32);
+        if (s && p->refine && prepare_refined(p, (int)st, r[ANS_REC - 1], control, code, len, c1, &a, s) &&
+            !set_has(p->played, hash8(s->iid))) {
+            variant_drop(s);
+            if (p->iid) memset(p->iid[i], 0, 32);
+            plat_inc64(&p->n_replaced);
+        }
         plat_inc64(&p->done);
     }
 }
@@ -1933,8 +2255,11 @@ static void prep_worker(void *arg) {
 // Translates every record of ans_path whose program is in prg_path on `threads` threads with up to `procs` translators.
 // *ans_out, *iid_out (optional; free them): the answers records and the input id each resolved to (zero: failed).
 // Returns the record count, -1 without the files.
+// refine: the split use masks and the refined variants as well (the seed), their records in *extra (free its p); a
+// dropped seed variant resolves to a zero input id; played: input ids never dropped.
 static long long prepare_files(const char *ans_path, const char *prg_path, int threads, int procs, const char *what,
-                               uint8_t **ans_out, uint8_t (**iid_out)[32]) {
+                               uint8_t **ans_out, uint8_t (**iid_out)[32], int refine, const Set64 *played,
+                               Bytes *extra) {
     paths();
     double t0 = (double)plat_now_ms();
     uint8_t *ab = NULL, *pb = NULL;
@@ -1945,7 +2270,8 @@ static long long prepare_files(const char *ans_path, const char *prg_path, int t
         free(ab), free(pb);
         return -1;
     }
-    Prep p = {.progs = {calloc(pn / PRG_HEAD + 1, sizeof(PrgIdx)), 0}, .ans = ab, .n_ans = an / ANS_REC};
+    Prep p = {.progs = {calloc(pn / PRG_HEAD + 1, sizeof(PrgIdx)), 0}, .ans = ab, .n_ans = an / ANS_REC,
+              .refine = refine, .played = played};
     if (iid_out) p.iid = calloc(p.n_ans + 1, 32);
     if (!p.progs.idx || (iid_out && !p.iid)) return free(p.progs.idx), free(p.iid), free(ab), free(pb), -1;
     prg_walk(pb, pn, prg_collect, &p.progs);
@@ -1966,7 +2292,12 @@ static long long prepare_files(const char *ans_path, const char *prg_path, int t
     rt_log("gfx_shader: prepare: %zu %s of %zu programs: %llu translated, %lld failed, %lld without a program, the rest "
            "cached; %.0f ms", p.n_ans, what, p.progs.n, (unsigned long long)((uint64_t)n_xlated - xl0), (long long)p.failed,
            (long long)p.missing, (double)plat_now_ms() - t0);
+    if (refine)
+        rt_log("gfx_shader: prepare: %zu refined variants, %lld seed variants dropped for their refined one, %lld use "
+               "masks split", p.extra.n / PRP_REC, (long long)p.n_replaced, (long long)p.n_upgraded);
     free(p.progs.idx), free(pb);
+    if (extra) *extra = p.extra;
+    else free(p.extra.p);
     if (ans_out) *ans_out = ab;
     else free(ab);
     if (iid_out) *iid_out = p.iid;
@@ -1978,15 +2309,10 @@ void gfx_shader_prepare_recorded(int threads, int procs) {
         rt_log("gfx_shader: prepare: no recorded answers (not recording)");
         return;
     }
-    prepare_files(RC.ans_path, RC.prg_path, threads, procs, "recorded pairs", NULL, NULL);
+    prepare_files(RC.ans_path, RC.prg_path, threads, procs, "recorded pairs", NULL, NULL, 0, NULL, NULL);
 }
 
-// ---- prepared variants (shader-prepared.bin next to pipeline-keys.bin)
-// "ACSPRP", version, record size; records: stage, priority, 2 zero bytes, input id. gfx_shader_prepare_seed writes
-// them in priority order, one per input id; gfx_shader_warm_list reads them at boot.
-#define PRP_VERSION 1
-#define PRP_REC 36
-
+// Writes shader-prepared.bin (see the prepared variants above): the seed's variants, then the refined ones.
 int gfx_shader_prepare_seed(const char *dir, int threads, int procs) {
     char ans[PATH_CAP + 32], prg[PATH_CAP + 32], out[PATH_CAP + 32];
     snprintf(ans, sizeof ans, "%s/seed-answers.bin", dir);
@@ -1994,10 +2320,20 @@ int gfx_shader_prepare_seed(const char *dir, int threads, int procs) {
     snprintf(out, sizeof out, "%s/shader-prepared.bin", dir);
     double t0 = (double)plat_now_ms();
     uint64_t fail0 = (uint64_t)n_failures;
-    uint8_t *ab = NULL, (*iid)[32] = NULL;
-    long long n = prepare_files(ans, prg, threads, procs, "seed variants", &ab, &iid);
+    uint8_t *ab = NULL, (*iid)[32] = NULL, *pa = NULL;
+    Bytes extra = {0};
+    Set64 played = {0};
+    size_t pn = 0;
+    char path[PATH_CAP + 32];
+    snprintf(path, sizeof path, "%s/shader-answers.bin", dir);
+    if (rec_read(path, "ACSANS", ANS_VERSION, ANS_REC, &pa, &pn))
+        for (size_t i = 0; i < pn / ANS_REC; i++) set_add(&played, hash8(pa + i * ANS_REC + 36));
+    free(pa);
+    long long n = prepare_files(ans, prg, threads, procs, "seed variants", &ab, &iid, 1, &played, &extra);
+    free(played.v);
     if (n < 0) return 1;
-    uint8_t *recs = calloc((size_t)n + 1, PRP_REC);
+    size_t n_extra = extra.n / PRP_REC, n_refined = 0;
+    uint8_t *recs = calloc((size_t)n + n_extra + 1, PRP_REC);
     static const uint8_t zero[32];
     size_t u = 0, by[3] = {0}, stages[6] = {0};
     Set64 seen = {0};
@@ -2009,7 +2345,16 @@ int gfx_shader_prepare_seed(const char *dir, int threads, int procs) {
         memcpy(r + 4, iid[i], 32);
         by[r[1]]++, stages[r[0]]++, u++;
     }
-    free(seen.v);
+    for (int pr = 0; recs && pr < 3; pr++)                 // the refined ones after them, also in priority order
+        for (size_t i = 0; i < n_extra; i++) {
+            const uint8_t *x = extra.p + i * PRP_REC;
+            if ((x[1] > 2 ? 2 : x[1]) != pr || !set_add(&seen, hash8(x + 4))) continue;
+            uint8_t *r = recs + u * PRP_REC;
+            r[0] = x[0] < 6 ? x[0] : 0, r[1] = (uint8_t)pr;
+            memcpy(r + 4, x + 4, 32);
+            by[r[1]]++, stages[r[0]]++, u++, n_refined++;
+        }
+    free(seen.v), free(extra.p);
     RecHeader h = {{'A', 'C', 'S', 'P', 'R', 'P'}, PRP_VERSION, PRP_REC};
     uint8_t *file = recs ? malloc(sizeof h + u * PRP_REC + 1) : NULL;
     int ok = file != NULL;
@@ -2019,8 +2364,8 @@ int gfx_shader_prepare_seed(const char *dir, int threads, int procs) {
     }
     char msg[640];
     snprintf(msg, sizeof msg, "gfx_shader: prepared %zu shader variants (vertex %zu, fragment %zu, compute %zu; title %zu, "
-             "warm-up %zu, other %zu) from %lld seed records, %llu translations failed, in %.0f ms; %s %s", u,
-             stages[GFX_STAGE_VS], stages[GFX_STAGE_FS], stages[GFX_STAGE_CS], by[0], by[1], by[2], n,
+             "warm-up %zu, other %zu; %zu refined) from %lld seed records, %llu translations failed, in %.0f ms; %s %s",
+             u, stages[GFX_STAGE_VS], stages[GFX_STAGE_FS], stages[GFX_STAGE_CS], by[0], by[1], by[2], n_refined, n,
              (unsigned long long)((uint64_t)n_failures - fail0), (double)plat_now_ms() - t0,
              ok ? "wrote" : "cannot write", out);
     rt_log("%s", msg);
@@ -2042,7 +2387,7 @@ size_t gfx_shader_warm_list(GfxWarmEnt **out) {
     plat_mutex_lock(&rec_io);                      // no append meanwhile
     rec_read(RC.ans_path, "ACSANS", ANS_VERSION, ANS_REC, &ab, &an);
     plat_mutex_unlock(&rec_io);
-    rec_read(prp, "ACSPRP", PRP_VERSION, PRP_REC, &pb, &pn);
+    rec_read_v(prp, "ACSPRP", 1, PRP_VERSION, PRP_REC, &pb, &pn);
     size_t na = an / ANS_REC, np = pn / PRP_REC, n = 0;
     GfxWarmEnt *e = calloc(na + np + 1, sizeof *e);
     Set64 seen = {0};
