@@ -3,11 +3,11 @@ TEXTS = {
     "title": "Hyrule Warriors: Age of Calamity",
     "intro": "This setup builds the PC version of the game on this computer from your own copy: the NSPs dumped from your "
              "Switch (base game, update 1.3.0, DLC if you have them) and your console's prod.keys. Nothing of the game "
-             "is downloaded. The first build takes 20 to 30 minutes and about 25 GB; later builds only redo what changed.",
+             "is downloaded. The first build takes 20 to 30 minutes and about 26 GB; later builds only redo what changed.",
     "install_folder": "Install the game in",
     "install_title": "Choose where to install the game",
-    "installed_here": "The game is already installed here. Update installs this version over it: only what changed is "
-                      "redone, and your saves and settings are kept.",
+    "installed_here": "The game is already installed here. Update installs this version over it without your NSPs: "
+                      "only what changed is redone, and your saves and settings are kept.",
     "plain_folder": "Choose a full path with plain letters only (no accents or special signs), such as "
                     "C:\\Games\\AgeOfCalamityRecomp.",
     "long_folder": "This path is too long. Choose a shorter one, such as C:\\Games\\AgeOfCalamityRecomp.",
@@ -17,7 +17,7 @@ TEXTS = {
     "browse": "Browse...",
     "folder_title": "Choose the folder with your NSPs and prod.keys",
     "base": "Base game",
-    "update": "Update 1.3.0",
+    "update_nsp": "Update 1.3.0",
     "dlc": "DLC (optional)",
     "keys": "prod.keys",
     "found": "found",
@@ -62,8 +62,8 @@ TEXTS = {
     "failed_box": "The build stopped at \"{step}\".\n\n{note}\n\nThe full log is in {path}",
     "cancelled": "Build stopped.",
     "no_python": "Could not start Python: {error}",
-    "update_note": "The game is already installed here. Update installs this version over it: only what changed is "
-                   "redone, and your saves and settings are kept.",
+    "update_note": "The game is already installed here. Update installs this version over it without your NSPs: "
+                   "only what changed is redone, and your saves and settings are kept.",
     "update": "Update",
     "need_wsl": "WSL (the Linux inside Windows) is needed for the Steam Deck version. Install it now? Windows asks for "
                 "administrator permission; restart the PC when it is done, then build again.",

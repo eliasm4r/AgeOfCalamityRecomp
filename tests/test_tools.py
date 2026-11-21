@@ -246,6 +246,43 @@ class MakeBuildTest(unittest.TestCase):
         self.assertEqual(make_build.romfs_size(), 11719230892)
 
 
+class MakeBuildUpdateTest(unittest.TestCase):
+    """--update: an install updates from the game data its first build extracted, without reading the dump."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root, make_build.ROOT = make_build.ROOT, Path(self.tmp.name)
+        self.args = SimpleNamespace(update=True, windows=False, deck=False, send=False,
+                                    game_dir=Path(self.tmp.name) / "no dump here", keys=Path("no.keys"))
+
+    def tearDown(self):
+        make_build.ROOT = self.root
+        self.tmp.cleanup()
+
+    def extract(self):
+        v130 = make_build.ROOT / "build/v130"
+        (v130 / "exefs").mkdir(parents=True)
+        (v130 / "exefs/main").write_bytes(b"")
+        (v130 / "romfs.bin").write_bytes(b"")
+
+    def test_check_needs_the_extracted_data(self):
+        with redirect_stdout(io.StringIO()), self.assertRaises(make_build.StepFailed):
+            make_build.s_check(self.args)
+
+    def test_check_passes_without_the_dump(self):
+        self.extract()
+        with redirect_stdout(io.StringIO()) as buf:
+            make_build.s_check(self.args)
+        self.assertIn("without the NSPs", buf.getvalue())
+
+    def test_no_dump_step_runs(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(make_build.s_dlc(self.args), "skip")
+            with self.assertRaises(make_build.StepFailed):
+                make_build.s_romfs(self.args)
+
+
 class MakePromptsTest(unittest.TestCase):
     """tools/make_prompts.py: BC3 both ways, the fingerprint runtime/prompts.c checks, the drawings."""
 

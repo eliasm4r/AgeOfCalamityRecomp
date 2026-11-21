@@ -65,6 +65,9 @@
   controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
   rumbles for its own player. If player 1's controller is unplugged, player 2's takes its place. `ACR_PLAYER2=0`
   keeps the second controller out of the game.
+- **Update without the NSPs**: when the install folder already holds the game, the setup empties and greys out the
+  NSP folder and only offers **Update**, which builds from the game data the first build extracted
+  (`make_build.py --update`). The DLC unpacked then are kept; to add one, build from the NSP folder.
 
 ## 0.1.1
 
