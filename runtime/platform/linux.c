@@ -1774,3 +1774,18 @@ int plat_restart_wait(uint32_t timeout_ms) {
     close(fd);
     return r;
 }
+
+// Write traps (stepscan.c): Windows only for now.
+int plat_trap_set(const uint64_t *pages, int n, int (*fn)(uint64_t addr, uint64_t ip),
+                  void (*bt)(int slot, const uint64_t *frames, int n)) {
+    (void)pages, (void)n, (void)fn, (void)bt;
+    return 0;
+}
+void plat_trap_arm(void) {}
+void plat_trap_clear(void) {}
+void plat_trap_access(int rw) { (void)rw; }
+int plat_mem_read_safe(uint64_t addr, void *out, uint64_t n) {
+    if (!plat_mem_readable(addr, n)) return 0;
+    memcpy(out, (const void *)(uintptr_t)addr, n);
+    return 1;
+}

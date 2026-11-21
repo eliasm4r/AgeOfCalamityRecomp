@@ -299,7 +299,10 @@ static void window_main(void *arg) {
     // first WM_ACTIVATEAPP, so loading goes on, and keyboard input waits for the foreground (input_win.c). Its taskbar
     // button flashes until it is brought up, and ACR_FULLSCREEN waits for that first activation.
     // ACR_BACKGROUND_WINDOW=1 (test runs): no flashing, never fullscreen at start, and F11 keeps the window's place.
-    int background = g_background = cfg_get("ACR_BACKGROUND_WINDOW") && atoi(cfg_get("ACR_BACKGROUND_WINDOW"));
+    // ACR_HIDDEN_WINDOW=1 (test runs on the player's machine): as the background window, and never shown at all; the
+    // swapchain still presents to it.
+    int hidden = cfg_get("ACR_HIDDEN_WINDOW") && atoi(cfg_get("ACR_HIDDEN_WINDOW"));
+    int background = g_background = hidden || (cfg_get("ACR_BACKGROUND_WINDOW") && atoi(cfg_get("ACR_BACKGROUND_WINDOW")));
     g_hwnd = CreateWindowExW(0, wc.lpszClassName, RT_PORT_NAME_W, WND_STYLE, CW_USEDEFAULT, CW_USEDEFAULT, ow, oh, NULL,
                              NULL, inst, NULL);
     if (!g_hwnd) {
@@ -318,7 +321,7 @@ static void window_main(void *arg) {
         // and without the focus. Shown first at its windowed size and made fullscreen at the first activation, it
         // showed the picture in the top left corner, then growing to the whole screen as the swapchain followed.
         int fs_now = !background && cfg_fullscreen();
-        SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, ow, oh, SWP_NOMOVE | SWP_NOACTIVATE | (fs_now ? 0 : SWP_SHOWWINDOW));
+        SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, ow, oh, SWP_NOMOVE | SWP_NOACTIVATE | (fs_now || hidden ? 0 : SWP_SHOWWINDOW));
         if (fs_now) {
             g_background = 1;   // toggle_fullscreen without taking the focus or the top of the z-order
             toggle_fullscreen(g_hwnd);

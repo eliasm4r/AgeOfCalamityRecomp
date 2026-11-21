@@ -92,6 +92,29 @@ static int npad_state(uint32_t want, uint32_t id, NpadState *s) {
     return live;
 }
 
+static uint64_t ld64_or0(uint64_t a) {
+    uint64_t v = 0;
+    if (a && plat_mem_read_safe(a, &v, 8)) return v;
+    return 0;
+}
+
+// ACR_HID_CALLERS=1 (diagnosis): the guest code that reads the controller, once per call site.
+static void hid_caller(Cpu *c, uint32_t want, uint32_t id, const void *out) {
+    static int callers = -1;
+    if (callers < 0) callers = cfg_get("ACR_HID_CALLERS") && atoi(cfg_get("ACR_HID_CALLERS")) ? 0 : 99;
+    static uint64_t seen[16];
+    if (callers < 16) {
+        int k = 0;
+        while (k < callers && seen[k] != c->x[30]) k++;
+        if (k == callers) {
+            seen[callers++] = c->x[30];
+            rt_log("hid: GetNpadStates style %u id %u from guest %#llx (fp chain %#llx %#llx), out %#llx", want, id,
+                   (unsigned long long)c->x[30], (unsigned long long)ld64_or0(c->x[29] + 8),
+                   (unsigned long long)ld64_or0(ld64_or0(c->x[29]) + 8), (unsigned long long)(uintptr_t)out);
+        }
+    }
+}
+
 static void npad_states(Cpu *c, uint32_t want) {
     NpadState *out = arg_p(c, 0);
     int max = (int)arg_x(c, 1);
@@ -101,6 +124,7 @@ static void npad_states(Cpu *c, uint32_t want) {
     NpadState s;
     npad_state(want, id, &s);
     *out = s;
+    hid_caller(c, want, id, out);
     ret_x(c, 1);
 }
 static void ov_states_full_key(Cpu *c) { npad_states(c, STYLE_FULL_KEY); }
@@ -115,6 +139,7 @@ static void npad_state_single(Cpu *c, uint32_t want) {
     NpadState s;
     npad_state(want, id, &s);
     *out = s;
+    hid_caller(c, want, id, out);
     ret_x(c, 0);
 }
 static void ov_state_full_key(Cpu *c) { npad_state_single(c, STYLE_FULL_KEY); }

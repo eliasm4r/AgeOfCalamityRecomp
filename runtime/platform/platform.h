@@ -215,6 +215,17 @@ uint64_t plat_mem_written(uint64_t addr, uint64_t n, uint64_t *pages, uint64_t m
 // the write should run again, 0 to let the fault go on (to the crash handler). One hook per process.
 void plat_mem_fault_hook(int (*fn)(uint64_t addr));
 void plat_mem_read_fault_hook(int (*fn)(uint64_t addr));     // read AVs go to fn; return 1 to resume (page filled)
+// Write traps (diagnosis, stepscan.c): the pages turn read-only and every write to them calls fn with the address and the
+// host instruction, then runs; returns the number of pages trapped (0: not available on this system). When fn returns
+// a slot >= 0, bt gets the host return addresses of the writing thread (innermost first). A page written more than
+// TRAP_PAGE_LIMIT times stays writable (a hot page made the game run at 2 fps). arm protects them again (call it once a
+// frame: a thaw makes them writable), clear lifts them.
+int plat_trap_set(const uint64_t *pages, int n, int (*fn)(uint64_t addr, uint64_t ip),
+                  void (*bt)(int slot, const uint64_t *frames, int n));
+void plat_trap_arm(void);
+void plat_trap_clear(void);
+void plat_trap_access(int rw);   // before plat_trap_set: 1 traps reads as well (pages no-access)
+int plat_mem_read_safe(uint64_t addr, void *out, uint64_t n);   // copy n bytes; 0 (no fault) when any is unreadable
 // Starts this program again with the same arguments and ends this process with the new one's exit code (Windows), or
 // replaces this process with it (Linux). Environment changes made before the call are passed on.
 _Noreturn void plat_reexec(void);

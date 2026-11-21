@@ -42,8 +42,10 @@ static uint64_t last_ns;
 #define FPS_MAX 240
 static int fps_hz = -1;
 static unsigned fps_seen;
+static int fps_forced;   // frame_step_force_hz: a rate the step scan (stepscan.c) holds over the setting, 0 none
 
 static int fps_parse(void) {
+    if (fps_forced) return fps_forced;
     const char *e = cfg_get("ACR_FPS_LIMIT");
     if (!e || !*e) return 30;
     if (!strcmp(e, "display")) return 60;
@@ -67,6 +69,12 @@ static void fps_live(void) {
 }
 
 void frame_step_init(void) { fps_live(); }
+
+void frame_step_force_hz(int hz) {
+    fps_forced = hz;
+    fps_hz = -1;   // fps_live reads the rate again
+    fps_live();
+}
 
 int frame_step_interval(void) {
     fps_live();
@@ -170,6 +178,7 @@ static void world_clock(double dt, double step) {
 }
 
 void frame_step_present(uint64_t display_ns, int interval) {
+    stepscan_present();
     double dt = last_ns ? (double)(display_ns - last_ns) * 1e-9 : 0;
     fps_block(dt);
     if (interval > 0) step_now = interval == 1 && fps_hz > 60 ? (dt > 0 ? dt : 1.0 / fps_hz) : interval / 60.0;

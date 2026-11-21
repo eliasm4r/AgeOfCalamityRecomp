@@ -638,6 +638,156 @@ void plat_mem_read_fault_hook(int (*fn)(uint64_t addr)) {
     AddVectoredExceptionHandler(1, fault_veh);
 }
 
+// ---- write traps (diagnosis: stepscan.c names the code that writes a word). Each trapped page is read-only; a write
+// to it faults here first (this handler is added last with First = 1, so it runs before fault_veh): the callback gets
+// the address and the host instruction, the freeze hook thaws the region if it was frozen (memory.c), the page turns
+// writable for one single step (trap flag) and read-only again after it. plat_trap_arm protects the pages again (a
+// thaw makes them writable); plat_trap_clear lifts every trap.
+#define TRAP_MAX 32
+static uint64_t trap_pages[TRAP_MAX];
+static volatile int32_t trap_n;
+static int (*trap_fn)(uint64_t addr, uint64_t ip);
+static void (*trap_bt)(int slot, const uint64_t *frames, int n);
+#define TRAP_PAGE_LIMIT 4000
+#define TRAP_PAGE_LIMIT_RW 40000   // reads: a page is read far more often than written
+static volatile int32_t trap_count[TRAP_MAX];
+static int trap_rw;                // plat_trap_access: reads trap too (the pages are no-access)
+static DWORD trap_prot(void) { return trap_rw ? PAGE_NOACCESS : PAGE_READONLY; }
+static int32_t trap_limit(void) { return trap_rw ? TRAP_PAGE_LIMIT_RW : TRAP_PAGE_LIMIT; }
+
+void plat_trap_access(int rw) { trap_rw = rw; }
+
+// The host return addresses above a faulting context, from the executable's unwind tables.
+static int trap_unwind(const CONTEXT *from, uint64_t *out, int max) {
+    CONTEXT ctx = *from;
+    int n = 0;
+    while (n < max) {
+        DWORD64 base = 0;
+        PRUNTIME_FUNCTION rf = RtlLookupFunctionEntry(ctx.Rip, &base, NULL);
+        if (rf) {
+            PVOID hd;
+            DWORD64 ef;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, rf, &ctx, &hd, &ef, NULL);
+        } else if (n == 0) {   // a leaf at the fault: its return address is on top of the stack
+            ctx.Rip = *(DWORD64 *)(uintptr_t)ctx.Rsp;
+            ctx.Rsp += 8;
+        } else {
+            break;   // no unwind data further up: reading the stack blind could fault in this handler
+        }
+        if (!ctx.Rip) break;
+        out[n++] = ctx.Rip;
+    }
+    return n;
+}
+static _Thread_local uint64_t trap_rearm;
+static uint64_t trap_known[TRAP_MAX * 4];   // every page ever trapped: a write that races plat_trap_clear lands here
+static volatile int32_t trap_nknown;
+
+static int trap_was(uint64_t page) {
+    int n = __atomic_load_n(&trap_nknown, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < n; i++)
+        if (trap_known[i] == page) return 1;
+    return 0;
+}
+
+static int trap_has(uint64_t page) {   // the trap index + 1, 0 none
+    int n = __atomic_load_n(&trap_n, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < n; i++)
+        if (trap_pages[i] == page) return i + 1;
+    return 0;
+}
+
+static LONG CALLBACK trap_veh(EXCEPTION_POINTERS *ep) {
+    const EXCEPTION_RECORD *er = ep->ExceptionRecord;
+    DWORD old;
+    if (er->ExceptionCode == EXCEPTION_SINGLE_STEP && trap_rearm) {
+        int t = trap_has(trap_rearm);
+        if (t && trap_count[t - 1] < trap_limit())
+            VirtualProtect((void *)(uintptr_t)trap_rearm, 0x1000, trap_prot(), &old);
+        trap_rearm = 0;
+        ep->ContextRecord->EFlags &= ~0x100u;
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    if (er->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || er->NumberParameters < 2)
+        return EXCEPTION_CONTINUE_SEARCH;
+    int write = er->ExceptionInformation[0] == 1;
+    if (!write && !(trap_rw && er->ExceptionInformation[0] == 0)) return EXCEPTION_CONTINUE_SEARCH;
+    uint64_t addr = (uint64_t)er->ExceptionInformation[1], page = addr & ~0xfffull;
+    int t = trap_has(page);
+    if (!t) {
+        // A trap lifted while this thread was on its way here (or re-protected by another thread's single step after
+        // the lift): writable again, unless the freeze (memory.c) owns the page.
+        if (!trap_was(page)) return EXCEPTION_CONTINUE_SEARCH;
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!write && !(VirtualQuery((void *)(uintptr_t)page, &mbi, sizeof mbi) && (mbi.Protect & 0xff) == PAGE_NOACCESS))
+            return EXCEPTION_CONTINUE_SEARCH;   // a read of a page no trap of ours made unreadable
+        if (!(write && fault_hook && fault_hook(addr))) VirtualProtect((void *)(uintptr_t)page, 0x1000, PAGE_READWRITE, &old);
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    __atomic_fetch_add(&trap_count[t - 1], 1, __ATOMIC_RELAXED);
+    int slot = trap_fn ? trap_fn(addr, (uint64_t)ep->ContextRecord->Rip) : -1;
+    if (slot >= 0 && trap_bt) {
+        uint64_t fr[24];
+        trap_bt(slot, fr, trap_unwind(ep->ContextRecord, fr, 24));
+    }
+    if (write && fault_hook) fault_hook(addr);   // a frozen region: thawed as any write would
+    VirtualProtect((void *)(uintptr_t)page, 0x1000, PAGE_READWRITE, &old);
+    trap_rearm = page;
+    ep->ContextRecord->EFlags |= 0x100u;
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+int plat_trap_set(const uint64_t *pages, int n, int (*fn)(uint64_t addr, uint64_t ip),
+                  void (*bt)(int slot, const uint64_t *frames, int n)) {
+    static int added;
+    if (n > TRAP_MAX) n = TRAP_MAX;
+    __atomic_store_n(&trap_n, 0, __ATOMIC_RELEASE);
+    for (int i = 0; i < n; i++) {
+        trap_pages[i] = pages[i] & ~0xfffull;
+        if (!trap_was(trap_pages[i]) && trap_nknown < TRAP_MAX * 4) {
+            trap_known[trap_nknown] = trap_pages[i];
+            __atomic_store_n(&trap_nknown, trap_nknown + 1, __ATOMIC_RELEASE);
+        }
+    }
+    trap_fn = fn, trap_bt = bt;
+    for (int i = 0; i < TRAP_MAX; i++) trap_count[i] = 0;
+    if (!added && AddVectoredExceptionHandler(1, trap_veh)) added = 1;
+    __atomic_store_n(&trap_n, n, __ATOMIC_RELEASE);
+    plat_trap_arm();
+    return added ? n : 0;
+}
+
+void plat_trap_arm(void) {
+    int n = __atomic_load_n(&trap_n, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < n; i++) {
+        if (trap_count[i] >= trap_limit()) continue;   // hot: left writable
+        DWORD old;
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((void *)(uintptr_t)trap_pages[i], &mbi, sizeof mbi) && mbi.State == MEM_COMMIT &&
+            (mbi.Protect & 0xff) == PAGE_READWRITE)
+            VirtualProtect((void *)(uintptr_t)trap_pages[i], 0x1000, trap_prot(), &old);
+    }
+}
+
+void plat_trap_clear(void) {
+    int n = __atomic_exchange_n(&trap_n, 0, __ATOMIC_ACQ_REL);
+    for (int i = 0; i < n; i++) {
+        DWORD old;
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((void *)(uintptr_t)trap_pages[i], &mbi, sizeof mbi) && mbi.State == MEM_COMMIT &&
+            ((mbi.Protect & 0xff) == PAGE_READONLY || (mbi.Protect & 0xff) == PAGE_NOACCESS))
+            VirtualProtect((void *)(uintptr_t)trap_pages[i], 0x1000, PAGE_READWRITE, &old);
+    }
+}
+
+
+// ReadProcessMemory on this process: an unreadable page makes it fail instead of faulting, without the VirtualQuery
+// per piece that plat_mem_readable costs (about 0.6 ms each in a running game).
+int plat_mem_read_safe(uint64_t addr, void *out, uint64_t n) {
+    SIZE_T got = 0;
+    return ReadProcessMemory(GetCurrentProcess(), (LPCVOID)(uintptr_t)addr, out, (SIZE_T)n, &got) && got == n;
+}
+
 static void (*crash_fn)(const PlatCrash *c);
 
 static LONG CALLBACK crash_veh(EXCEPTION_POINTERS *ep) {

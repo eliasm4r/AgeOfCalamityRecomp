@@ -45,6 +45,8 @@ int input_capture(int reset, int *id);
 uint32_t input_key_char(int key);
 // F8, the flight recorder's key (no KEY_ id), held while the game window is in front.
 int input_flight_key(void);
+int input_stepscan_key(void);   // F9 held while the game window has focus (stepscan.c)
+void input_force_lstick(int on, int32_t x, int32_t y);   // hold this left-stick tilt over the pads (stepscan.c)
 
 // Mouse camera and cursor (input_win.c, Win32 window thread). The window procedure calls input_window_msg first for raw
 // mouse input, cursor hiding and confinement; it returns 1 with *res set when the message is handled. input_cursor_suspend(1)

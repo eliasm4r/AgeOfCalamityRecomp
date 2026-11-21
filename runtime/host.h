@@ -308,6 +308,8 @@ void *rt_patch_page(void);                                 // the page the patch
 void frame_step_init(void);                                // reads the frame rate setting (ACR_FPS_LIMIT)
 int frame_step_interval(void);                             // vsyncs per game frame: 2 at 30 fps, 1 above
 uint64_t frame_step_period_ns(void);                       // the time between two presents the setting asks for
+void frame_step_force_hz(int hz);                          // hold this rate over the setting (step scan), 0 releases it
+void stepscan_present(void);                               // stepscan.c: F9 / ACR_STEPSCAN diagnosis, at every present
 double frame_step_limit_hz(void);                         // the frame rate set, 30 to 240 (overlay); 0 unknown
 int64_t frame_step_world_us(void);                         // game time since the loaded save's first frame, -1 before
                                                            // (ACR_FPS_LIMIT, live)

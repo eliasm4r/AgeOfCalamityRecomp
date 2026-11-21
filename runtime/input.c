@@ -113,6 +113,13 @@ static void script_load(void) {
     rt_log("input: script %s, %d events", path, script_n);
 }
 
+// A left-stick tilt held over the pads' (stepscan.c: the map cursor moves at a constant speed during a scan).
+static volatile int32_t force_on, force_l[2];
+void input_force_lstick(int on, int32_t x, int32_t y) {
+    force_l[0] = x, force_l[1] = y;
+    __atomic_store_n(&force_on, on, __ATOMIC_RELEASE);
+}
+
 static void script_apply(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     if (!script_state) script_load();
     if (!script_n) return;
@@ -554,6 +561,11 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
         }
     }
     script_apply(&b, sl, sr);
+    if (__atomic_load_n(&force_on, __ATOMIC_ACQUIRE)) {   // stepscan.c
+        static int logs;
+        if (logs++ < 3) rt_log("input: left stick held at %d %d (step scan)", force_l[0], force_l[1]);
+        sl[0] = force_l[0], sl[1] = force_l[1];
+    }
     rec_apply(b, sl, sr);
     diag_attack_button((b >> B_Y & 1) != 0);
     // L3+R3: a tap steps the performance overlay (F10); held ACR_QUICK_HOLD_MS (default 1500) opens the quick menu,
