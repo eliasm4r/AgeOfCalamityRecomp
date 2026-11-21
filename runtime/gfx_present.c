@@ -248,6 +248,10 @@ static void window_settings_live(void) {
 // ---- swapchain
 static const char *g_present_got = "";   // the ACR_VK_PRESENT value of the mode the swapchain got; "" before one
 
+// Mailbox, the default, is missing on some drivers (AMD's on Windows): FIFO_RELAXED takes its place where the surface
+// has it, a vsync that shows a frame that missed its refresh at once (with a tear) instead of holding it for the next,
+// so a GPU-bound 50 fps on a 60 Hz screen does not judder between 60 and 30. FIFO otherwise, which every driver has.
+// The modes the surface offers go to the log once, for reports from other graphics cards.
 static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
     const char *e = cfg_value("ACR_VK_PRESENT");
     VkPresentModeKHR want = !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
@@ -258,9 +262,26 @@ static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
     if (n > 16) n = 16;
     vkGetPhysicalDeviceSurfacePresentModesKHR(pd, g_surface, &n, m);
     VkPresentModeKHR got = VK_PRESENT_MODE_FIFO_KHR;
-    for (uint32_t i = 0; i < n; i++) if (m[i] == want) got = want;
-    const char *name = got == VK_PRESENT_MODE_MAILBOX_KHR ? "mailbox" : got == VK_PRESENT_MODE_IMMEDIATE_KHR ? "immediate" : "fifo";
+    int relaxed = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (m[i] == want) got = want;
+        if (m[i] == VK_PRESENT_MODE_FIFO_RELAXED_KHR) relaxed = 1;
+    }
+    if (got != want && want == VK_PRESENT_MODE_MAILBOX_KHR && relaxed) got = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+    static const char *const names[] = {"immediate", "mailbox", "fifo", "fifo_relaxed"};   // VkPresentModeKHR 0..3
+    const char *name = names[got];
     __atomic_store_n(&g_present_got, name, __ATOMIC_RELEASE);
+    static int listed;
+    if (!listed) {
+        listed = 1;
+        char list[128] = "";
+        for (uint32_t i = 0; i < n; i++) {
+            size_t k = strlen(list);
+            if (m[i] <= 3) snprintf(list + k, sizeof list - k, "%s%s", k ? " " : "", names[m[i]]);
+            else snprintf(list + k, sizeof list - k, "%s%d", k ? " " : "", (int)m[i]);   // an extension's mode
+        }
+        rt_log("gfx: the surface offers present modes %s", list);
+    }
     static int logged = -1;   // the mode last logged: a change from the menu shows in the log
     if ((int)got != logged) {
         logged = (int)got;

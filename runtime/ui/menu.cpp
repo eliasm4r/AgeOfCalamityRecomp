@@ -628,14 +628,15 @@ static void row_fps_limit() {
 static const char *present_name(const char *mode) {
     static const struct { const char *mode; UiTextId name; } names[] = {
         {"mailbox", UI_MENU_PRESENT_MAILBOX}, {"fifo", UI_MENU_PRESENT_VSYNC}, {"immediate", UI_MENU_PRESENT_IMMEDIATE},
+        {"fifo_relaxed", UI_MENU_PRESENT_ADAPTIVE},
     };
     for (const auto &n : names)
         if (!strcmp(n.mode, mode)) return menu_text(n.name);
     return nullptr;
 }
 
-// "in use: VSync" under the Presentation value when the swapchain got another mode than the setting (a driver without
-// mailbox gets fifo); NULL when they agree or before the first swapchain.
+// "in use: Adaptive VSync" under the Presentation value when the swapchain got another mode than the setting (a driver
+// without mailbox gets fifo_relaxed, else fifo); NULL when they agree or before the first swapchain.
 static const char *present_note(void) {
     const char *got = gfx_window_present_mode(), *name = present_name(got);
     if (!*got || !strcmp(got, cfg_value("ACR_VK_PRESENT")) || !name) return nullptr;

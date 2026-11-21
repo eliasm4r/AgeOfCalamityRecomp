@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Presentation on graphics cards without Mailbox** (AMD on Windows, issue #4): the game fell back to plain VSync,
+  which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
+  Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
+  shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
+
 ## 0.1.1
 
 ### Fixed
