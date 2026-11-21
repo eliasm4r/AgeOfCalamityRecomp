@@ -92,8 +92,9 @@ the Steam Deck version), extracts the game code from your files, translates it a
 <summary><b>Updating to a new version</b></summary>
 <br>
 
-On Windows, extract the new zip anywhere, start its setup, keep the same install folder and press **Update**. On
-Linux, extract the new package over the old folder and build again. Your `build` and `dist` folders stay, so only what
+On Windows, extract the new zip anywhere, start its setup, keep the same install folder and press **Update**: the
+setup sees the installed game and updates it from the game data its first build extracted, so your NSPs and
+`prod.keys` are not needed again. On Linux, extract the new package over the old folder and build again. Your `build` and `dist` folders stay, so only what
 changed is redone, usually in minutes. Saves and settings (`dist/*/profile`, `dist/*/settings.ini`) are never overwritten.
 With **RecompLauncher**, the game is built again by itself after an update.
 </details>

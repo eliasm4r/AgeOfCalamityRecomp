@@ -84,6 +84,13 @@ def game_ready(root=None):
     return (game_dir(root) / ("AgeOfCalamityRecomp.exe" if WIN else "AgeOfCalamityRecomp")).is_file()
 
 
+def updatable(root=None):
+    """An installed game with the code and data its first build extracted: it updates without the NSPs (make_build.py
+    --update), like PokePark's setup."""
+    base = Path(root) if root else ROOT
+    return game_ready(base) and (base / "build/v130/exefs/main").is_file() and (base / "build/v130/romfs.bin").is_file()
+
+
 # ---- the install folder (Windows package only)
 def ours(folder):
     """A folder the setup may write into: an install, or the unpacked package itself."""
@@ -522,9 +529,26 @@ class App:
         self.folder.trace_add("write", lambda *change: self.refresh())
         self.install.trace_add("write", lambda *change: self.refresh())
         self.steps = []
+        self.updating = self.dump_cleared = False
         self.refresh()
 
     def refresh(self):
+        if PACKAGED:
+            text = self.install.get().strip().strip('"')
+            problem = install_problem(text)
+            self.updating = not problem and updatable(Path(text))
+        else:
+            problem, self.updating = "", updatable()
+        if self.updating and self.folder.get() and not self.build:
+            self.dump_cleared = True
+            return self.folder.set("")   # an update reads no NSPs; the folder's trace calls refresh again
+        if not self.updating and self.dump_cleared and not self.build:   # another folder: the last build's NSPs again
+            self.dump_cleared = False
+            if self.settings.values["game_dir"]:
+                return self.folder.set(self.settings.values["game_dir"])
+        if not self.build:
+            for w in (self.folder_entry, self.folder_button):
+                w.configure(state="disabled" if self.updating else "normal")
         found = scan_dump(self.folder.get().strip().strip('"'))
         unnamed = found["nsp"] >= 2 and not (found["base"] or found["update"])
         for name, mark, text in self.found:
@@ -542,16 +566,13 @@ class App:
             optional = name == "dlc"
             mark.configure(text="\u2713" if ok else ("\u2013" if optional else "\u2717"),
                            foreground="#1a7f37" if ok else ("#666" if optional else "#c62828"))
-            text.configure(text=f"{T[name]}: {detail}")
+            text.configure(text=f"{T['update_nsp' if name == 'update' else name]}: {detail}")
         self.files_ok = ((found["base"] and found["update"]) or found["nsp"] >= 2) and found["keys"]
         if PACKAGED:
-            text = self.install.get().strip().strip('"')
-            problem = install_problem(text)
-            there = not problem and game_ready(Path(text))
-            self.install_note.configure(text=problem or (T["installed_here"] if there else ""),
+            self.install_note.configure(text=problem or (T["installed_here"] if self.updating else ""),
                                         foreground="#c62828" if problem else "#666")
-            if not self.build:
-                self.main_button.configure(text=T["update"] if there else T["build"])
+        if not self.build:
+            self.main_button.configure(text=T["update"] if self.updating else T["build"])
         if self.deck.get():
             self.deck_panel.grid()
         else:
@@ -594,7 +615,8 @@ class App:
 
     def save_choices(self):
         s = self.settings.values
-        s["game_dir"] = self.folder.get().strip().strip('"')
+        if not self.updating:   # an update leaves the NSP folder of the last build in setup.ini
+            s["game_dir"] = self.folder.get().strip().strip('"')
         s["windows"] = "1" if self.windows.get() else "0"
         s["deck"] = "1" if self.deck.get() else "0"
         s["with_romfs"] = "1" if self.with_romfs.get() else "0"
@@ -605,7 +627,7 @@ class App:
         self.settings.save()
 
     def start(self, check_only):
-        if not self.files_ok:
+        if not (self.updating or self.files_ok):
             return messagebox.showwarning(T["window"], T["need_files"], parent=self.root)
         windows = WIN and self.windows.get()
         deck = self.deck.get()
@@ -627,7 +649,7 @@ class App:
                 return messagebox.showwarning(T["window"], str(error), parent=self.root)
         self.save_choices()
         s = self.settings.values
-        args = ["--game-dir", s["game_dir"]]
+        args = ["--update"] if self.updating else ["--game-dir", s["game_dir"]]
         if deck:
             args.append("--deck")
             if self.with_romfs.get():

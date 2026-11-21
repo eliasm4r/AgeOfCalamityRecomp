@@ -108,6 +108,10 @@ TEXT = {
     "dlss_kept": "a DLSS library of another version is already in the game folder: kept",
     "dlss_failed": "WARNING: NVIDIA DLSS could not be downloaded ({0}). The game runs without DLAA; the next build tries again",
     "shaders_kept": "the shaders are already prepared for this translator",
+    "update_from": "update: from the game data the first build extracted ({0}), without the NSPs",
+    "no_extracted": "the game data the first build extracted is not in {0}: choose the folder with your NSPs and "
+                    "prod.keys and build again",
+    "dlc_kept": "update: the DLC unpacked by the first build are kept (to add one, build from your NSP folder)",
     "prompts_failed": "WARNING: the Xbox and PlayStation button prompts could not be made ({0}); the game keeps the Switch ones",
     # what tools/extract.py inventory found wrong in the dump ("@@PROBLEM <code> <detail>")
     "p_base": "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)",
@@ -302,7 +306,34 @@ def mem_gib() -> float:
 
 # ---- steps
 
+def extracted() -> bool:
+    """The game code and data a first build extracted from the dump, which an update builds from (--update)."""
+    return (ROOT / "build/v130/exefs/main").is_file() and (ROOT / "build/v130/romfs.bin").is_file()
+
+
 def s_check(args) -> None:
+    if args.update:
+        if not extracted():
+            raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
+        out(tr("update_from", ROOT / "build/v130"))
+    else:
+        check_dump(args)
+    if args.windows and not WIN:
+        raise StepFailed(tr("no_win_linux"))
+    if args.send and not args.deck:
+        raise StepFailed(tr("send_deck"))
+    # Space: the RomFS merge holds the NCAs (~11 GB) and the image (10.9 GB) at once; each build ~6-8 GB.
+    need = (23 if not (ROOT / "build/v130/romfs.bin").is_file() else 0) + 7 * args.deck + 9 * args.windows
+    free = shutil.disk_usage(ROOT).free / 1e9
+    out(f"{ROOT}: {free:.0f} GB")
+    if free < need:
+        raise StepFailed(tr("disk", ROOT.anchor or ROOT, free, need))
+    ram = mem_gib()
+    if ram and ram < 7.5:
+        out(tr("ram", ram))
+
+
+def check_dump(args) -> None:
     g = args.game_dir
     if not g.is_dir():
         raise StepFailed(tr("no_dir", g))
@@ -328,19 +359,6 @@ def s_check(args) -> None:
                [tr("update")] * (not any(UPDATE_ID in p.name.upper() for p in nsps))
         if miss:
             raise StepFailed(tr("missing", ", ".join(miss)))
-    if args.windows and not WIN:
-        raise StepFailed(tr("no_win_linux"))
-    if args.send and not args.deck:
-        raise StepFailed(tr("send_deck"))
-    # Space: the RomFS merge holds the NCAs (~11 GB) and the image (10.9 GB) at once; each build ~6-8 GB.
-    need = (23 if not (ROOT / "build/v130/romfs.bin").is_file() else 0) + 7 * args.deck + 9 * args.windows
-    free = shutil.disk_usage(ROOT).free / 1e9
-    out(f"{ROOT}: {free:.0f} GB")
-    if free < need:
-        raise StepFailed(tr("disk", ROOT.anchor or ROOT, free, need))
-    ram = mem_gib()
-    if ram and ram < 7.5:
-        out(tr("ram", ram))
 
 
 def wsl_ready() -> bool:
@@ -457,6 +475,8 @@ def s_extract(args) -> str:
         if capture(inspect).returncode == 0:
             return "skip"
         out(tr("stale_exefs"))
+    if args.update:
+        raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
     if exefs.is_dir():
         shutil.rmtree(exefs)
     run([tool_python(), ROOT / "tools/extract.py", "exefs", "--game-dir", args.game_dir, "--keys", args.keys])
@@ -482,9 +502,13 @@ def s_romfs(args) -> str:
     if rom.is_file():
         if not want or rom.stat().st_size == want:
             return "skip"
+        if args.update:
+            raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
         out(tr("stale_romfs", rom.stat().st_size))   # merged with another update by an earlier attempt
         rom.unlink()
         rom.with_name("romfs.bin.sha256").unlink(missing_ok=True)
+    if args.update:
+        raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
     run([tool_python(), ROOT / "tools/merge_romfs.py", "--game-dir", args.game_dir, "--keys", args.keys])
     got = rom.stat().st_size if rom.is_file() else 0
     if want and got != want:
@@ -495,6 +519,9 @@ def s_romfs(args) -> str:
 
 def s_dlc(args) -> str:
     # finds the DLC NCAs by content, checks their hash trees and skips the images already extracted
+    if args.update:
+        out(tr("dlc_kept"))
+        return "skip"
     run([tool_python(), ROOT / "tools/extract_dlc.py", "--game-dir", args.game_dir, "--keys", args.keys])
     return "ok"
 
@@ -708,6 +735,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files", help="folder with the NSPs and prod.keys")
     ap.add_argument("--keys", type=Path, help="key file (default: prod.keys in the game folder)")
+    ap.add_argument("--update", action="store_true",
+                    help="update an install from the game data its first build extracted (build/v130): no NSPs read")
     ap.add_argument("--deck", action="store_true", help="Steam Deck / Linux folder (dist/steamdeck)")
     ap.add_argument("--windows", action="store_true", help="Windows version (dist/windows)")
     ap.add_argument("--with-romfs", action="store_true", help="Deck: also put romfs.bin in the folder (first install)")
