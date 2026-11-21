@@ -24,7 +24,7 @@
 #define STACK_OFF 0x10000000ull
 #define STACK_SIZE 0x10000000ull
 #define HEAP_OFF (STACK_OFF + STACK_SIZE + 0x10000000ull)
-#define HEAP_CAP (4 * GiB)
+#define HEAP_CAP (4 * GiB)               // the heap region, or the pool rounded up to a GiB when larger (mem_init)
 #define ALIAS_SIZE (64 * GiB)
 #define ALIAS_ALIGN (4 * GiB)
 #define ALIAS_PAGES (ALIAS_SIZE / PAGE)
@@ -235,16 +235,22 @@ void mem_init(void) {
     // depends on ACR_APP_POOL and on the resolution settings (resolution.c decides them once, on this first call).
     cfg_init();
     const char *pool = cfg_get("ACR_APP_POOL");
+    uint64_t size = pool ? strtoull(pool, NULL, 0)
+                         : DEFAULT_POOL + res_heap_extra_bytes() + res_buffer_pool_extra_bytes();   // resolution.c
+    if (!size) rt_fatal("memory: ACR_APP_POOL is 0");
+    // The heap region: 4 GiB, or more when a larger resolution grows the pool past it (resolution.c: 4.3 GiB with a
+    // 3840x2160 output and scene, whose heap the SDK asks for whole), up to the end of the low block.
+    uint64_t region = (size + GiB - 1) & ~(GiB - 1);
+    region = region < HEAP_CAP ? HEAP_CAP : region > LOW_SIZE - HEAP_OFF ? LOW_SIZE - HEAP_OFF : region;
     L = (RtGuestLayout){
         .aslr = {low, RT_ADDRESS_LIMIT - low},
         .stack = {low + STACK_OFF, STACK_SIZE},
-        .heap = {low + HEAP_OFF, HEAP_CAP},
+        .heap = {low + HEAP_OFF, region},
         .alias = {alias, ALIAS_SIZE},
         .kernel = {RT_KERNEL_BASE, RT_KERNEL_SIZE},
         .hostfn = {RT_HOSTFN_BASE, RT_HOSTFN_SIZE},
-        .pool = pool ? strtoull(pool, NULL, 0) : DEFAULT_POOL + res_heap_extra_bytes(),   // resolution.c
+        .pool = size,
     };
-    if (!L.pool) rt_fatal("memory: ACR_APP_POOL is 0");
 }
 
 const RtGuestLayout *mem_layout(void) { return &L; }
@@ -276,7 +282,7 @@ static int inside(uint64_t a, uint64_t n, RtRange r) { return a >= r.base && n <
 // ---- 0x01 SetHeapSize
 uint32_t mem_set_heap_size(uint64_t size, uint64_t *addr) {
     plat_mutex_lock(&lock);
-    if (size > HEAP_CAP || size % 0x200000 || size + image_bytes() > L.pool) {
+    if (size > L.heap.size || size % 0x200000 || size + image_bytes() > L.pool) {
         plat_mutex_unlock(&lock);
         return R_INVALID_STATE;
     }

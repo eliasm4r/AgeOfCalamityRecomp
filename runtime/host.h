@@ -292,6 +292,7 @@ void ov_scan_tick(void);                                   // ov_system.c: ACR_S
 uint64_t res_heap_extra_bytes(void);                       // added to the application pool (mem_init), 2 MiB steps
 uint64_t res_heap_extra_kib(void);                         // the targets' growth over the game's sizes; 0 = none
 uint64_t res_texpool_extra_bytes(void);                    // the game's texture pool growth (set texpool), out of that pool growth
+uint64_t res_buffer_pool_extra_bytes(void);                // the game's GPU buffer pool growth (set texpool), added to the pool
 void res_init(void);                                       // after rt_patches_init: the patch page and the sets
 float res_dlss_lod_bias(void);                             // ACR_DLSS upscaling: texture LOD bias (<= 0)
 void res_sizes(unsigned out[2], unsigned scene[2]);      // the output and scene sizes in effect (the game's own

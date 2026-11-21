@@ -391,6 +391,18 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   at most 2880x1620 pixels. On outputs other than 1920x1080 the game's scaling draw (scene to output) is a quad in the
   1920x1080 layout units, and DLSS (`vk_dlaa_scale_draw`) now accepts it. DLSS modes at 1280x720 still never reach the
   scaling draw (the DLAA point is not armed there; not looked into).
+- The 175 % stop and the 3840x2160 one were the heap's first pool: 215 MiB with NVN flags 0x22 (CPU uncached, GPU
+  cached: buffers), set at `main+0x8aece8` (`mov w11, #0xd700000`). The object `main+0x151daf4` passed on is the
+  movie player's (`[x20+0x4a0]`), whose buffer was never made. The end of the furthest buffer or texture made in that
+  pool, on the save route with the pool grown: 167 MiB at Game, 181 at 100 %, 223 at 150 %, 249 at 175 %, 278 at
+  200 % and 278 with a 3840x2160 output at 100 %, so 15.6 MiB more per million scene pixels and nothing for the
+  output's size. It is an upper bound (150 % played in 215 MiB). The `texpool` set reads that size from patch page
+  +128 and grows it by 16 MiB per million scene pixels over 1440x810 (`res_buffer_pool_extra_bytes`, 116 MiB at
+  3840x2160), which keeps the game's own 48 MiB margin; the GPU heap and the application pool grow by as much. With
+  it, 175 % and 200 % load a save and play a new game's first battle, and so does a 3840x2160 output at 100 %; the
+  texture pool at 200 % holds up to 2077 MiB of its 2190. A 3840x2160 output and scene make a 4.3 GiB application
+  pool, and the heap the SDK asks for no longer fit the 4 GiB heap region (`SetHeapSize` failed with `0xd401`), so
+  `mem_init` sizes the region from the pool (5 GiB there, 4 GiB at any smaller size). A larger scene was never measured and is brought back to 3840x2160 pixels.
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 
