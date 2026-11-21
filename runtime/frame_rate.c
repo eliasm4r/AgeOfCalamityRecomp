@@ -131,6 +131,13 @@ static void fps_block(double dt) {
     if (set == -2) set = rt_patch_set("vsync");
     b[2] = rt_patch_enabled(set) ? (uint32_t)(vs * 65536.0 + 0.5) : (uint32_t)fps;
     memcpy(&b[3], &f, sizeof f);
+    // patch page +0: the 30 Hz ratio, the vsyncs of this update over the game's own 2 (set cursor: code that steps by a
+    // fixed amount per update, recomp/patches-v130.txt)
+    uint8_t *page = rt_patch_page();
+    if (page) {
+        float ratio = (float)(vs / 2.0);
+        memcpy(page, &ratio, sizeof ratio);
+    }
 }
 
 // ---- ACR_TRACE=perf speed lines

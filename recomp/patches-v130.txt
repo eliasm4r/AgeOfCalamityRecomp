@@ -257,6 +257,14 @@ site vsync main f9b418 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
 site vsync main f9b420 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
 site vsync main fa5d90 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
 site vsync main fa5da4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+# The free cursor (world map, and the other menus that move a pointer with the stick): main+0xce4c00 adds the stick's
+# step ([this+0xb4], [this+0xb8], integers set from the stick by main+0xce71e0) times a speed from the game's parameter
+# table ([param+0x1e0]) to the cursor's position once per update, with no frame time: at 60 fps it crossed the map in
+# 2 s instead of 5 (GitHub issues #1 to #3). Found with runtime/stepscan.c (the stick's readers, then the cursor's
+# writer). The speed is now multiplied by the 30 Hz ratio at page +0 (runtime/frame_rate.c: vsyncs per update / 2),
+# as TotK's patch set cursor. x12 and s4 are scratch there (x12 is loaded again before its next use, s4 unused).
+set  cursor ACR_PATCH_CURSOR 1
+site cursor main ce4fdc bd41e183 bd41e183 @page:x12 bd400184 1e240863   # ldr s3,[x12,#0x1e0] ; *= [page] (fmul s3,s3,s4)
 
 # main: 1090 spin waits
 spin main 8de78 8deac   # 6 instructions; loads

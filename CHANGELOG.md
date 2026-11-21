@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **World map cursor twice as fast at 60 fps** (issues #1 to #3): the cursor moved by a fixed step per game update,
+  so at 60 fps it crossed the map in 2 seconds instead of 5. Its step now follows the frame rate (patch set `cursor`,
+  `ACR_PATCH_CURSOR=0` turns it off). The same holds for the other menus that move a pointer with the stick.
+
 ## 0.1.1
 
 ### Fixed
