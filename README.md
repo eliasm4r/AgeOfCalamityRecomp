@@ -67,7 +67,7 @@ yet (above 60 the game steps by the real time of each frame, as in the TotK reco
    example in Downloads (on Linux, extract it where the game should live).
 2. Start **`AgeOfCalamityRecomp Setup.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
 3. In the setup window:
-   - on Windows, choose where to install the game (about 25 GB; `%LOCALAPPDATA%\AgeOfCalamityRecomp` by default);
+   - on Windows, choose where to install the game (about 26 GB; `%LOCALAPPDATA%\AgeOfCalamityRecomp` by default);
    - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
      update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
      identifies them by their contents;
@@ -104,7 +104,7 @@ With **RecompLauncher**, the game is built again by itself after an update.
 
 | What | Where | Size |
 |---|---|---|
-| The setup, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 25 GB |
+| The setup, the extracted game data, the finished folders | the install folder (`build/`, `dist/`) | about 26 GB |
 | Linux for Windows (Steam Deck version only) | WSL distro **AgeOfCalamityRecomp**, in `%LOCALAPPDATA%\AgeOfCalamityRecomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
 | Linux: build folder and Python packages | `~/AgeOfCalamityRecomp-build`, `~/.venvs/AgeOfCalamityRecomp` | about 6 GB |
@@ -118,7 +118,7 @@ To remove everything, delete the install folder; on Windows also run `wsl --unre
 - **System**: Windows 10 (2004 or newer) or 11, or 64-bit Linux with `python3`
 - **Memory**: 8 GB of RAM, 16 GB recommended
 - **Graphics**: a Vulkan 1.3 graphics card (any recent NVIDIA, AMD or Intel)
-- **Disk space**: about 45 GB during the first build, about 25 GB afterwards
+- **Disk space**: about 46 GB during the first build, about 26 GB afterwards
 - **Internet**: only for the first build, to download the tools
 - **Game**: your own dump of the base game, update **1.3.0** and optionally the DLCs, with your `prod.keys`
 

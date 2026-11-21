@@ -30,7 +30,7 @@ other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setu
             has an NVIDIA RTX GPU (skipped otherwise; a failed download warns and the game runs without DLAA)
   shaders   every game shader translated into dist/windows/shader-cache and built into the GPU driver's cache
             (tools/prepare_shaders.py, AgeOfCalamityRecomp.exe --prepare-shaders), so fights do not stutter; skipped
-            while shader-prepared.bin is newer than the translator id
+            while shader-prepared.bin is newer than the translator id and of the current version
   send      the Deck folder's changed files to the Steam Deck over SSH (tools/deck/deploy.sh --no-build)
 
 Nothing here reads or prints key values: the key file's path goes to the tools that need it.
@@ -669,11 +669,23 @@ def s_dlss(args) -> str:
 
 # ---- shaders (tools/prepare_shaders.py): every game shader translated and built into the GPU driver's cache before
 # the first fight, as TotK's setup prepares its shaders. Skipped when shader-prepared.bin is newer than the translator
-# id: the translations are keyed by it, so a rebuild of the game code keeps them.
+# id (the translations are keyed by it, so a rebuild of the game code keeps them) and of PREPARED_VERSION, the
+# runtime's PRP_VERSION (runtime/gfx_shader.c; 2: the refined variants too). Over an older one only what is missing is
+# translated.
+PREPARED_VERSION = 2
+
+
+def prepared_version(path: Path) -> int:
+    with open(path, "rb") as f:
+        head = f.read(12)   # "ACSPRP", 2 bytes, u32 version
+    return int.from_bytes(head[8:12], "little") if len(head) == 12 and head[:6] == b"ACSPRP" else 0
+
+
 def s_shaders(args) -> str:
     dist = ROOT / "dist/windows"
     done, xid = dist / "shader-prepared.bin", dist / "xlate.id"
-    if done.is_file() and xid.is_file() and done.stat().st_mtime >= xid.stat().st_mtime:
+    if (done.is_file() and xid.is_file() and done.stat().st_mtime >= xid.stat().st_mtime
+            and prepared_version(done) >= PREPARED_VERSION):
         out(tr("shaders_kept"))
         return "skip"
     msys(args, f"python3 -u tools/prepare_shaders.py {sh_quote(msys_path(dist))}")

@@ -38,6 +38,17 @@
   scene got the picture in its top left corner only, and the rest still held the colours of the last scene, shown
   unlit at 150 % and 200 %. The copy now covers the whole texture (patch set `hold`, `ACR_PATCH_HOLD=0` turns it off);
   checked at 125, 150 and 200 % on the same recorded inputs: the screen stays black while loading, as at 100 %.
+- **Long freeze when the first mission starts, on a first launch**: the setup translates each of the game's shaders
+  once, answering its questions about what it reads with defaults: a 2D texture at each slot, float vertex inputs.
+  Play binds something else to some of them: buffers where a shader fetches the light and decal lists, integer bone
+  and instance indices, 3D or cube textures, images. These variants were translated while the frame waited: on an
+  RTX 4070 the first frame of the tutorial battle took 2.6 s (2 s of it translation), and two more 0.8 and 0.9 s.
+  The setup now reads how each translated shader uses its textures and vertex inputs, and translates the variants
+  play asks for as well, and leaves out the default variant of a fragment shader that reads such a buffer (play never
+  used one). On the same recorded inputs from a new game, that first frame takes 0.5 to 0.6 s (the graphics driver
+  building the scene's pipelines, once) and nothing is translated during the 5 minutes (100 shaders before). The setup's
+  shader step takes about 3 minutes more (8.4 instead of 5.3 on that PC) and the shader cache 1.1 GB more (7.6 GB).
+  An install prepared by an earlier version prepares again at its next update, translating only the new variants.
 
 ### Added
 - **Render scale 150 %, 175 % and 200 %** (up to 3840x2160 for a 1920x1080 picture): the larger scenes that stopped
