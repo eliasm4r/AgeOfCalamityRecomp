@@ -33,6 +33,12 @@
   are copied now, 20 MiB a frame at 1080p. This weighs most where copies to the card are slow, such as the AMD cards
   of issue #4 (GPU at 99 % for little power).
 
+- **Unlit picture with a black rectangle after "New game" at render scales above 100 %**: while a new game loads, the
+  game copies the last picture into a texture of the scene's size, with a rectangle of the output's size. A larger
+  scene got the picture in its top left corner only, and the rest still held the colours of the last scene, shown
+  unlit at 150 % and 200 %. The copy now covers the whole texture (patch set `hold`, `ACR_PATCH_HOLD=0` turns it off);
+  checked at 125, 150 and 200 % on the same recorded inputs: the screen stays black while loading, as at 100 %.
+
 ### Added
 - **Render scale 150 %, 175 % and 200 %** (up to 3840x2160 for a 1920x1080 picture): the larger scenes that stopped
   the game as the second intro movie started were the same full texture pool, and from 175 % on the game's pool of

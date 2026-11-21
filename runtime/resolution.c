@@ -23,7 +23,10 @@
 // 3840x2160 output at 100 % (2026-11-21; 200 % ran at 47 fps on an RTX 4070 with a 60 fps limit).
 // A scene larger than 3840x2160 was never measured: it is brought back to that many pixels (SCENE_PIXELS). The
 // recorded first battle at 140 % held 59.8 fps with DLAA, GPU 7 ms on an RTX 4070; 200 % draws twice the pixels of 140.
-// The game's own final passes scale the scene to the output; the present scales the output to the window.
+// The game's own final passes scale the scene to the output; the present scales the output to the window. A scene
+// larger than the output switches on the hold set too: the game copies its held picture (the loading after "New game")
+// into a target of the scene's size with a rectangle of the output's, which left the rest of that target as the memory
+// was, an unlit picture of the last scene at 150 and 200 %.
 //
 // Patch page: +32 the output size and +40 the scene size, each {w, h} in one 64-bit word (width in the low half), the
 // form of the constants the patched instructions built; +112 the texture pool's size, +116 the GPU heap's and +128 the
@@ -184,6 +187,10 @@ void res_init(void) {
     memcpy(page + 120, &win, 8);
     rt_patch_switch(output, R.ow != BASE_W || R.oh != BASE_H);
     rt_patch_switch(scene, scene_on);
+    // The held picture covers a target larger than the output (recomp/patches-v130.txt, set hold; ACR_PATCH_HOLD=0
+    // turns it off)
+    const char *h = cfg_get("ACR_PATCH_HOLD");
+    if (!(h && !strcmp(h, "0"))) rt_patch_switch(rt_patch_set("hold"), R.sw > R.ow || R.sh > R.oh);
     int texpool = rt_patch_set("texpool");
     uint64_t grow = res_texpool_extra_bytes(), bgrow = res_buffer_pool_extra_bytes();
     if (texpool >= 0 && (grow || bgrow)) {
