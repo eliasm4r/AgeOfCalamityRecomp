@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Content guard: keeps game data, keys and generated files out of git.
 
-Modos:
+Modes:
     python3 tools/check_content.py --staged   # files in the index (pre-commit hook)
     python3 tools/check_content.py --all      # every tracked file (CI)
     python3 tools/check_content.py FILE...    # specific files

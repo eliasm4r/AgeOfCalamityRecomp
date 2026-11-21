@@ -36,7 +36,7 @@ def read_at(f: BinaryIO, offset: int, length: int) -> bytes:
     require(0 <= offset and 0 <= length <= MAX_READ, "Invalid or too large read")
     f.seek(offset)
     data = f.read(length)
-    require(len(data) == length, "Arquivo truncado")
+    require(len(data) == length, "Truncated file")
     return data
 
 

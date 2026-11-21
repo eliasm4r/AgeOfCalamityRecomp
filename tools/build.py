@@ -380,7 +380,7 @@ def fetch(url_sha: tuple[str, str], dst: Path) -> Path:
         return dst
     url, sha = url_sha
     dst.parent.mkdir(parents=True, exist_ok=True)
-    print(f"dist: baixando {url}")
+    print(f"dist: downloading {url}")
     part = dst.with_suffix(dst.suffix + ".part")
     subprocess.run(["curl", "-sL", "--http1.1", "--retry", "5", "-C", "-", "-o", str(part), url], check=True)
     h = hashlib.sha256()
@@ -403,7 +403,7 @@ def sniper_sysroot(work: Path) -> Path:
     tar = fetch(SNIPER_TAR, work / "dl" / "sniper-sysroot.tar.gz")
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
-    print("dist: extraindo o sysroot sniper")
+    print("dist: extracting the sniper sysroot")
     subprocess.run(["tar", "-xf", str(tar), "-C", str(root), "--wildcards", "--no-wildcards-match-slash",
                     *SNIPER_MEMBERS], check=True)
     for p in root.rglob("*"):
@@ -694,7 +694,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ninja-only", action="store_true", help="only writes guest.ninja, without compiling")
     ap.add_argument("--runtime-only", action="store_true", help="host: only compiles the runtime, without linking")
     ap.add_argument("--dist", default=str(ROOT / "dist" / "steamdeck"), help="dist: output folder for the Deck")
-    ap.add_argument("--xlate", action="store_true", help="dist: recompila o tradutor de shaders")
+    ap.add_argument("--xlate", action="store_true", help="dist: rebuilds the shader translator")
     ap.add_argument("--with-romfs", action="store_true", help="dist: also puts romfs.bin in (hard link on the same disk, else a copy)")
     ap.add_argument("steps", nargs="*", help="gen, guest, host, dist (default: gen, guest, host)")
     args = ap.parse_args(argv)
