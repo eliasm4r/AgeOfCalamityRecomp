@@ -22,6 +22,11 @@ int input_overlay_gate(int *held, uint64_t *buttons);   // L3+R3: 1 in the poll 
 typedef struct { int held, fired; uint64_t since; } InputQuickGate;
 int input_quick_gate(InputQuickGate *q, uint64_t *buttons, uint64_t now_ns, uint64_t hold_ns);
 int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly);
+// Player 2 (co-op, ov_input.c npad id 1): the second connected gamepad alone, 0 without one (ACR_PLAYER2=0: never).
+// Nothing while a menu or a text entry is open. Any thread.
+int input_poll_player2(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
+int input_player2_connected(void);
+int input_rumble2(uint16_t low, uint16_t high, uint32_t ms);   // input_rumble on player 2's gamepad
 // The gamepad layout in effect (PAD_LAYOUT_*, input_map.h; ACR_PAD_LAYOUT, live); -1 without a gamepad. Any thread.
 int input_pad_layout(void);
 // How far the open gamepad's left (pct[0]) and right (pct[1]) sticks are from the centre now, in percent of full

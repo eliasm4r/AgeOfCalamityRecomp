@@ -165,6 +165,10 @@ one does.
 | <kbd>F10</kbd> | Performance overlay |
 | <kbd>F11</kbd> | Full screen |
 
+**Two players:** connect a second controller, then press the left stick on the Hyrule map (**Two players**). The
+first controller (and the keyboard and mouse) plays player 1, the second one player 2, on a split screen. Each
+controller rumbles for its own player.
+
 <br>
 
 ## FAQ

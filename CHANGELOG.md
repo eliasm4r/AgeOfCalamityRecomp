@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Two-player co-op with a second controller** (issue #1): the game saw a single controller, so "Two players" on the
+  map found no one to join. A second connected controller is now player 2 (the game's controller 2, a full
+  controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
+  rumbles for its own player. If player 1's controller is unplugged, player 2's takes its place. `ACR_PLAYER2=0`
+  keeps the second controller out of the game.
+
 ## 0.1.1
 
 ### Fixed
