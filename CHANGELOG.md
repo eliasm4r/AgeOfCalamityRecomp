@@ -20,6 +20,10 @@
   of 1510 MiB, cut from a GPU heap of fixed size, and the larger scene filled it, so a story cutscene of the first
   battle loaded forever. Both now grow with the scene (patch set `texpool`, `ACR_PATCH_TEXPOOL=0` turns it off): 1786
   MiB at 140 %.
+- **Presentation on graphics cards without Mailbox** (AMD on Windows, issue #4): the game fell back to plain VSync,
+  which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
+  Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
+  shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
 
 ### Added
 - **Render scale 150 %** (2880x1620 for a 1920x1080 picture): the larger scenes that stopped the game as the second
@@ -30,10 +34,6 @@
   2880x1620 pixels (a larger one stops the game on loading a save): at 3840x2160, Game (75 %) gives exactly that and
   DLSS or the game's FSR brings it up to 4K. DLSS also runs at these sizes (the game's scaling draw there is in its
   1920x1080 layout units).
-- **Presentation on graphics cards without Mailbox** (AMD on Windows, issue #4): the game fell back to plain VSync,
-  which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
-  Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
-  shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
 - **Two-player co-op with a second controller** (issue #1): the game saw a single controller, so "Two players" on the
   map found no one to join. A second connected controller is now player 2 (the game's controller 2, a full
   controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
