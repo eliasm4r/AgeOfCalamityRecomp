@@ -9,22 +9,25 @@
 // Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 3840x2160: above
 // 1920x1080 the window's images take the output's size too, set output, and the HUD is drawn at that size from its
 // 1920x1080 layout), ACR_RENDER_SCALE = the scene's size relative to the output: "game" (default, 3/4, the game's
-// 1440x810 at 1080p) or a percentage up to 150, the scene keeping at most 2880x1620 pixels (SCENE_PIXELS).
+// 1440x810 at 1080p) or a percentage up to 200, the scene keeping at most 3840x2160 pixels (SCENE_PIXELS).
 // Above 100 the scene is larger than the output (supersampling), and the game's final passes scale it down. The game's
 // GPU texture pool is a fixed 1510 MiB in a GPU heap of fixed size (set texpool below): at 125 and 140 % the larger
 // targets filled it and a story cutscene of the first battle waited for memory forever (0.1.1 capped the scale at 100),
 // so both grow with the scene. The same pool stopped 148 % and more as the second intro movie started (main+0x18d3040
-// got no memory for a texture; the first battle at 150 % takes up to 1568 MiB of it): with it grown, 150 % plays the
-// first battle and the second one's opening cutscene (2026-11-21). Above, other limits of the game's: 175 % (3360x1890)
-// plays a new game's first battle but stops on loading a save (main+0x151daf4 passes a null object to main+0x17bf930),
-// 200 % (3840x2160) stops 18 s into the first battle on a null write. A 3840x2160 scene stops the same way with a
-// 3840x2160 output (on loading a save, 2026-11-21): the limit is the scene's size, so a larger one is brought back to
-// 2880x1620 pixels, the largest that played (150 % of 1080p, and "game" at 3840x2160). The recorded first battle at
-// 140 % held 59.8 fps with DLAA, GPU 7 ms on an RTX 4070; 150 % draws 1.15 times the pixels of 140.
+// got no memory for a texture; the first battle at 150 % takes up to 1568 MiB of it). The heap's 215 MiB pool of GPU
+// buffers stopped 175 % (3360x1890) on loading a save (the movie player main+0x151daf4 got a null buffer and passed it
+// to main+0x17bf930; 200 % stopped 18 s into the first battle on a null write): it holds 167 MiB at the game's scene
+// and 15.6 MiB more per million scene pixels (278 MiB at 3840x2160; measured 2026-11-21 by the end of its furthest
+// buffer or texture), so it grows by 16 MiB per million pixels over the game's 1440x810, which keeps its own 48 MiB
+// margin. With both pools grown, 175 and 200 % play a new game's first battle and load a save, and so does a
+// 3840x2160 output at 100 % (2026-11-21; 200 % ran at 47 fps on an RTX 4070 with a 60 fps limit).
+// A scene larger than 3840x2160 was never measured: it is brought back to that many pixels (SCENE_PIXELS). The
+// recorded first battle at 140 % held 59.8 fps with DLAA, GPU 7 ms on an RTX 4070; 200 % draws twice the pixels of 140.
 // The game's own final passes scale the scene to the output; the present scales the output to the window.
 //
 // Patch page: +32 the output size and +40 the scene size, each {w, h} in one 64-bit word (width in the low half), the
-// form of the constants the patched instructions built; +112 the texture pool's size and +116 the GPU heap's (32 bits).
+// form of the constants the patched instructions built; +112 the texture pool's size, +116 the GPU heap's and +128 the
+// buffer pool's (32 bits).
 //
 // The heap and DLSS code below came with the runtime (TOTK's resolution.c).
 #include <math.h>
@@ -42,7 +45,7 @@
 #define SCENE_H 810
 #define DTA_KIB 113664u      // DynamicTextureAllocatorMem, shipped
 #define SCENE_MAX 4096       // per side, as MacNativeGames' ACR_RENDER_RES
-#define SCENE_PIXELS (2880.0 * 1620.0)   // the largest scene that plays (header)
+#define SCENE_PIXELS (3840.0 * 2160.0)   // the largest scene measured (header)
 #define OUT_MAX_W 3840
 #define OUT_MAX_H 2160
 
@@ -82,11 +85,11 @@ static void decide(void) {
     } else if (strcmp(s, "game")) {
         char *end;
         double pct = strtod(s, &end);
-        if (end != s && !*end && pct >= 25 && pct <= 150) {
+        if (end != s && !*end && pct >= 25 && pct <= 200) {
             k = pct / 100.0;
             R.scene_set = 1;
         } else {
-            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..150; game", s);
+            rt_log("resolution: ACR_RENDER_SCALE=%s is not game or a percentage 25..200; game", s);
         }
     }
     double sw = R.ow * k, sh = R.oh * k;
@@ -99,7 +102,7 @@ static void decide(void) {
         R.sw = (unsigned)(R.sw * f) & ~1u;
         R.sh = (unsigned)(R.sh * f) & ~1u;
         R.scene_set = 1;
-        rt_log("resolution: a scene larger than 2880x1620 stops the game on loading a save; %ux%u", R.sw, R.sh);
+        rt_log("resolution: a scene larger than 3840x2160 was never measured; %ux%u", R.sw, R.sh);
     }
     // Below 1920x1080 the KTGL's 2D projection and full-screen quads take the layout size for any target as large as
     // the output (recomp/patches-v130.txt, set output): a scene of the output's size would have its own passes caught by
@@ -133,9 +136,19 @@ uint64_t res_heap_extra_bytes(void) { return ((res_heap_extra_kib() << 10) + 0x1
 // application pool, 175 % asked for more than the 4 GiB heap and the SDK stopped at SetHeapSize.)
 #define TEXPOOL_SIZE 0x5e600000u
 #define GPU_HEAP_SIZE 0x72204008u
-uint64_t res_texpool_extra_bytes(void) {
+static int texpool_off(void) {
     const char *e = cfg_get("ACR_PATCH_TEXPOOL");   // =0: the game's own sizes
-    return e && !strcmp(e, "0") ? 0 : res_heap_extra_bytes();
+    return e && !strcmp(e, "0");
+}
+uint64_t res_texpool_extra_bytes(void) { return texpool_off() ? 0 : res_heap_extra_bytes(); }
+
+// The pool of GPU buffers (+128): 215 MiB, grown by 16 MiB per million scene pixels over the game's 1440x810 (header),
+// in 2 MiB steps. mem_init adds it to the application pool and res_init to the heap.
+#define BUFFER_POOL_SIZE 0xd700000u
+uint64_t res_buffer_pool_extra_bytes(void) {
+    if (!bigger() || texpool_off()) return 0;
+    double px = (double)R.sw * R.sh - (double)SCENE_W * SCENE_H;
+    return px > 0 ? ((uint64_t)ceil(16.0 * px / 1e6 / 2.0) * 2) << 20 : 0;
 }
 
 // ---- start: the patch page and the sets
@@ -172,14 +185,16 @@ void res_init(void) {
     rt_patch_switch(output, R.ow != BASE_W || R.oh != BASE_H);
     rt_patch_switch(scene, scene_on);
     int texpool = rt_patch_set("texpool");
-    uint64_t grow = res_texpool_extra_bytes();
-    if (texpool >= 0 && grow) {
-        uint32_t sizes[2] = {TEXPOOL_SIZE + (uint32_t)grow, GPU_HEAP_SIZE + (uint32_t)grow};
+    uint64_t grow = res_texpool_extra_bytes(), bgrow = res_buffer_pool_extra_bytes();
+    if (texpool >= 0 && (grow || bgrow)) {
+        uint32_t sizes[2] = {TEXPOOL_SIZE + (uint32_t)grow, GPU_HEAP_SIZE + (uint32_t)(grow + bgrow)};
+        uint32_t buffers = BUFFER_POOL_SIZE + (uint32_t)bgrow;
         memcpy(page + 112, sizes, sizeof sizes);
+        memcpy(page + 128, &buffers, sizeof buffers);
         rt_patch_switch(texpool, 1);
-        rt_log("resolution: the game's texture pool grows by %llu MiB to %u MiB", (unsigned long long)(grow >> 20),
-               sizes[0] >> 20);
-    } else if (grow) {
+        rt_log("resolution: the game's texture pool grows by %llu MiB to %u MiB, its buffer pool by %llu MiB to %u MiB",
+               (unsigned long long)(grow >> 20), sizes[0] >> 20, (unsigned long long)(bgrow >> 20), buffers >> 20);
+    } else if (grow || bgrow) {
         rt_log("resolution: the generated C has no texpool patch set; the texture pool keeps its 1510 MiB");
     }
     R.on = 1;

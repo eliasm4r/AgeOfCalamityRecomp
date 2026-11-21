@@ -17,7 +17,8 @@ of the 2 MiB-aligned module slot free); the runtime commits it and owns its cont
 the field-of-view factor (runtime/resolution.c res_fov_live, set fov), +92..95 the sun shadow map size
 (runtime/resolution.c shadow_init, set shadow), +104..111 the UI layout size, 1920x1080 (runtime/resolution.c res_init, set output),
 +112..119 the sizes of the texture pool and of the GPU heap holding it (runtime/resolution.c res_init, set texpool),
-+120..127 the size of the window's images (runtime/resolution.c res_init, set output).
++120..127 the size of the window's images (runtime/resolution.c res_init, set output), +128..131 the size of the
+GPU buffer pool (set texpool).
 A new set takes words outside these.
 
 The replacement words are lifted at the site's address in place of the original instruction, and the generated C reads
