@@ -859,8 +859,11 @@ int vk_dlaa_scale_draw(VkExec *ex) {
     D.done = 1;   // one try a frame: a draw after this one is not the scaling draw
     float plo[2] = {0}, phi[2] = {0}, ulo[2] = {0}, uhi[2] = {0};
     int pos = quad_range(ex, 0x22, plo, phi), uv = quad_range(ex, 0x16, ulo, uhi);
-    int corners = pos && fabsf(plo[0]) < 0.5f && fabsf(plo[1]) < 0.5f && fabsf(phi[0] - (float)c->width) < 0.5f &&
-                  fabsf(phi[1] - (float)c->height) < 0.5f;
+    // The quad spans the output in pixels, or in the UI's 1920x1080 layout units when the output has another size (the
+    // KTGL's projection on the output target takes the layout size then: recomp/patches-v130.txt, set output).
+    int px = fabsf(phi[0] - (float)c->width) < 0.5f && fabsf(phi[1] - (float)c->height) < 0.5f;
+    int lu = fabsf(phi[0] - 1920.0f) < 0.5f && fabsf(phi[1] - 1080.0f) < 0.5f;
+    int corners = pos && fabsf(plo[0]) < 0.5f && fabsf(plo[1]) < 0.5f && (px || lu);
     float f = uhi[0];
     int share = uv && fabsf(ulo[0]) < 1e-3f && fabsf(ulo[1]) < 1e-3f && fabsf(uhi[1] - f) < 2e-3f && f > 0.25f &&
                 f < 1.0005f;

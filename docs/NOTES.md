@@ -364,7 +364,33 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   `main+0x8aecf8` (`mov w11, #0x5e600000`, next to 215 MiB at `0xd700000` and the 101 MiB shader pool): the same
   size at 100 and 140 %, so the application pool's growth never reaches it. Growing it alone (even by 32 MiB) makes
   `nnMain` give up right after the first `nvnMemoryPoolInitialize` (`main+0x4ee0`): its storage comes from another
-  fixed game heap. The menu offers up to 100 % until that heap is found.
+  fixed game heap.
+- That heap: `nnMain` allocates one GPU heap of a fixed **0x72204008** bytes (`main+0x8ad378`, `mov w1, #0x4008` and
+  `movk w1, #0x7220, lsl #16`; size kept at `[main+0x2b5f550]`, heap at `[main+0x2b5f4d8]`, its allocator object at
+  `main+0x2b5f9e8`, the one `[main+0x2b5fd40]` points to). `main+0x8b00c0` takes the three pools from it in order
+  (`main+0x8b1684`, `0x8b1774`, `0x8b17ec`, each a 4 KiB header then the pool) through that allocator's vtable +0x40:
+  215 + 1510 + 101 MiB + 3 headers fill it exactly. The `texpool` patch set reads both sizes from the patch page and
+  grows them by the same amount (the targets' growth, `res_heap_extra_bytes`), and the application pool grows by that
+  much more: at 140 % the pool is 1786 MiB and the game starts.
+- The 148 % stop was the same pool: the loader `main+0x18d3040` creates a texture for the second intro movie and gets
+  null when the pool is full. With it grown, 150 % (pool up to 1568 MiB used in the first battle) plays the first
+  battle and the second one's opening cutscene. Counting the growth once more in the application pool asked for more
+  than the 4 GiB heap at 175 % (`SetHeapSize` failed, `0xd401`), so the pool now comes out of the application pool's
+  growth. 175 % (3360x1890, pool 2004 MiB, up to 1792 used) plays a new game's first battle but stops on loading a save:
+  `main+0x151daf4` passes a null object (`[x24+0xb0]`) to `main+0x17bf930`, which reads `[null+0x48]`. 200 %
+  (3840x2160) stops 18 s into the first battle on a null write in lifted game code.
+- Outputs above 1920x1080: the device setup `main+0x17c34f0` sizes the window's images from the configuration when the
+  device's byte `[x20+0x2a32]` is clear and a fixed 1920x1080 (`main+0x17c3770` `mov w10, #0x780`, `main+0x17c3784`
+  `mov w11, #0x438`) when it is set, as it is. The game drew a 2560x1440 picture into 1920x1080 window images, and the
+  screen showed its top left corner (the window crop the game sets is the output's size, so it was not the crop). The
+  `output` set reads both constants from patch page +120; `res_init` writes the output there when it is larger, else
+  1920x1080, so smaller outputs are unchanged. Measured: 2560x1440 with the scene at Game (1920x1080) and 100 %, and
+  3840x2160 at Game (2880x1620), play the second story battle; the HUD is drawn at the output size from its 1920x1080
+  layout. 3840x2160 at 100 % (a 3840x2160 scene, 1012 MiB of growth) first asked for more than the 4 GiB heap, and
+  with the heap raised stopped on loading a save like 175 % at 1080p: the scene size is the limit, so the scene keeps
+  at most 2880x1620 pixels. On outputs other than 1920x1080 the game's scaling draw (scene to output) is a quad in the
+  1920x1080 layout units, and DLSS (`vk_dlaa_scale_draw`) now accepts it. DLSS modes at 1280x720 still never reach the
+  scaling draw (the DLAA point is not armed there; not looked into).
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 

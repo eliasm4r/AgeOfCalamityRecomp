@@ -544,10 +544,10 @@ static void row_window_size(void) {
     opt_choice_list("ACR_WINDOW_SIZE", UI_MENU_WINDOW_SIZE, pv, pn, n, UI_MENU_WINDOW_SIZE_DESC);
 }
 
-// The game resolution (resolution.c): the 16:9 sizes up to the game's own 1920x1080 (its texture heaps are sized for
-// that), and the current value when it is another size.
+// The game resolution (resolution.c): 16:9 sizes from 960x540 to 3840x2160 (the game's own is 1920x1080), and the
+// current value when it is another size.
 static void row_output_res(void) {
-    static const char *const vals[] = {"960x540", "1280x720", "1600x900", "1920x1080"};
+    static const char *const vals[] = {"960x540", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
     enum { N = sizeof vals / sizeof *vals };
     char shown[N][32];
     const char *names[N];
@@ -561,7 +561,7 @@ static void row_output_res(void) {
 }
 
 static void row_render_scale(void) {
-    static const char *const vals[] = {"game", "50", "60", "67", "85", "100"};
+    static const char *const vals[] = {"game", "50", "60", "67", "85", "100", "125", "140", "150"};
     enum { N = sizeof vals / sizeof *vals };
     char shown[N][32];
     const char *names[N];

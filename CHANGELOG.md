@@ -16,6 +16,20 @@
   about 230 updates a second), and each update stepped a whole frame's time: the game ran up to twice as fast. Each
   update now steps the time shown divided by the updates made in it; measured speed 1.00 at 120, 144 and 240 (it was
   1.91 at 240), and the cutscene above keeps the 30 fps timing at 240.
+- **Render scale 125 % and 140 % are back** (supersampling, issue of 0.1.0): the game keeps its GPU textures in a pool
+  of 1510 MiB, cut from a GPU heap of fixed size, and the larger scene filled it, so a story cutscene of the first
+  battle loaded forever. Both now grow with the scene (patch set `texpool`, `ACR_PATCH_TEXPOOL=0` turns it off): 1786
+  MiB at 140 %.
+
+### Added
+- **Render scale 150 %** (2880x1620 for a 1920x1080 picture): the larger scenes that stopped the game as the second
+  intro movie started were the same full texture pool. 175 % and 200 % still stop on other limits of the game.
+- **Game resolution 2560x1440 and 3840x2160** (Screen tab): the game draws its picture and its HUD at that size, so
+  text, icons and the minimap stay sharp on a 1440p or 4K screen. The game made its window's images a fixed 1920x1080,
+  so a larger picture showed only its top left corner; they now take the game resolution. The 3D scene keeps at most
+  2880x1620 pixels (a larger one stops the game on loading a save): at 3840x2160, Game (75 %) gives exactly that and
+  DLSS or the game's FSR brings it up to 4K. DLSS also runs at these sizes (the game's scaling draw there is in its
+  1920x1080 layout units).
 
 ## 0.1.1
 

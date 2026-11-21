@@ -42,8 +42,9 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 - **Native code, no emulation**: about 101,000 functions of the game translated to C and compiled for x86-64.
 - **Vulkan renderer**: NVN, the Switch's graphics API, reimplemented over Vulkan, with shaders translated once and kept
   for the next start.
-- **Sharper picture**: 3D scene up to 100 % of a 1920x1080 output instead of the Switch's 1440x810, FSR 1 upscaling,
-  NVIDIA DLSS / DLAA on RTX cards, anisotropic filtering, shadow quality, colour settings and HDR.
+- **Sharper picture**: game resolution up to 3840x2160 (the HUD drawn at that size), a 3D scene up to 2880x1620
+  (150 % of 1080p, supersampling) instead of the Switch's 1440x810, FSR 1 upscaling, NVIDIA DLSS / DLAA on RTX cards,
+  anisotropic filtering, shadow quality, colour settings and HDR.
 - **Steam Deck profile**: detected by itself, with full screen 1280x800, handheld render mode and a quick menu on
   **L3+R3**.
 - **Keyboard and mouse** and **Xbox, PlayStation and Switch controllers**, every key and button rebindable (the
