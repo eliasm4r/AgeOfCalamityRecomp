@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 ### Fixed
 - **World map cursor twice as fast at 60 fps** (issues #1 to #3): the cursor moved by a fixed step per game update,
@@ -24,6 +24,14 @@
   which holds a late frame for a whole refresh, so a GPU-bound 50 fps judders between 60 and 30. It now takes
   Adaptive VSync (FIFO relaxed) where the driver has it: frames on time wait for the refresh as before, a late one is
   shown at once. The menu shows "in use: Adaptive VSync", and the log lists the present modes the card offers.
+- **GPU busy in the performance overlay** now counts the copies made to the graphics card before each part of a frame
+  (VRAM mirror). They were counted as idle time, so on an RX 6800 running at 99 % the overlay showed 3 to 5 ms of GPU
+  work a frame (issue #4). At 1080p on an RTX 4070 the same scene reads 8.1 ms instead of 3.3 ms.
+- **Less GPU time a frame**: the game flushes about a dozen small ranges of its GPU buffer pool each frame (about
+  9 MiB at 1080p), and the runtime copied the whole span between the first and the last of them to the graphics card
+  every frame: about 115 MiB at 1080p, 3 ms of an RTX 4070 (11 ms with a 3840x2160 scene). Only the flushed ranges
+  are copied now, 20 MiB a frame at 1080p. This weighs most where copies to the card are slow, such as the AMD cards
+  of issue #4 (GPU at 99 % for little power).
 
 ### Added
 - **Render scale 150 %, 175 % and 200 %** (up to 3840x2160 for a 1920x1080 picture): the larger scenes that stopped
@@ -41,14 +49,6 @@
   controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
   rumbles for its own player. If player 1's controller is unplugged, player 2's takes its place. `ACR_PLAYER2=0`
   keeps the second controller out of the game.
-- **GPU busy in the performance overlay** now counts the copies made to the graphics card before each part of a frame
-  (VRAM mirror). They were counted as idle time, so on an RX 6800 running at 99 % the overlay showed 3 to 5 ms of GPU
-  work a frame (issue #4). At 1080p on an RTX 4070 the same scene reads 8.1 ms instead of 3.3 ms.
-- **Less GPU time a frame**: the game flushes about a dozen small ranges of its GPU buffer pool each frame (about
-  9 MiB at 1080p), and the runtime copied the whole span between the first and the last of them to the graphics card
-  every frame: about 115 MiB at 1080p, 3 ms of an RTX 4070 (11 ms with a 3840x2160 scene). Only the flushed ranges
-  are copied now, 20 MiB a frame at 1080p. This weighs most where copies to the card are slow, such as the AMD cards
-  of issue #4 (GPU at 99 % for little power).
 
 ## 0.1.1
 
