@@ -191,24 +191,40 @@ static int ts_open(VkCommandBuffer cb) {
     return (int)p;
 }
 
-// At its end, before vkEndCommandBuffer; fence: the value whose completion covers it.
-static void ts_close(VkCommandBuffer cb, int pair, uint64_t fence) {
+// At its end, before vkEndCommandBuffer.
+static void ts_write_end(VkCommandBuffer cb, int pair) {
     if (pair < 0) return;
     vkCmdWriteTimestamp(cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, ts_pool, 2 * (uint32_t)pair + 1);
     ts_sub_ns[pair] = 0;
     if (ts_n_unsent < 4) ts_unsent[ts_n_unsent++] = pair;
+}
+
+// Its read once fence (the value whose completion covers it) is reached. ts_read_cb takes the pairs in the order they were tracked as the GPU's order: a
+// prologue runs before its part, so it is tracked first. Tracked after the part, its copies counted as idle time
+// before the part and never as busy time (the perf overlay showed 3-5 ms of GPU work a frame on an RX 6800 at 99 %).
+static void ts_track(int pair, uint64_t fence) {
+    if (pair < 0) return;
     TsRead *t = malloc(sizeof *t);
     if (!t) rt_fatal("vk: out of memory");
     t->pair = (uint32_t)pair;
     vk_completion_add(fence, ts_read_cb, t);
 }
 
+// Both, for a command buffer timed on its own (a prologue).
+static void ts_close(VkCommandBuffer cb, int pair, uint64_t fence) {
+    ts_write_end(cb, pair);
+    ts_track(pair, fence);
+}
+
 // The pair of the part being recorded.
 static void ts_begin(VkCommandBuffer cb) { ts_cur = ts_open(cb); }
 
-static void ts_end(VkCommandBuffer cb, uint64_t fence) {
-    ts_close(cb, ts_cur, fence);
+// The part's closing timestamp: the pair it returns is tracked after the part's prologue.
+static int ts_end(VkCommandBuffer cb) {
+    int pair = ts_cur;
+    ts_write_end(cb, pair);
     ts_cur = -1;
+    return pair;
 }
 
 // An empty submission records no command buffer: its pair is never written.
@@ -366,10 +382,11 @@ static VkCommandBuffer prologue(VkCtx *c, uint64_t fence) {
 VkCommandBuffer vk_sync_split(void) {
     VkCtx *c = vk_ctx();
     VkCommandBuffer cb = slots[cur_slot].cb;
-    ts_end(cb, cur_fence);
+    int part = ts_end(cb);
     if (!rec_end_cb(cb, 0, 0)) vkEndCommandBuffer(cb);   // every command of the part is in cb, ended by its recorder
     vk_upload_flush(0);   // the uploads this part asked for precede it in queue order
     VkCommandBuffer pro = prologue(c, cur_fence);
+    ts_track(part, cur_fence);
     VkCommandBufferSubmitInfo cbi[2] = {{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = pro},
                                         {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb}};
     VkSubmitInfo2 si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = pro ? 2 : 1,
@@ -421,7 +438,8 @@ uint64_t vk_sync_submit(const uint64_t *handles, int n) {
     rec_begin(s->cb);
     int recorded = vk_exec_record(s->cb, handles, n, fence);
     s = &slots[cur_slot];   // the last part (vk_sync_split)
-    if (recorded) ts_end(s->cb, fence);
+    int part = -1;
+    if (recorded) part = ts_end(s->cb);
     else ts_drop();
     // The recorder is done with the part: the end-of-submission crumb, then the end, by the recorder when it records.
     if (!rec_end_cb(s->cb, VK_CRUMB_SUBMIT_END, fence)) vkEndCommandBuffer(s->cb);
@@ -429,6 +447,7 @@ uint64_t vk_sync_submit(const uint64_t *handles, int n) {
     // After the recording: the uploads it asked for (and every earlier one) precede it in queue order.
     vk_upload_flush(0);
     VkCommandBuffer pro = prologue(c, fence);
+    ts_track(part, fence);
     s = &slots[cur_slot];
     VkCommandBufferSubmitInfo cbi[2] = {{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = pro},
                                         {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = s->cb}};

@@ -41,6 +41,9 @@
   controller): the map's two-player prompt accepts it, the battle splits the screen and each controller drives and
   rumbles for its own player. If player 1's controller is unplugged, player 2's takes its place. `ACR_PLAYER2=0`
   keeps the second controller out of the game.
+- **GPU busy in the performance overlay** now counts the copies made to the graphics card before each part of a frame
+  (VRAM mirror). They were counted as idle time, so on an RX 6800 running at 99 % the overlay showed 3 to 5 ms of GPU
+  work a frame (issue #4). At 1080p on an RTX 4070 the same scene reads 8.1 ms instead of 3.3 ms.
 
 ## 0.1.1
 
