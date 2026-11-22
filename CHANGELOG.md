@@ -8,6 +8,7 @@
   build installs its own copy in `C:/AgeOfCalamityRecomp-tools/msys64` (about 1.5 GB).
 - **The game window comes to the front** when it opens, instead of staying behind the other windows. If Windows
   refuses (you moved to another program during the start), its taskbar button flashes.
+- **Aiming**: the left stick no longer moves the aim of the bow and the other aimed actions, only the right stick does.
 
 ## 0.3.0
 

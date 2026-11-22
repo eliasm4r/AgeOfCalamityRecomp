@@ -1432,3 +1432,14 @@ spin sdk 33fbe4 33fc14   # 13 instructions; loads
 spin sdk 371f48 372118 372120 372130   # 51 instructions; loads
 spin sdk 3723fc 372530 372540   # 33 instructions; loads
 spin sdk 372548 3725a4 3725b4   # 28 instructions; loads
+
+# Aiming (the bow and the other aimed actions): main+0x12ca20 and main+0x12cdc4 read the aim's step from the left stick
+# (controller slots 0x98, 0xa0) and fall back to the right stick (0xa8, 0xb0) only while the left one rests, so walking
+# stick input moved the aim. The two branches that skip the fallback are removed: only the right stick steers the aim.
+set  aimstick ACR_PATCH_AIMSTICK 1
+site aimstick main 12cd0c 540001e5 d503201f   # b.pl -> nop
+site aimstick main 12cd14 540001a5 d503201f
+site aimstick main 12ce70 540001e5 d503201f
+site aimstick main 12ce78 540001a5 d503201f
+site aimstick main 12cf8c 540001e5 d503201f
+site aimstick main 12cf94 540001a5 d503201f
