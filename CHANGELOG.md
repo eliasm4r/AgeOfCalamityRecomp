@@ -9,6 +9,8 @@
 - **The game window comes to the front** when it opens, instead of staying behind the other windows. If Windows
   refuses (you moved to another program during the start), its taskbar button flashes.
 - **Aiming**: the left stick no longer moves the aim of the bow and the other aimed actions, only the right stick does.
+  **Aim with the left stick** (Controls tab, and in RecompLauncher; off by default) brings the game's original aiming
+  back, at once.
 - **A `profile` folder that is a junction or symbolic link** (saves kept on another disk) no longer stops the game at
   start with "cannot create directory".
 
