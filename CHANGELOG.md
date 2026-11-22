@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 ### Added
 - **Dynamic resolution setting** (Screen tab, and in RecompLauncher): in battles the game draws the 3D scene smaller
