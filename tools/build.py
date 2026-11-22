@@ -229,13 +229,35 @@ def runtime_sources() -> list[Path]:
     """Every runtime/*.c, *.cpp, platform/*.c, ui/*.cpp and Dear ImGui, without the files of the other system (Win32); on
     Windows also runtime/AgeOfCalamityRecomp.rc (the AgeOfCalamityRecomp.exe manifest: per-monitor DPI and the UTF-8 code page)."""
     pats = ("*.c", "*.cpp", "*.rc", "platform/*.c", "ui/*.cpp", "third_party/imgui/*.cpp",
-            "third_party/imgui/backends/*.cpp")
+            "third_party/imgui/backends/*.cpp", "third_party/FidelityFX/sdk/src/shared/*.cpp",
+            "third_party/FidelityFX/sdk/src/backends/vk/*.cpp", "third_party/FidelityFX/sdk/src/components/*/*.cpp")
 
     def other_os(p: Path) -> bool:
         if WIN:
             return p.stem.endswith("_sdl") or p.name == "linux.c"
         return p.stem.endswith("_win") or p.name == "win32.c" or p.suffix == ".rc"
     return sorted(p for pat in pats for p in RUNTIME.glob(pat) if not other_os(p))
+
+
+FFX = RUNTIME / "third_party" / "FidelityFX"   # AMD's FidelityFX SDK, the FSR 3.1 upscaler's subset (its README.md)
+
+
+def ffx_include() -> list[str]:
+    """The SDK's public headers, ffx_shader_blobs.h and the upscaler's SPIR-V (runtime/vk_fsr3.cpp includes them)."""
+    return [a for d in (FFX / "sdk" / "include", FFX / "sdk" / "src" / "backends" / "shared", FFX / "spirv")
+            for a in ("-isystem", shell_arg(d))]
+
+
+def ffx_rule() -> list[str]:
+    """The SDK's own sources: ffx_compat.h force-included so they build with clang unchanged, their warnings off."""
+    return ["rule cc_ffx",
+            f"  command = $cc $rtflags -include ffx_compat.h -I {shell_arg(FFX)} "
+            f"-I {shell_arg(FFX / 'sdk' / 'src' / 'shared')} -w -MD -MF $out.d -c $in -o $out",
+            "  deps = gcc", "  depfile = $out.d", "  description = cc $in"]
+
+
+def runtime_rule(src: Path) -> str:
+    return "cc_ffx" if src.is_relative_to(FFX / "sdk") else "cc_rt"
 
 
 def runtime_object(out: Path, src: Path) -> Path:
@@ -311,7 +333,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
         romfs_index.write_placeholder(out)
         print(f"host: WARNING: {ROMFS_IMAGE} does not exist; the executable compiles but does not start the game")
     inc = ["-I", shell_arg(RUNTIME), "-I", shell_arg(gen), "-I", shell_arg(out), "-I", shell_arg(vma_include()),
-           "-I", shell_arg(RUNTIME / "third_party" / "imgui")]
+           "-I", shell_arg(RUNTIME / "third_party" / "imgui")] + ffx_include()
     lines = [
         "ninja_required_version = 1.10",
         f"builddir = {ninja_escape(out)}",
@@ -329,7 +351,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
         "  rspfile = $out.rsp",
         "  rspfile_content = $in_newline",
         "  description = link $out",
-    ]
+    ] + ffx_rule()
     if WIN:   # runtime/AgeOfCalamityRecomp.rc, as in Astral Chain's tools/build_game.py (MIT); windres writes no depfile
         windres = shutil.which("llvm-windres") or need("windres")
         lines += ["rule rc", f"  command = {windres} -I {shell_arg(RUNTIME)} -I {shell_arg(ROOT / 'assets')} -O coff $in -o $out",
@@ -341,7 +363,7 @@ def step_host(args, gen: Path, lib: Path) -> Path:
             lines.append(f"build {ninja_escape(o)}: rc {ninja_escape(src)} | {ninja_escape(RUNTIME / 'AgeOfCalamityRecomp.manifest')} "
                          f"{ninja_escape(ROOT / 'assets' / 'icon.ico')}")
         else:
-            lines.append(f"build {ninja_escape(o)}: cc_rt {ninja_escape(src)}")
+            lines.append(f"build {ninja_escape(o)}: {runtime_rule(src)} {ninja_escape(src)}")
         objs.append(o)
     exe = out / EXE
     lines.append(f"build {ninja_escape(exe)}: link " + " ".join(ninja_escape(o) for o in objs) + f" {ninja_escape(lib)}")
@@ -457,7 +479,7 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
         sys.exit(f"ERROR: {ROMFS_IMAGE} does not exist (tools/merge_romfs.py)")
     romfs_index.write(ROMFS_IMAGE, host)
     inc = ["-I", shell_arg(deps / "include"), "-I", shell_arg(RUNTIME), "-I", shell_arg(gen), "-I", shell_arg(host),
-           "-I", shell_arg(RUNTIME / "third_party" / "imgui")]
+           "-I", shell_arg(RUNTIME / "third_party" / "imgui")] + ffx_include()
     ccs = " ".join(shell_arg(a) for a in cc)
     lines = [
         "ninja_required_version = 1.10",
@@ -476,11 +498,11 @@ def step_dist(args, gen: Path, lib: Path) -> Path:
         "  rspfile = $out.rsp",
         "  rspfile_content = $in_newline",
         "  description = link $out",
-    ]
+    ] + ffx_rule()
     objs = []
     for src in runtime_sources() + [host / "modules.c"]:
         o = runtime_object(out, src)
-        lines.append(f"build {ninja_escape(o)}: cc_rt {ninja_escape(src)}")
+        lines.append(f"build {ninja_escape(o)}: {runtime_rule(src)} {ninja_escape(src)}")
         objs.append(o)
     exe = out / "AgeOfCalamityRecomp"
     lines.append(f"build {ninja_escape(exe)}: link " + " ".join(ninja_escape(o) for o in objs) + f" {ninja_escape(lib)}")

@@ -37,13 +37,13 @@ static const char *const known[] = {
     "BIND_SKIP", "BIND_STATS", "BIND_UP", "BIND_X", "BIND_Y",
     "BIND_ZL", "BIND_ZR", "BLACK_SECS", "BLOCK_VIEWS_3D", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CRIT", "CRIT_OUT", "CRUMB_DRAWS",
-    "DESC_TEMPLATE", "DEVICE_PROFILE", "DIAG", "DIRTY_CENSUS", "DLAA", "DLAA_JITTER", "DLAA_MV", "DLSS", "DLSS_PRESET","DUMP", "CMD_OOM", "CTL_TRACE", "DUMP_BUF", "DUMP_DIR", "DYNAMIC_RES",
+    "DESC_TEMPLATE", "DEVICE_PROFILE", "DIAG", "DIRTY_CENSUS", "DLAA", "DLAA_ENGINE", "DLAA_JITTER", "DLAA_MV", "DLSS", "DLSS_PRESET", "FSR3_DEBUG", "FSR3_FP16", "FSR3_SHARPNESS", "FSR3_VIEW", "DUMP", "CMD_OOM", "CTL_TRACE", "DUMP_BUF", "DUMP_DIR", "DYNAMIC_RES",
     "DUMP_LOG", "DUMP_LOG_VKFMT", "DUMP_MAX", "PERF_LOG", "ATTACK_SHOTS", "ATTACK_DUMP", "HIT_SHOTS", "HIT_DUMP", "MARK_DUMP", "DARK_SECS", "DUMP_RAW", "DUMP_VBIN", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FPS60", "FPS_LIMIT", "FRAME_QUEUE", "FREEZE_IDLE", "FREEZE_SHADOW", "FREE_CORES",
     "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "HANG_SECS", "HDR", "HDR_GAME_NITS",
     "HDR_PEAK_NITS", "HDR_UI_NITS", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "INVERT_LX", "INVERT_LY", "INVERT_RX", "INVERT_RY", "LANG", "LIB_PREBUILD",
     "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_TEST",
-    "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MIRROR_WB", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MUTE", "MUTE_BACKGROUND",
+    "MENU_TEST_DIR", "MENU_TEST_FOCUS", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MIRROR_WB", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MUTE", "MUTE_BACKGROUND",
     "ONE_PER_CORE", "OPERATION_MODE", "OUTPUT_RES", "PAD_LAYOUT", "PATCH_OUTPUT", "PATCH_SCENE", "PCSS", "PCSS_K", "PEEK", "PEEK_EVERY", "PERF_OVERLAY", "PERF_SLOW_MS", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT",
     "PRESENT_SHOT", "PREWARM_XLATE", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PROMPTS", "PUSH_SKIP", "PUSH_STAGE", "QUICK_HOLD_MS", "RDOC", "RDOC_DIR", "RDOC_DLL", "REC_END", "REEXEC",
@@ -69,7 +69,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"COLOR_BRIGHTNESS", "display"}, {"COLOR_CONTRAST", "display"}, {"COLOR_SATURATION", "display"},
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"},
     {"HDR_UI_NITS", "display"},
-    {"DLAA", "display"}, {"DLSS", "display"}, {"DLSS_PRESET", "display"}, {"FXAA", "display"},
+    {"DLAA", "display"}, {"DLAA_ENGINE", "display"}, {"FSR3_SHARPNESS", "display"}, {"DLSS", "display"}, {"DLSS_PRESET", "display"}, {"FXAA", "display"},
     {"DEVICE_PROFILE", "display"}, {"ASSUME_FOCUS", "display"},
     {"SHADOW_SCALE", "display"}, {"CONTACT_SHADOWS", "display"},
     {"PCSS", "display"},
@@ -112,6 +112,8 @@ static const CfgMeta metas[] = {
     {"DYNAMIC_RES", "game", "game|off", LIVE},   // resolution.c res_present
     {"UPSCALER", "fsr", "fsr|bilinear", LIVE}, {"SHARPNESS", "80", "0..100", LIVE},
     {"DLAA", "0", "0|1", RESTART}, {"DLSS", "dlaa", "dlaa|quality|balanced|performance", RESTART},
+    {"DLAA_ENGINE", "auto", "auto|dlss|fsr3", RESTART},   // vk_dlaa.c vk_dlaa_init: DLSS, else AMD FSR 3.1
+    {"FSR3_SHARPNESS", "80", "0..100", LIVE},   // vk_dlaa.c fsr_eval (TotK Recomp's default)
     {"DLSS_PRESET", "default", "default|k|j", LIVE},{"FXAA", "1", "0|1", LIVE},
     {"ASPECT", "fit", "fit|stretch", LIVE},
     {"ANISO", "game", "game|2|4|8|16", RESTART},   // vk_texture.c sampler_features

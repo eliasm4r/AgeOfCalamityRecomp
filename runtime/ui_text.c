@@ -126,18 +126,28 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_PCSS] = "Soft shadows",
     [UI_MENU_PCSS_DESC] = "Sun shadows sharp where an object meets the ground and softer the further the shadow falls "
                           "(PCSS). 0 keeps the game's filter. Takes effect at the next start.",
-    [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS for the 3D scene (NVIDIA RTX GPUs; nvngx_dlss.dll next to AgeOfCalamityRecomp): smoother edges "
-                          "and less shimmer. The HUD is not touched. The mode below sets the resolution it works from. Takes effect "
-                          "after a restart.",
-    [UI_MENU_DLSS] = "DLSS mode",
-    [UI_MENU_DLSS_DESC] = "DLAA draws the 3D scene at full resolution. Quality, Balanced and Performance draw it at 67, 58 "
-                          "and 50 % and let DLSS scale it up, for more frames per second; they replace the 3D render "
+    [UI_MENU_DLAA] = "DLSS / FSR 3.1",
+    [UI_MENU_DLAA_DESC] = "Temporal anti-aliasing and upscaling of the 3D scene: smoother edges and less shimmer. NVIDIA "
+                          "DLSS on RTX cards (nvngx_dlss.dll next to AgeOfCalamityRecomp), AMD FSR 3.1 on any other "
+                          "graphics card (the engine below). The HUD is not touched. The mode below sets the resolution "
+                          "it works from. Takes effect after a restart.",
+    [UI_MENU_DLAA_ENGINE] = "Upscaler",
+    [UI_MENU_DLAA_ENGINE_DESC] = "Which one runs. Automatic: NVIDIA DLSS where the card and nvngx_dlss.dll have it, "
+                                 "else AMD FSR 3.1. FSR 3.1 works on AMD, Intel and NVIDIA cards. Takes effect after a "
+                                 "restart.",
+    [UI_MENU_DLAA_ENGINE_AUTO] = "Automatic", [UI_MENU_DLAA_ENGINE_DLSS] = "NVIDIA DLSS",
+    [UI_MENU_DLAA_ENGINE_FSR3] = "AMD FSR 3.1",
+    [UI_MENU_FSR3_SHARPNESS] = "FSR 3.1 sharpness",
+    [UI_MENU_FSR3_SHARPNESS_DESC] = "FSR 3.1's own sharpening of the 3D scene, against the softness of its temporal "
+                                    "accumulation (FSR 3.1 only); 0 turns it off. Applies at once.",
+    [UI_MENU_DLSS] = "Mode",
+    [UI_MENU_DLSS_DESC] = "Native (DLAA) draws the 3D scene at full resolution. Quality, Balanced and Performance draw it at "
+                          "67, 58 and 50 % and let DLSS or FSR 3.1 scale it up, for more frames per second; they replace the 3D render "
                           "scale. Takes effect after a restart.",
-    [UI_MENU_DLSS_DLAA] = "DLAA (native)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
+    [UI_MENU_DLSS_DLAA] = "Native (DLAA)", [UI_MENU_DLSS_QUALITY] = "Quality", [UI_MENU_DLSS_BALANCED] = "Balanced",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance",
     [UI_MENU_DLSS_PRESET] = "DLSS model",
-    [UI_MENU_DLSS_PRESET_DESC] = "Which DLSS model runs. Automatic follows NVIDIA's advice per mode: K for DLAA, Quality "
+    [UI_MENU_DLSS_PRESET_DESC] = "Which DLSS model runs (DLSS only). Automatic follows NVIDIA's advice per mode: K for DLAA, Quality "
                                  "and Balanced, M for Performance. J: slightly less ghosting behind moving characters, "
                                  "a little more flicker. K: the sharpest model in every mode. Applies at once.",
     [UI_MENU_DLSS_PRESET_DEFAULT] = "Automatic", [UI_MENU_DLSS_PRESET_K] = "K (sharpest)",
@@ -388,7 +398,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_VK_VALIDATION] = "Validation layer",
     [UI_MENU_VK_VALIDATION_DESC] = "Checks every Vulkan call and slows the game down a lot.",
     [UI_MENU_VK_VALIDATION_MISSING] = "The validation layer is not installed.",
-    [UI_MENU_DLAA_MISSING] = "DLSS is not available: it needs an NVIDIA RTX card and nvngx_dlss.dll, which the Windows build downloads. Build again, or put the file next to AgeOfCalamityRecomp.exe, and restart.",
+    [UI_MENU_DLAA_MISSING] = "DLSS is not available: it needs an NVIDIA RTX card and nvngx_dlss.dll, which the Windows build downloads. Build again, or put the file next to AgeOfCalamityRecomp.exe, and restart. Or set the upscaler to Automatic or AMD FSR 3.1.",
     [UI_MENU_VK_DYN_VERTEX] = "Dynamic vertex state",
     [UI_MENU_VK_DYN_VERTEX_DESC] = "Forces dynamic vertex input on or off; the default depends on the GPU.",
     [UI_MENU_VK_DYN_A2C] = "Dynamic alpha to coverage",

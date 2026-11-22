@@ -430,7 +430,8 @@ extern "C" void menu_vk_release(void) {
 // ---- test hooks
 // ACR_MENU_TEST=<frame>[:<frames per page>]: at that presented frame the menu opens on its first tab; each tab stays
 // <frames per page> frames (default 30) and its last frame's swapchain image goes to ACR_MENU_TEST_DIR (default: the
-// working directory) as menu-test-<frame>-<page>.png; after the last tab the menu closes.
+// working directory) as menu-test-<frame>-<page>.png; after the last tab the menu closes. ACR_MENU_TEST_FOCUS=<key>
+// (a row's key, e.g. ACR_DLAA_ENGINE) puts the cursor on that row, so rows below a tab's first screen get shot too.
 // ACR_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (ACR_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. settings.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
@@ -704,6 +705,9 @@ static void tab_screen(float scale) {
     // frame: the row stays out of the menu (settings.ini still takes contact_shadows) until it is
     if (vk_dlaa_missing()) opt_disable_next(UI_MENU_DLAA_MISSING);
     opt_toggle("ACR_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
+    static const UiTextId engine[] = {UI_MENU_DLAA_ENGINE_AUTO, UI_MENU_DLAA_ENGINE_DLSS, UI_MENU_DLAA_ENGINE_FSR3};
+    opt_choice("ACR_DLAA_ENGINE", UI_MENU_DLAA_ENGINE, engine, 3, UI_MENU_DLAA_ENGINE_DESC);
+    opt_slider("ACR_FSR3_SHARPNESS", UI_MENU_FSR3_SHARPNESS, 0, 100, UI_MENU_FSR3_SHARPNESS_DESC, 5, "%.0f %%");
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
                                     UI_MENU_DLSS_PERFORMANCE};
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);
@@ -1566,6 +1570,8 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             g_test.opened = frame;
             g_test.page = 0;
             g_tab_request = 0;
+            const char *fk = cfg_get("ACR_MENU_TEST_FOCUS");
+            if (fk && *fk) opt_focus_key(fk);   // its tab's shot shows it, scrolled into view
             set_open(1);
             open = true;
         } else if (!g_perf_mode) {
