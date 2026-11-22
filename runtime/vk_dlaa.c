@@ -8,9 +8,11 @@
 // overloads in slots 0-7 and the Get overloads in 8-15, each group in reverse declaration order. vtable_ok checks that
 // layout with a set-then-get round trip before anything relies on it.
 //
-// Where DLAA runs in the frame, the jitter and the motion vectors: see the sections below.
+// Where DLAA runs in the frame, the jitter and the motion vectors: see the sections below. AMD FSR 3.1 (vk_fsr3.cpp)
+// takes NGX's place on any GPU and system (ACR_DLAA_ENGINE); NGX itself is loaded on Windows only.
 #ifdef _WIN32
 #include <windows.h>
+#endif
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +61,7 @@ typedef NgxResult (*PFN_Evaluate)(VkCommandBuffer, const NgxHandle *, const NgxP
 typedef NgxResult (*PFN_Release)(NgxHandle *);
 
 static struct {
-    HMODULE core;
+    void *core;   // the NGX core's module (HMODULE)
     PFN_Init init;
     PFN_ReqExt req_ext;
     PFN_Params caps, alloc_params;
@@ -84,10 +86,12 @@ static void p_seti(NgxParam *p, const char *n, int v) { ((SetI)p->vt->slot[S_I])
 static void p_setu(NgxParam *p, const char *n, unsigned v) { ((SetU)p->vt->slot[S_U32])(p, n, v); }
 static void p_setf(NgxParam *p, const char *n, float v) { ((SetF)p->vt->slot[S_F])(p, n, v); }
 static void p_setp(NgxParam *p, const char *n, void *v) { ((SetP)p->vt->slot[S_P])(p, n, v); }
+#ifdef _WIN32   // (vtable_ok and ngx_init)
 static int p_geti(const NgxParam *p, const char *n, int *v) { return NGX_OK(((GetI)p->vt->slot[G_I])(p, n, v)); }
 static int p_getu(const NgxParam *p, const char *n, unsigned *v) { return NGX_OK(((GetU)p->vt->slot[G_U32])(p, n, v)); }
 static int p_getf(const NgxParam *p, const char *n, float *v) { return NGX_OK(((GetF)p->vt->slot[G_F])(p, n, v)); }
 static int p_getp(const NgxParam *p, const char *n, void **v) { return NGX_OK(((GetP)p->vt->slot[G_P])(p, n, v)); }
+#endif
 
 // NGX is brought up only when dlaa is on at start: its device extensions can only be asked for at device creation, and
 // loading the driver's NGX core on every NVIDIA machine would cost start time and change the device with DLAA off. So
@@ -112,6 +116,10 @@ int vk_dlaa_missing(void) { return vk_dlaa_wanted() && N.tried && !N.available; 
 static int core_load(void) {
     if (N.tried) return N.loaded;
     N.tried = 1;
+#ifndef _WIN32
+    rt_log("dlaa: NGX (DLSS) is loaded on Windows only");
+    return 0;
+#else
     char dir[MAX_PATH] = {0}, path[MAX_PATH + 32];
     DWORD n = sizeof dir;
     if (RegGetValueA(HKEY_LOCAL_MACHINE, "SOFTWARE\\NVIDIA Corporation\\Global\\NGXCore", "FullPath", RRF_RT_REG_SZ,
@@ -125,7 +133,7 @@ static int core_load(void) {
         rt_log("dlaa: cannot load %s (error %lu): DLAA off", path, GetLastError());
         return 0;
     }
-#define FN(f, name) N.f = (void *)GetProcAddress(N.core, name)
+#define FN(f, name) N.f = (void *)GetProcAddress((HMODULE)N.core, name)
     FN(init, "NVSDK_NGX_VULKAN_Init_Ext2");
     FN(req_ext, "NVSDK_NGX_VULKAN_RequiredExtensions");
     FN(caps, "NVSDK_NGX_VULKAN_GetCapabilityParameters");
@@ -142,6 +150,7 @@ static int core_load(void) {
     N.loaded = 1;
     rt_log("dlaa: NGX core %s", path);
     return 1;
+#endif
 }
 
 static int listed(const char *const *list, uint32_t n, const char *s) {
@@ -171,6 +180,7 @@ void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, cons
     }
 }
 
+#ifdef _WIN32   // (the MSVC layout of the parameter object: NGX is loaded on Windows only)
 static int vtable_ok(void) {
     NgxParam *p = NULL;
     if (!NGX_OK(N.alloc_params(&p)) || !p) return 0;
@@ -188,6 +198,7 @@ static int vtable_ok(void) {
     if (!ok) rt_log("dlaa: NGX parameter layout check failed (i=%d u=%u f=%g p=%p): DLAA off", i, u, f, v);
     return ok;
 }
+#endif
 
 static void ngx_init(void);
 
@@ -208,6 +219,7 @@ void vk_dlaa_init(void) {
 
 static void ngx_init(void) {
     if (!core_load()) return;
+#ifdef _WIN32
     wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
@@ -230,6 +242,7 @@ static void ngx_init(void) {
     N.available = avail != 0;
     rt_log("dlaa: NGX up; DLSS %s%s", avail ? "available" : "NOT available (is nvngx_dlss.dll next to AgeOfCalamityRecomp?)",
            driver ? "; the driver needs an update" : "");
+#endif
 }
 
 // ---------------------------------------------------------------- where DLAA runs in the frame
@@ -1008,22 +1021,3 @@ int vk_dlaa_scale_draw(VkExec *ex) {
 }
 
 int vk_dlaa_ran(void) { return D.done || D.up; }
-
-#else
-// NGX is loaded as a Windows DLL; elsewhere DLAA and the DLSS modes' scaling do nothing.
-#include "vk_dlaa.h"
-
-int vk_dlaa_wanted(void) { return 0; }
-int vk_dlaa_missing(void) { return 0; }
-void vk_dlaa_instance_exts(const char **ext, uint32_t *n, uint32_t max) { (void)ext, (void)n, (void)max; }
-void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, const char **ext, uint32_t *n, uint32_t max) {
-    (void)have, (void)nhave, (void)ext, (void)n, (void)max;
-}
-void vk_dlaa_init(void) {}
-void vk_dlaa_pass(VkExec *ex) { (void)ex; }
-void vk_dlaa_frame(void) {}
-void vk_dlaa_draw(VkExec *ex) { (void)ex; }
-void vk_dlaa_viewport(VkExec *ex, VkViewport *v) { (void)ex, (void)v; }
-int vk_dlaa_scale_draw(VkExec *ex) { (void)ex; return 0; }
-int vk_dlaa_ran(void) { return 0; }
-#endif

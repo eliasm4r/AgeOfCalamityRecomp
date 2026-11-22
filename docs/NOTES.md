@@ -71,7 +71,8 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
   near and far planes and the vertical field of view (37 degrees there) are read from the view-projection each frame
   (`camera_planes`). One FSR 3.1 history serves every dynamic-resolution share of a target size, where NGX needs a
   feature per share. Same cost as DLSS on an RTX 4070 at 1080p and 60 fps; its pipelines take about half a second
-  more at the first frame. Still in `#ifdef _WIN32` with NGX: Linux and the Deck need that part split out.
+  more at the first frame. Only the NGX loading is Windows code: elsewhere `auto` takes FSR 3.1 (compiled with Linux
+  clang in WSL; not yet run on a Linux GPU or the Deck).
 
 ### 5. Frame pacing
 

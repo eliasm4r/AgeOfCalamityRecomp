@@ -43,7 +43,7 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 - **Vulkan renderer**: NVN, the Switch's graphics API, reimplemented over Vulkan, with shaders translated once and kept
   for the next start.
 - **Sharper picture**: game resolution up to 3840x2160 (the HUD drawn at that size), a 3D scene up to 3840x2160
-  (200 % of 1080p, supersampling) instead of the Switch's 1440x810, FSR 1 upscaling, NVIDIA DLSS / DLAA on RTX cards and AMD FSR 3.1 on any other card (Windows),
+  (200 % of 1080p, supersampling) instead of the Switch's 1440x810, FSR 1 upscaling, NVIDIA DLSS / DLAA on RTX cards (Windows) and AMD FSR 3.1 on any other card and on the Deck,
   anisotropic filtering, shadow quality, colour settings and HDR.
 - **Steam Deck profile**: detected by itself, with full screen 1280x800, handheld render mode and a quick menu on
   **L3+R3**.
