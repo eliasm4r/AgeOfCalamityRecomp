@@ -263,6 +263,15 @@
       "defaults": { "input/motion": "1" }
     },
     {
+      "id": "aim_left_stick", "label": "Aim with the left stick",
+      "help": "The game's original aiming: the left stick also moves the aim of the bow and the other aimed actions. Off: only the right stick aims.",
+      "choices": [
+        { "label": "Off", "set": { "input/aim_left_stick": "0" } },
+        { "label": "On", "set": { "input/aim_left_stick": "1" } }
+      ],
+      "defaults": { "input/aim_left_stick": "0" }
+    },
+    {
       "id": "gyro_calibration", "label": "Gyro calibration",
       "help": "Takes the drift the in-game Calibrate gyro row measured (Controls tab, F1) off the gyroscope. Off: the raw gyroscope; the measure is kept.",
       "choices": [

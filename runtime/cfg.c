@@ -30,7 +30,7 @@ static int save_ok = 1;                         // the last cfg_save_to wrote (o
 // Every name the runtime reads (and the patch sets in generated/), without the prefix. A file key outside this list is
 // logged as unknown. A new variable goes here too, or its ini key logs a harmless "unknown key" line.
 static const char *const known[] = {
-    "AB", "AMIIBO_DIR", "ANISO", "APP_POOL", "ASPECT", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_DEVICE", "AUDIO_OFF", "AUDIO_PREFILL_MS",
+    "AB", "AIM_LEFT_STICK", "AMIIBO_DIR", "ANISO", "APP_POOL", "ASPECT", "ASSUME_FOCUS", "ASTC", "ASTC_BC", "ASTC_TIME", "ASYNC_PREEMPT", "AUDIO", "AUDIO_DEVICE", "AUDIO_OFF", "AUDIO_PREFILL_MS",
     "BACKGROUND_WINDOW", "BIND_A", "BIND_B", "BIND_DOWN", "BIND_L", "BIND_LCLICK", "BIND_LEFT", "BIND_LSTICK_DOWN", "BIND_LSTICK_LEFT",
     "BIND_LSTICK_RIGHT", "BIND_LSTICK_UP", "BIND_MINUS",
     "BIND_PLUS", "BIND_R", "BIND_RCLICK", "BIND_RIGHT", "BIND_RSTICK_DOWN", "BIND_RSTICK_LEFT", "BIND_RSTICK_RIGHT", "BIND_RSTICK_UP",
@@ -77,7 +77,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"},
     {"VOLUME", "audio"}, {"MUTE", "audio"}, {"MUTE_BACKGROUND", "audio"}, {"AUDIO_DEVICE", "audio"},
     {"INVERT_LX", "input"}, {"INVERT_LY", "input"}, {"INVERT_RX", "input"}, {"INVERT_RY", "input"},
-    {"MOTION", "input"}, {"GYRO_CALIBRATION", "input"}, {"GYRO_BIAS_X", "input"}, {"GYRO_BIAS_Y", "input"},
+    {"AIM_LEFT_STICK", "input"}, {"MOTION", "input"}, {"GYRO_CALIBRATION", "input"}, {"GYRO_BIAS_X", "input"}, {"GYRO_BIAS_Y", "input"},
     {"GYRO_BIAS_Z", "input"}, {"GYRO_BIAS_PAD", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
     {"PAD_LAYOUT", "input"}, {"PROMPTS", "input"}, {"STICK_DEADZONE", "input"}, {"LSTICK_DEADZONE", "input"}, {"RSTICK_DEADZONE", "input"},
     {"MOUSE_SENS", "input"}, {"WALK_KEY", "input"}, {"WALK_SCALE", "input"}, {"INPUT_RECORD", "input"},
@@ -143,6 +143,7 @@ static const CfgMeta metas[] = {
     {"INVERT_RY", "0", "0|1", LIVE},
     // GYRO_CALIBRATION: subtract the bias the Calibrate gyro row measured (motion_fusion.c). The bias itself
     // (GYRO_BIAS_X/Y/Z, GYRO_BIAS_PAD: the controller it belongs to) has no row here, so Reset all keeps it.
+    {"AIM_LEFT_STICK", "0", "0|1", LIVE},   // resolution.c res_present
     {"MOTION", "1", "0|1", LIVE}, {"GYRO_CALIBRATION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
     {"RUMBLE_TRIGGERS", "0", "0|1", LIVE}, {"PAD_LAYOUT", "nintendo", "auto|nintendo|xbox|playstation", LIVE},
     {"PROMPTS", "nintendo", "nintendo|xbox|playstation", RESTART},
