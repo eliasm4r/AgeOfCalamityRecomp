@@ -1,9 +1,11 @@
 """Tests of the extraction tools with synthetic files (no game data)."""
 from __future__ import annotations
 
+import argparse
 import io
 import json
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -383,6 +385,39 @@ class MakeBuildTest(unittest.TestCase):
 
     def test_known_romfs_size(self):
         self.assertEqual(make_build.romfs_size(), 11719230892)
+
+    def msys2_step(self, d, works):
+        """tools_msys2 with the player's MSYS2 and our copy both unpacked; works: msys_works' answers, in order."""
+        theirs, own = d / "theirs/msys64", d / "own/msys64"
+        for root in (theirs, own):
+            (root / "usr/bin").mkdir(parents=True)
+            (root / "usr/bin/bash.exe").write_bytes(b"")
+        args = argparse.Namespace(msys2=str(theirs))
+        listed = subprocess.CompletedProcess([], 0, b"", b"")
+        with mock.patch.object(make_build, "MSYS2_OWN", own), mock.patch.object(make_build, "capture", lambda *a, **k: listed), \
+                mock.patch.object(make_build, "msys_works", side_effect=works), mock.patch.object(make_build, "out"), \
+                mock.patch.object(make_build, "msys") as commands:
+            make_build.tools_msys2(args)
+        commands.assert_not_called()   # nothing is installed into the player's MSYS2
+        return args.msys2, theirs, own
+
+    def test_working_msys2_is_kept(self):
+        with tempfile.TemporaryDirectory() as d:
+            used, theirs, _own = self.msys2_step(Path(d), [True])
+            self.assertEqual(used, str(theirs))
+
+    def test_broken_msys2_moves_to_our_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            used, _theirs, own = self.msys2_step(Path(d), [False, True])
+            self.assertEqual(used, str(own))
+
+    def test_our_broken_copy_stops_the_build(self):
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(make_build.StepFailed):
+            self.msys2_step(Path(d), [False, False])
+
+    def test_our_copy_never_unpacks_over_c_msys64(self):
+        self.assertEqual(make_build.MSYS2_OWN.name, "msys64")
+        self.assertNotEqual(make_build.MSYS2_OWN.parent, Path("C:/"))
 
 
 class ReadOnlySystemTest(unittest.TestCase):
