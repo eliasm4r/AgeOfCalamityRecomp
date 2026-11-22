@@ -6,6 +6,8 @@
 - **Build stopping on a PC that already has MSYS2** (`DLL load failed while importing binascii`): the build tools step
   now checks that MSYS2's Python can load what the build needs. When it cannot, that MSYS2 is left untouched and the
   build installs its own copy in `C:/AgeOfCalamityRecomp-tools/msys64` (about 1.5 GB).
+- **The game window comes to the front** when it opens, instead of staying behind the other windows. If Windows
+  refuses (you moved to another program during the start), its taskbar button flashes.
 
 ## 0.3.0
 
