@@ -333,7 +333,7 @@ static int vk_up(const MenuTarget *t) {
 // A catalog row also holds menu text (Simplified Chinese), so every string of the row goes into the builder: the merged
 // font must cover the whole menu of that language, not only its name. Made again when the window height changes; the old
 // texture goes after the queue is idle (CreateFontsTexture).
-static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0400, 0x052F, 0x2010, 0x2027, 0};
+static const ImWchar kRanges[] = {0x0020, 0x017F, 0x0400, 0x052F, 0x2010, 0x2027, 0};   // Latin-1, Extended-A (œ)
 static const struct { const char *lang; UiTextId name; } kCjk[] = {
     {"ja", UI_MENU_LANGNAME_JA}, {"ko", UI_MENU_LANGNAME_KO}, {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS},
     {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT},
@@ -430,11 +430,13 @@ extern "C" void menu_vk_release(void) {
 // ---- test hooks
 // ACR_MENU_TEST=<frame>[:<frames per page>]: at that presented frame the menu opens on its first tab; each tab stays
 // <frames per page> frames (default 30) and its last frame's swapchain image goes to ACR_MENU_TEST_DIR (default: the
-// working directory) as menu-test-<frame>-<page>.png; after the last tab the menu closes.
+// working directory) as menu-test-<frame>-<page>.png; after the last tab the menu closes. ACR_MENU_TEST_FOCUS=<key>
+// (a row's key, e.g. ACR_DLAA_ENGINE) puts the cursor on that row, so rows below a tab's first screen get shot too.
 // ACR_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (ACR_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. settings.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
+enum { TAB_SCREEN, TAB_GAME, TAB_LANGUAGE, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_ADVANCED, TAB_MODS, TAB_CHEATS,
+       TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -703,6 +705,9 @@ static void tab_screen(float scale) {
     // frame: the row stays out of the menu (settings.ini still takes contact_shadows) until it is
     if (vk_dlaa_missing()) opt_disable_next(UI_MENU_DLAA_MISSING);
     opt_toggle("ACR_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
+    static const UiTextId engine[] = {UI_MENU_DLAA_ENGINE_AUTO, UI_MENU_DLAA_ENGINE_DLSS, UI_MENU_DLAA_ENGINE_FSR3};
+    opt_choice("ACR_DLAA_ENGINE", UI_MENU_DLAA_ENGINE, engine, 3, UI_MENU_DLAA_ENGINE_DESC);
+    opt_slider("ACR_FSR3_SHARPNESS", UI_MENU_FSR3_SHARPNESS, 0, 100, UI_MENU_FSR3_SHARPNESS_DESC, 5, "%.0f %%");
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
                                     UI_MENU_DLSS_PERFORMANCE};
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);
@@ -722,11 +727,31 @@ static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
     opt_toggle("ACR_FRAME_QUEUE", UI_MENU_FRAME_QUEUE, UI_MENU_FRAME_QUEUE_DESC);
-    row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     if (opt_choice("ACR_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC))
         ov_operation_mode_changed();
     opt_toggle("ACR_ASSUME_FOCUS", UI_MENU_ASSUME_FOCUS, UI_MENU_ASSUME_FOCUS_DESC);
+    opt_end();
+}
+
+// The menu language: Automatic (unset) and each language the menu is translated into, under its own name. The menu
+// redraws in the new language at once (menu_text reads the setting).
+static void row_menu_lang(void) {
+    static const struct { const char *code; UiTextId name; } langs[] = {
+        {"en", UI_MENU_LANGNAME_EN}, {"fr", UI_MENU_LANGNAME_FR},
+    };
+    enum { N = sizeof langs / sizeof *langs + 1 };
+    const char *vals[N], *names[N];
+    vals[0] = "";
+    names[0] = menu_text(UI_MENU_MENU_LANG_AUTO);
+    for (int i = 1; i < N; i++) vals[i] = langs[i - 1].code, names[i] = menu_text(langs[i - 1].name);
+    opt_choice_list("ACR_MENU_LANG", UI_MENU_MENU_LANG, vals, names, N, UI_MENU_MENU_LANG_DESC);
+}
+
+static void tab_language(float scale) {
+    opt_begin("##language", scale);
+    row_menu_lang();
+    row_game_lang();
     opt_end();
 }
 
@@ -877,6 +902,18 @@ static void tab_controls(float scale) {
         ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
     }
     opt_toggle("ACR_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
+    opt_toggle("ACR_GYRO_CALIBRATION", UI_MENU_GYRO_CALIBRATION, UI_MENU_GYRO_CALIBRATION_DESC);
+    // The measured bias belongs to one controller (input.c pad_bias_select): the value says whether the open one has
+    // one, and the state of an attempt while it runs (about 1.5 s) and after it.
+    if (motion_calibration_enabled() && input_motion_enabled()) {
+        static const UiTextId calib[] = {UI_MENU_CALIB_NONE, UI_MENU_CALIB_COLLECTING, UI_MENU_CALIB_DONE,
+                                         UI_MENU_CALIB_FAILED, UI_MENU_CALIB_MOVED};
+        int st = input_motion_calib_state(nullptr, 0);
+        if (opt_button("##calibrate_gyro", UI_MENU_CALIBRATE_GYRO, UI_MENU_CALIBRATE_GYRO_DESC,
+                       menu_text(calib[st >= 0 && st <= MOTION_CALIB_MOVED ? st : 0])) &&
+            st != MOTION_CALIB_COLLECTING)
+            input_motion_calibrate();
+    }
     opt_slider("ACR_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("ACR_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
     opt_toggle("ACR_RUMBLE_TRIGGERS", UI_MENU_RUMBLE_TRIGGERS, UI_MENU_RUMBLE_TRIGGERS_DESC);
@@ -1061,7 +1098,8 @@ static void tab_advanced(float scale) {
     }
 }
 
-static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,     UI_MENU_TAB_SOUND,
+static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,     UI_MENU_TAB_LANGUAGE,
+                                              UI_MENU_TAB_SOUND,
                                               UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,   UI_MENU_TAB_ADVANCED,
                                               UI_MENU_TAB_MODS,     UI_MENU_TAB_CHEATS};
 static int g_tab;               // the tab shown
@@ -1239,6 +1277,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             switch (k) {
             case TAB_SCREEN: tab_screen(scale); break;
             case TAB_GAME: tab_game(scale); break;
+            case TAB_LANGUAGE: tab_language(scale); break;
             case TAB_MODS: tab_mods(scale); break;
             case TAB_SOUND: tab_sound(scale); break;
             case TAB_CONTROLS: tab_controls(scale); break;
@@ -1543,6 +1582,8 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             g_test.opened = frame;
             g_test.page = 0;
             g_tab_request = 0;
+            const char *fk = cfg_get("ACR_MENU_TEST_FOCUS");
+            if (fk && *fk) opt_focus_key(fk);   // its tab's shot shows it, scrolled into view
             set_open(1);
             open = true;
         } else if (!g_perf_mode) {

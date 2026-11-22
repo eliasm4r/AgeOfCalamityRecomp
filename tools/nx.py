@@ -16,8 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
 CONTENT_TYPES = {0: "Program", 1: "Meta", 2: "Control", 3: "Manual", 4: "Data", 5: "PublicData"}
 MAX_READ = 512 * 1024 * 1024
 
@@ -27,7 +25,16 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+# cryptography is imported only to decrypt: reading a RomFS image that is already decrypted (romfs_index.py in the
+# Windows build, under MSYS2's Python) must not need it. A broken MSYS2 cryptography (its _rust module failing to
+# load a DLL after a partial MSYS2 update) stopped the Windows build there (issue #6).
+def modes():
+    from cryptography.hazmat.primitives.ciphers import modes as m
+    return m
+
+
 def decrypt(key: bytes, mode, data: bytes) -> bytes:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
     ctx = Cipher(algorithms.AES(key), mode).decryptor()
     return ctx.update(data) + ctx.finalize()
 
@@ -165,7 +172,7 @@ def read_nca_header(f: BinaryIO, offset: int, size: int, keys: dict[str, bytes])
     require(size >= 0xC00, "Truncated NCA header")
     require("header_key" in keys, "header_key ausente no prod.keys")
     raw = read_at(f, offset, 0xC00)
-    hdr = b"".join(decrypt(keys["header_key"], modes.XTS(i.to_bytes(16, "big")), raw[i * 512:(i + 1) * 512])
+    hdr = b"".join(decrypt(keys["header_key"], modes().XTS(i.to_bytes(16, "big")), raw[i * 512:(i + 1) * 512])
                    for i in range(6))
     require(hdr[0x200:0x204] == b"NCA3", "Not NCA3 (check prod.keys and the file)")
     require(struct.unpack_from("<Q", hdr, 0x208)[0] == size, "NCA size does not match the container")
@@ -191,11 +198,11 @@ def nca_ctr_key(nca: Nca, keys: dict[str, bytes], tickets: dict[bytes, bytes]) -
         require(nca.rights_id in tickets, "NCA with a rights ID and no common ticket in the container")
         name = f"titlekek_{generation:02x}"
         require(name in keys, f"{name} ausente no prod.keys")
-        return decrypt(keys[name], modes.ECB(), tickets[nca.rights_id])
+        return decrypt(keys[name], modes().ECB(), tickets[nca.rights_id])
     area = ("application", "ocean", "system")[nca.header[0x207]]
     name = f"key_area_key_{area}_{generation:02x}"
     require(name in keys, f"{name} ausente no prod.keys")
-    return decrypt(keys[name], modes.ECB(), nca.header[0x300:0x340])[32:48]
+    return decrypt(keys[name], modes().ECB(), nca.header[0x300:0x340])[32:48]
 
 
 class SectionReader:
@@ -214,7 +221,7 @@ class SectionReader:
         aligned = absolute & ~15
         iv = self.fs[0x140:0x148][::-1] + (aligned // 16).to_bytes(8, "big")
         data = read_at(self.f, self.nca.offset + aligned, size + absolute - aligned)
-        return decrypt(self.key, modes.CTR(iv), data)[absolute - aligned:]
+        return decrypt(self.key, modes().CTR(iv), data)[absolute - aligned:]
 
 
 def read_pfs0(f: BinaryIO, nca: Nca, index: int, key: bytes) -> list[tuple[str, bytes]]:

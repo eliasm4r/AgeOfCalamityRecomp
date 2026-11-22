@@ -40,7 +40,7 @@ enum {
     R_SetDepthWriteEnable, R_SetFrontFace, R_SetPrimitiveRestartEnable, R_SetPrimitiveTopology,
     R_SetRasterizerDiscardEnable, R_SetScissorWithCount, R_SetStencilCompareMask, R_SetStencilOp, R_SetStencilReference,
     R_SetStencilTestEnable, R_SetStencilWriteMask, R_SetViewportWithCount, R_WriteTimestamp, R_WriteTimestamp2,
-    R_PushTpl, R_Push, R_VertexInput, R_Bool, R_PolygonMode, R_BlendEnable, R_BlendEquation, R_WriteMask, R_EndCb,
+    R_PushTpl, R_Push, R_VertexInput, R_Bool, R_PolygonMode, R_BlendEnable, R_BlendEquation, R_WriteMask, R_EndCb, R_Crumb,
 };
 
 static uint64_t now_ns(void) { return plat_now_ns(); }
@@ -527,6 +527,14 @@ void rec_bool(PFN_vkCmdSetDepthClampEnableEXT fn, VkCommandBuffer cb, VkBool32 v
     pub();
 }
 
+// A GPU breadcrumb (vk_crumbs.c) in the recorded order: ACR_CRUMB_DRAWS marks every draw of a part the recorder makes.
+void rec_crumb(VkCommandBuffer cb, int kind, uint64_t n) {
+    if (!OWNED(cb)) { vk_crumb(cb, kind, n); return; }
+    A_EndCb *a = put(R_Crumb, sizeof *a);
+    *a = (A_EndCb){kind, n};
+    pub();
+}
+
 typedef struct { PFN_vkCmdSetPolygonModeEXT fn; VkPolygonMode m; } A_PolygonMode;
 void rec_polygon_mode(PFN_vkCmdSetPolygonModeEXT fn, VkCommandBuffer cb, VkPolygonMode m) {
     if (!OWNED(cb)) { fn(cb, m); return; }
@@ -623,6 +631,7 @@ static void exec_packet(uint32_t op, void *p) {
     case R_BlendEnable: { A_Targets *a = p; ((PFN_vkCmdSetColorBlendEnableEXT)a->fn)(cb, a->first, a->n, a->v); break; }
     case R_BlendEquation: { A_Targets *a = p; ((PFN_vkCmdSetColorBlendEquationEXT)a->fn)(cb, a->first, a->n, a->v); break; }
     case R_WriteMask: { A_Targets *a = p; ((PFN_vkCmdSetColorWriteMaskEXT)a->fn)(cb, a->first, a->n, a->v); break; }
+    case R_Crumb: { A_EndCb *a = p; vk_crumb(cb, a->kind, a->n); break; }
     case R_EndCb: {
         A_EndCb *a = p;
         if (a->kind) vk_crumb(cb, a->kind, a->n);

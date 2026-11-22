@@ -11,12 +11,12 @@ typedef enum {
     UI_SWKBD_CANCEL,
     UI_SWKBD_PAD_HINT,       // how a controller answers
 
-    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Russian, Brazilian Portuguese and
-    // Simplified Chinese texts.
+    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID: English for every id, and the menu languages
+    // (ui_text.c menu_lang) for each id they translate.
     UI_MENU_FIRST,
     UI_MENU_TITLE = UI_MENU_FIRST,
     UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_MODS, UI_MENU_TAB_SOUND, UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,
-    UI_MENU_TAB_ADVANCED,
+    UI_MENU_TAB_ADVANCED, UI_MENU_TAB_LANGUAGE,
     UI_MENU_CONTINUE, UI_MENU_QUIT,
     UI_MENU_ON, UI_MENU_OFF, UI_MENU_AUTO, UI_MENU_DEFAULT_MARK,      // "default" beside the default value
     UI_MENU_AFTER_RESTART,    // note on a setting that is read at start
@@ -53,7 +53,9 @@ typedef enum {
     UI_MENU_PCSS, UI_MENU_PCSS_DESC,
     UI_MENU_DLAA, UI_MENU_DLAA_DESC, UI_MENU_DLSS, UI_MENU_DLSS_DESC, UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY,
     UI_MENU_DLSS_BALANCED, UI_MENU_DLSS_PERFORMANCE, UI_MENU_DLSS_PRESET, UI_MENU_DLSS_PRESET_DESC, UI_MENU_DLSS_PRESET_DEFAULT,
-    UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J, UI_MENU_FXAA, UI_MENU_FXAA_DESC,
+    UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J, UI_MENU_DLAA_ENGINE, UI_MENU_DLAA_ENGINE_DESC,
+    UI_MENU_DLAA_ENGINE_AUTO, UI_MENU_DLAA_ENGINE_DLSS, UI_MENU_DLAA_ENGINE_FSR3, UI_MENU_FSR3_SHARPNESS,
+    UI_MENU_FSR3_SHARPNESS_DESC, UI_MENU_FXAA, UI_MENU_FXAA_DESC,
 
     // Game
     UI_MENU_FPS_LIMIT, UI_MENU_FPS_LIMIT_DESC, UI_MENU_FPS_30, UI_MENU_FPS_60, UI_MENU_FPS_120, UI_MENU_FPS_144,
@@ -88,6 +90,9 @@ typedef enum {
 
     // Controls
     UI_MENU_MOTION, UI_MENU_MOTION_DESC,
+    UI_MENU_GYRO_CALIBRATION, UI_MENU_GYRO_CALIBRATION_DESC,   // the switch that applies the measured bias
+    UI_MENU_CALIBRATE_GYRO, UI_MENU_CALIBRATE_GYRO_DESC,       // the row that measures it, then its states:
+    UI_MENU_CALIB_NONE, UI_MENU_CALIB_COLLECTING, UI_MENU_CALIB_DONE, UI_MENU_CALIB_FAILED, UI_MENU_CALIB_MOVED,
     UI_MENU_RUMBLE_STRENGTH, UI_MENU_RUMBLE_STRENGTH_DESC,
     UI_MENU_RUMBLE_CURVE, UI_MENU_RUMBLE_CURVE_DESC,
     UI_MENU_RUMBLE_TRIGGERS, UI_MENU_RUMBLE_TRIGGERS_DESC,
@@ -244,5 +249,8 @@ int ui_text_defined(const char *lang, UiTextId id);
 // The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
 
-// Menu text: the port's menu and overlay are English (ui_text_in("en", id)).
+// The menu language: ACR_MENU_LANG when the catalog translates the menu into it, unset the system's language when it
+// does, else "en". The catalog row's own string.
+const char *menu_lang(void);
+// Menu and overlay text in the menu language (English for an id it does not translate).
 const char *menu_text(UiTextId id);

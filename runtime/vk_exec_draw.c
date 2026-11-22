@@ -1645,9 +1645,10 @@ static VkBufferView texel_view(uint64_t h, int storage) {
     return Z.zview;
 }
 
-// ---- ACR_CRUMB_DRAWS=1 (diagnosis; with ACR_VK_RECORDER=0, as the crumb goes straight into ex->cb): a GPU breadcrumb
-// before every draw and dispatch, and a ring of the shaders each used (cache key prefixes, as the shader-cache file
-// names), so a lost device names the draw the GPU was in (vk_crumbs.c vk_crumbs_report).
+// ---- ACR_CRUMB_DRAWS=1 (diagnosis): a GPU breadcrumb before every draw and dispatch, and a ring of the shaders each
+// used (cache key prefixes, as the shader-cache file names), so a lost device names the draw the GPU was in (vk_crumbs.c
+// vk_crumbs_report). The crumb goes through the recorder when it records the part. Each crumb is two marker writes,
+// the second waiting for the commands before it: the GPU runs slower (about 30 fps at 140 %), so never on by itself.
 #define CRUMB_RING 16384
 typedef struct { uint32_t seq; char what[60]; } CrumbRec;
 static CrumbRec crumb_ring[CRUMB_RING];
@@ -1663,16 +1664,10 @@ static void key8(const GfxShader *s, char *o) {
 static void crumb_mark(VkExec *ex, const GfxShader *a, const GfxShader *b) {
     if (crumb_on < 0) {
         const char *e = cfg_get("ACR_CRUMB_DRAWS");
-        crumb_on = e && *e && strcmp(e, "0");
+        crumb_on = e && *e && strcmp(e, "0") != 0;
         if (crumb_on) rt_log("vk: a GPU breadcrumb before every draw and dispatch (ACR_CRUMB_DRAWS)");
     }
     if (!crumb_on) return;
-    if (rec_records(ex->cb)) {   // vk_crumb writes straight into the command buffer: not with the recorder thread on it
-        static int said;
-        if (!said++) rt_log("vk: ACR_CRUMB_DRAWS needs ACR_VK_RECORDER=0; no draw breadcrumbs");
-        crumb_on = 0;
-        return;
-    }
     uint32_t n = ++crumb_seq & 0x0fffffff;
     CrumbRec *r = &crumb_ring[n % CRUMB_RING];
     char ka[9], kb[9];
@@ -1681,7 +1676,7 @@ static void crumb_mark(VkExec *ex, const GfxShader *a, const GfxShader *b) {
     r->seq = n;
     if (b) snprintf(r->what, sizeof r->what, "draw vs %s fs %s", ka, kb);
     else snprintf(r->what, sizeof r->what, "dispatch cs %s", ka);
-    vk_crumb(ex->cb, VK_CRUMB_DRAW, n);
+    rec_crumb(ex->cb, VK_CRUMB_DRAW, n);
 }
 
 void vk_exec_crumb_name(uint32_t n, char *o, size_t size) {

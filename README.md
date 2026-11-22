@@ -43,7 +43,7 @@ No emulator, sharper resolutions, keyboard, mouse and modern controllers.
 - **Vulkan renderer**: NVN, the Switch's graphics API, reimplemented over Vulkan, with shaders translated once and kept
   for the next start.
 - **Sharper picture**: game resolution up to 3840x2160 (the HUD drawn at that size), a 3D scene up to 3840x2160
-  (200 % of 1080p, supersampling) instead of the Switch's 1440x810, FSR 1 upscaling, NVIDIA DLSS / DLAA on RTX cards,
+  (200 % of 1080p, supersampling) instead of the Switch's 1440x810, FSR 1 upscaling, NVIDIA DLSS / DLAA on RTX cards (Windows) and AMD FSR 3.1 on any other card and on the Deck,
   anisotropic filtering, shadow quality, colour settings and HDR.
 - **Steam Deck profile**: detected by itself, with full screen 1280x800, handheld render mode and a quick menu on
   **L3+R3**.
@@ -79,7 +79,9 @@ yet (above 60 the game steps by the real time of each frame, as in the TotK reco
    controller. The extracted zip can be deleted once the game is installed.
 
 The setup downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
-the Steam Deck version), extracts the game code from your files, translates it and compiles it.
+the Steam Deck version), extracts the game code from your files, translates it and compiles it. On systems whose
+packages cannot be installed (SteamOS, Bazzite and other Fedora Atomic systems) it puts the tools in a distrobox
+container named `acr-build` (distrobox comes with Bazzite and recent SteamOS).
 
 > [!TIP]
 > **Windows says it "protected your PC"?** The setup is not signed: click *More info*, then *Run anyway*.
@@ -110,9 +112,11 @@ With **RecompLauncher**, the game is built again by itself after an update.
 | Linux for Windows (Steam Deck version only) | WSL distro **AgeOfCalamityRecomp**, in `%LOCALAPPDATA%\AgeOfCalamityRecomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
 | Linux: build folder and Python packages | `~/AgeOfCalamityRecomp-build`, `~/.venvs/AgeOfCalamityRecomp` | about 6 GB |
+| SteamOS, Bazzite: the build tools' container | distrobox `acr-build` | about 2 GB |
 
 To remove everything, delete the install folder; on Windows also run `wsl --unregister AgeOfCalamityRecomp` and delete
-`C:\msys64` if the setup installed it; on Linux delete `~/AgeOfCalamityRecomp-build` and `~/.venvs/AgeOfCalamityRecomp`.
+`C:\msys64` if the setup installed it; on Linux delete `~/AgeOfCalamityRecomp-build` and `~/.venvs/AgeOfCalamityRecomp`
+(and `distrobox rm acr-build` if the setup made it).
 </details>
 
 ### Requirements
@@ -217,12 +221,13 @@ older. This has not been tried with every emulator yet: if the game refuses the 
 </details>
 
 <details>
-<summary><b>DLSS / DLAA is greyed out.</b></summary>
+<summary><b>DLSS / FSR 3.1 is greyed out.</b></summary>
 <br>
 
-It needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to `AgeOfCalamityRecomp.exe`. The Windows build
-downloads it from NVIDIA's DLSS SDK when it finds an RTX card. If that download failed (see the build log), build again
-or put the file there yourself, then restart the game.
+The upscaler is set to NVIDIA DLSS, which needs an NVIDIA RTX card and NVIDIA's `nvngx_dlss.dll` next to
+`AgeOfCalamityRecomp.exe`. The Windows build downloads it from NVIDIA's DLSS SDK when it finds an RTX card. If that
+download failed (see the build log), build again or put the file there yourself, then restart the game. Or set
+**Upscaler** to Automatic or AMD FSR 3.1, which works on any graphics card.
 </details>
 
 <details>

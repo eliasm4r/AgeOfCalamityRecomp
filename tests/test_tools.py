@@ -7,6 +7,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -345,6 +346,27 @@ class ProgressTest(unittest.TestCase):
         self.assertEqual(self.lines[-1], "progress 0.000 " + make_build.tr("t_winbuild") + " (about 8 min left)")
 
 
+class NoCryptographyTest(unittest.TestCase):
+    """MSYS2's Python runs romfs_index.py and prepare_shaders.py on decrypted data: neither may need cryptography."""
+
+    def test_readers_import_without_cryptography(self):
+        import builtins
+        import importlib
+        real = builtins.__import__
+
+        def block(name, *a, **k):
+            if name.startswith("cryptography"):
+                raise ImportError("blocked " + name)
+            return real(name, *a, **k)
+
+        saved = {n: sys.modules.pop(n) for n in ("nx", "romfs_index", "prepare_shaders") if n in sys.modules}
+        self.addCleanup(sys.modules.update, saved)
+        with mock.patch.object(builtins, "__import__", block):
+            for name in ("nx", "romfs_index", "prepare_shaders"):
+                importlib.import_module(name)
+                sys.modules.pop(name, None)
+
+
 class MakeBuildTest(unittest.TestCase):
     def test_run_collects_problem_lines(self):
         found = []
@@ -361,6 +383,56 @@ class MakeBuildTest(unittest.TestCase):
 
     def test_known_romfs_size(self):
         self.assertEqual(make_build.romfs_size(), 11719230892)
+
+
+class ReadOnlySystemTest(unittest.TestCase):
+    """SteamOS / Bazzite: the build tools go into a distrobox (make_build.use_box)."""
+
+    def setUp(self):
+        make_build._use_box = None
+        self.addCleanup(setattr, make_build, "_use_box", None)
+
+    def box(self, readonly=True, distrobox=True, clang=False):
+        which = {"distrobox": "/usr/bin/distrobox" if distrobox else None,
+                 "clang": "/usr/bin/clang" if clang else None, "ninja": "/usr/bin/ninja" if clang else None}
+        return (mock.patch.object(make_build, "system_readonly", lambda: readonly),
+                mock.patch.object(make_build.shutil, "which", lambda n: which.get(n)))
+
+    def test_box_only_on_a_read_only_system_without_tools(self):
+        for readonly, distrobox, clang, want in ((True, True, False, True), (False, True, False, False),
+                                                 (True, False, False, False), (True, True, True, False)):
+            make_build._use_box = None
+            a, b = self.box(readonly, distrobox, clang)
+            with a, b:
+                self.assertEqual(make_build.use_box(), want, (readonly, distrobox, clang))
+
+    def test_wraps_the_venv_python_only(self):
+        make_build._use_box = True
+        venv = [make_build.VENV_PY, "-u", "tools/build.py"]
+        self.assertEqual(make_build.box_wrap(venv), ["distrobox", "enter", make_build.BOX, "--"] + venv)
+        self.assertEqual(make_build.box_wrap(["bash", "x.sh"]), ["bash", "x.sh"])
+        make_build._use_box = False
+        self.assertEqual(make_build.box_wrap(venv), venv)
+
+    def test_tools_step_makes_the_box_once(self):
+        make_build._use_box = True
+        calls = []
+        table = ("ID | NAME | STATUS | IMAGE\n"
+                 "1a | acr-build | Up | docker.io/library/archlinux:latest\n").encode()
+        args = mock.Mock(deck=True, windows=False)
+        for listed, creates in ((b"", True), (table, False)):
+            calls.clear()
+            with mock.patch.object(make_build, "WIN", False),                     mock.patch.object(make_build, "run", lambda cmd, **kw: calls.append([str(c) for c in cmd])),                     mock.patch.object(make_build, "capture", lambda cmd, **kw: mock.Mock(stdout=listed)),                     redirect_stdout(io.StringIO()):
+                self.assertEqual(make_build.s_tools(args), "ok")
+            self.assertEqual(any(c[:2] == ["distrobox", "create"] for c in calls), creates)
+            self.assertEqual(calls[-1][:4], ["distrobox", "enter", make_build.BOX, "--"])
+            self.assertTrue(calls[-1][-2].endswith("setup_wsl.sh") and calls[-1][-1] == "--minimal")
+
+    def test_read_only_without_distrobox_stops_with_a_message(self):
+        a, b = self.box(readonly=True, distrobox=False)
+        with a, b, mock.patch.object(make_build, "WIN", False), redirect_stdout(io.StringIO()),                 self.assertRaises(make_build.StepFailed) as e:
+            make_build.s_tools(mock.Mock(deck=True, windows=False))
+        self.assertIn("distrobox", str(e.exception))
 
 
 class MakeBuildUpdateTest(unittest.TestCase):
