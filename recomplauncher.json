@@ -253,6 +253,15 @@
       "defaults": { "input/motion": "1" }
     },
     {
+      "id": "gyro_calibration", "label": "Gyro calibration",
+      "help": "Takes the drift the in-game Calibrate gyro row measured (Controls tab, F1) off the gyroscope. Off: the raw gyroscope; the measure is kept.",
+      "choices": [
+        { "label": "Off", "set": { "input/gyro_calibration": "0" } },
+        { "label": "On", "set": { "input/gyro_calibration": "1" } }
+      ],
+      "defaults": { "input/gyro_calibration": "1" }
+    },
+    {
       "id": "stick_deadzone", "label": "Stick dead zone",
       "help": "How far a stick must move before the game notices. Raise it if the character or the camera drifts.",
       "slider": { "key": "input/stick_deadzone", "min": 0, "max": 50, "step": 1, "format": "%d" },
