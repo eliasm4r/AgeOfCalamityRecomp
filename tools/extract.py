@@ -36,9 +36,40 @@ DLC_PREFIX = "01002B00111A3"
 UPDATE_VERSION = 327680   # the title number of update 1.3.0, the only one the port accepts (tools/data/known-builds.json)
 
 
-def scan(game_dir: Path, keys: dict) -> list[dict]:
+def add_source_args(ap: argparse.ArgumentParser) -> None:
+    """--game-dir and --nsp, the same in every tool that reads the dump."""
+    ap.add_argument("--game-dir", type=Path, default=None,
+                    help='folder with the NSPs, subfolders included (default "Game Files" when no --nsp is given)')
+    ap.add_argument("--nsp", type=Path, action="append", default=[],
+                    help="an NSP or XCI chosen on its own, anywhere (repeatable; with --game-dir or instead of it)")
+
+
+def game_dir_of(args) -> Path | None:
+    """The folder to search: --game-dir, else "Game Files" when no file was chosen on its own, else none."""
+    return args.game_dir if args.game_dir else None if args.nsp else ROOT / "Game Files"
+
+
+def package_paths(game_dir: Path | None, nsps=()) -> list[Path]:
+    """The NSPs and XCIs of the folder (subfolders included) and the files chosen on their own, each once."""
+    paths = {}
+    if game_dir:
+        for p in game_dir.rglob("*"):
+            if p.suffix.lower() in (".nsp", ".xci") and p.is_file():
+                paths.setdefault(p.resolve(), p)
+    for p in nsps:
+        paths.setdefault(Path(p).resolve(), Path(p))
+    return sorted(paths.values(), key=lambda p: (p.name.lower(), str(p)))
+
+
+def sources_text(game_dir: Path | None, nsps=()) -> str:
+    """Where the packages were looked for, for messages."""
+    return " and ".join(([str(game_dir)] if game_dir else []) + (["the chosen files"] if nsps else [])) or "nowhere"
+
+
+def scan(paths: list[Path], keys: dict) -> list[dict]:
+    """Each package of paths (package_paths) identified by its contents."""
     found = []
-    for path in sorted(p for p in game_dir.rglob("*") if p.suffix.lower() in (".nsp", ".xci")):
+    for path in paths:
         with path.open("rb") as f:
             kind, entries = nx.container_entries(f, path.stat().st_size)
             tickets = nx.common_tickets(f, entries)
@@ -75,13 +106,13 @@ def describe(pkgs: list[dict]) -> None:
 
 
 def cmd_inventory(args, keys) -> int:
-    pkgs = scan(args.game_dir, keys)
+    pkgs = scan(package_paths(game_dir_of(args), args.nsp), keys)
     describe(pkgs)
     roles = [p["role"] for p in pkgs]
     # Each problem also goes out as a "@@PROBLEM <code> <detail>" line, which tools/make_build.py words for the player.
     problems = []
     if roles.count("base") != 1:
-        problems.append(("base", roles.count("base"), f"esperada 1 base, achei {roles.count('base')}"))
+        problems.append(("base", roles.count("base"), f"expected 1 base game, found {roles.count('base')}"))
     if roles.count("update") > 1:
         problems.append(("updates", roles.count("update"), f"expected 1 update 1.3.0, found {roles.count('update')}"))
     elif not roles.count("update"):
@@ -99,10 +130,10 @@ def cmd_inventory(args, keys) -> int:
 
 
 def cmd_exefs(args, keys) -> int:
-    pkgs = scan(args.game_dir, keys)
+    pkgs = scan(package_paths(game_dir_of(args), args.nsp), keys)
     role = "base" if args.base_only else "update"
     chosen = [p for p in pkgs if p["role"] == role]
-    nx.require(len(chosen) == 1, f"expected exactly 1 '{role}' package in {args.game_dir}")
+    nx.require(len(chosen) == 1, f"expected exactly 1 '{role}' package in {sources_text(game_dir_of(args), args.nsp)}")
     pkg = chosen[0]
     out = args.work / "exefs"
     nx.require(not out.exists() or args.force, f"{out} already exists (use --force to redo it)")
@@ -125,13 +156,13 @@ def cmd_exefs(args, keys) -> int:
                 "integrity": "FS header, hash table and every ExeFS block verified; RSA signatures not",
                 "files": listing}
     (args.work / "exefs-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(f"ExeFS em {out}")
+    print(f"ExeFS in {out}")
     return 0
 
 
 def cmd_romfs_list(args, keys) -> int:
     from collections import Counter
-    pkgs = [p for p in scan(args.game_dir, keys) if p["role"] in ("base", "dlc")]
+    pkgs = [p for p in scan(package_paths(game_dir_of(args), args.nsp), keys) if p["role"] in ("base", "dlc")]
     args.work.mkdir(parents=True, exist_ok=True)
     for pkg in pkgs:
         with pkg["path"].open("rb") as f:
@@ -190,7 +221,7 @@ def cmd_hactool_home(args, keys) -> int:
     import os
     import re
     tickets: dict[bytes, bytes] = {}
-    for pkg in scan(args.game_dir, keys):
+    for pkg in scan(package_paths(game_dir_of(args), args.nsp), keys):
         if pkg["role"] not in ("base", "update"):
             continue
         with pkg["path"].open("rb") as f:
@@ -221,7 +252,7 @@ def cmd_hactool_home(args, keys) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=("inventory", "exefs", "romfs-list", "romfs-index", "hactool-home"))
-    ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
+    add_source_args(ap)
     ap.add_argument("--keys", type=Path, default=ROOT / "Game Files" / "prod.keys")
     ap.add_argument("--work", type=Path, default=ROOT / "build" / "v130")
     ap.add_argument("--base-only", action="store_true", help="ExeFS of base 1.0.0 instead of the update")

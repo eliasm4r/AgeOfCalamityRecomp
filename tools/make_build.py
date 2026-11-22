@@ -114,12 +114,12 @@ TEXT = {
     "dlc_kept": "update: the DLC unpacked by the first build are kept (to add one, build from your NSP folder)",
     "prompts_failed": "WARNING: the Xbox and PlayStation button prompts could not be made ({0}); the game keeps the Switch ones",
     # what tools/extract.py inventory found wrong in the dump ("@@PROBLEM <code> <detail>")
-    "p_base": "the base game (01002B00111A2000) is not among the NSPs in the folder (or there is more than one)",
-    "p_update": "update 1.3.0 (01002B00111A2800) is not among the NSPs in the folder",
-    "p_updates": "there is more than one update 1.3.0 in the folder; keep one",
-    "p_wrong_update": "the update in your folder is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
+    "p_base": "the base game (01002B00111A2000) is not among your NSPs (or there is more than one)",
+    "p_update": "update 1.3.0 (01002B00111A2800) is not among your NSPs",
+    "p_updates": "there is more than one update 1.3.0 among your NSPs; keep one",
+    "p_wrong_update": "your update is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
                        "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and build again",
-    "no_nsp": "there are no .nsp files in the chosen folder",
+    "no_nsp": "there are no .nsp files in the chosen folder or files",
     "wrong_build": "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
                     "1.4.1 is not accepted yet. Replace the update NSP and build again",
     "stale_exefs": "the game code extracted by an earlier attempt is not version 1.3.0: extracting again",
@@ -333,12 +333,33 @@ def s_check(args) -> None:
         out(tr("ram", ram))
 
 
+def dump_nsps(args) -> list:
+    """The NSPs of the game folder (subfolders included) and the ones chosen on their own, each once (the same set as
+    tools/extract.py package_paths, which cannot be imported here: it needs cryptography)."""
+    paths = {}
+    if args.game_dir:
+        for p in args.game_dir.rglob("*.nsp"):
+            paths.setdefault(p.resolve(), p)
+    for p in args.nsp:
+        paths.setdefault(p.resolve(), p)
+    return sorted(paths.values(), key=lambda p: (p.name.lower(), str(p)))
+
+
+def dump_args(args) -> list:
+    """--game-dir and --nsp for the tools that read the dump (tools/extract.py add_source_args)."""
+    return (["--game-dir", args.game_dir] if args.game_dir else []) + [a for n in args.nsp for a in ("--nsp", n)]
+
+
 def check_dump(args) -> None:
     g = args.game_dir
-    if not g.is_dir():
+    if g and not g.is_dir():
         raise StepFailed(tr("no_dir", g))
-    nsps = sorted(g.rglob("*.nsp"))
-    out(f"{g}: {len(nsps)} NSP; prod.keys {'ok' if args.keys.is_file() else '--'}")
+    for n in args.nsp:
+        if not n.is_file():
+            raise StepFailed(tr("missing", n))
+    nsps = dump_nsps(args)
+    where = " and ".join(([str(g)] if g else []) + (["the chosen files"] if args.nsp else []))
+    out(f"{where}: {len(nsps)} NSP; prod.keys {'ok' if args.keys.is_file() else '--'}")
     if not args.keys.is_file():
         raise StepFailed(tr("missing", "prod.keys"))
     if not nsps:
@@ -348,13 +369,13 @@ def check_dump(args) -> None:
     if WIN or VENV_PY.is_file():
         found = []
         try:
-            run([tool_python(), ROOT / "tools/extract.py", "inventory", "--game-dir", g, "--keys", args.keys],
+            run([tool_python(), ROOT / "tools/extract.py", "inventory", *dump_args(args), "--keys", args.keys],
                 problems=found)
         except StepFailed:
             if found and "p_" + found[0][0] in TEXT:
                 raise StepFailed(tr("p_" + found[0][0], found[0][1]))
             raise
-    else:
+    elif not args.nsp:   # files chosen one by one may have any name: the inventory checks them once it can
         miss = [tr("base")] * (not any(BASE_ID in p.name.upper() for p in nsps)) + \
                [tr("update")] * (not any(UPDATE_ID in p.name.upper() for p in nsps))
         if miss:
@@ -479,7 +500,7 @@ def s_extract(args) -> str:
         raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
     if exefs.is_dir():
         shutil.rmtree(exefs)
-    run([tool_python(), ROOT / "tools/extract.py", "exefs", "--game-dir", args.game_dir, "--keys", args.keys])
+    run([tool_python(), ROOT / "tools/extract.py", "exefs", *dump_args(args), "--keys", args.keys])
     try:
         run(inspect)
     except StepFailed:
@@ -509,7 +530,7 @@ def s_romfs(args) -> str:
         rom.with_name("romfs.bin.sha256").unlink(missing_ok=True)
     if args.update:
         raise StepFailed(tr("no_extracted", ROOT / "build/v130"))
-    run([tool_python(), ROOT / "tools/merge_romfs.py", "--game-dir", args.game_dir, "--keys", args.keys])
+    run([tool_python(), ROOT / "tools/merge_romfs.py", *dump_args(args), "--keys", args.keys])
     got = rom.stat().st_size if rom.is_file() else 0
     if want and got != want:
         rom.unlink(missing_ok=True)
@@ -522,7 +543,7 @@ def s_dlc(args) -> str:
     if args.update:
         out(tr("dlc_kept"))
         return "skip"
-    run([tool_python(), ROOT / "tools/extract_dlc.py", "--game-dir", args.game_dir, "--keys", args.keys])
+    run([tool_python(), ROOT / "tools/extract_dlc.py", *dump_args(args), "--keys", args.keys])
     return "ok"
 
 
@@ -733,7 +754,10 @@ def s_send(args) -> str:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")   # the launcher reads UTF-8
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files", help="folder with the NSPs and prod.keys")
+    ap.add_argument("--game-dir", type=Path, default=None,
+                    help='folder with the NSPs and prod.keys (default "Game Files" when no --nsp is given)')
+    ap.add_argument("--nsp", type=Path, action="append", default=[],
+                    help="an NSP chosen on its own, anywhere: base game, update or DLC (repeatable)")
     ap.add_argument("--keys", type=Path, help="key file (default: prod.keys in the game folder)")
     ap.add_argument("--update", action="store_true",
                     help="update an install from the game data its first build extracted (build/v130): no NSPs read")
@@ -751,7 +775,10 @@ def main() -> int:
     ap.add_argument("--prepare", action="store_true",
                     help="setup for a launcher: build for this PC (Windows or Linux), print 'progress <0-1> <text>' lines")
     args = ap.parse_args()
-    args.game_dir = args.game_dir.expanduser()
+    args.nsp = [n.expanduser() for n in args.nsp]
+    args.game_dir = args.game_dir.expanduser() if args.game_dir else None if args.nsp else ROOT / "Game Files"
+    if not (args.keys or args.game_dir):
+        ap.error("--keys is needed when no game folder is given")
     args.keys = (args.keys or args.game_dir / "prod.keys").expanduser()
     if args.win_work is None:
         args.win_work = Path("C:/AgeOfCalamityRecomp-win") if Path("C:/AgeOfCalamityRecomp-win/host").is_dir() else ROOT / "build/win"
