@@ -1,13 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Fixed
-- **Linux: "the build stopped at Install the build tools" on Bazzite** (and other Fedora Atomic systems: Silverblue,
-  Kinoite, Bluefin), whose `dnf` refuses to install anything. There, and on SteamOS (which the setup refused until now),
-  the build tools now go into a distrobox container, `acr-build` (Arch Linux), which shares your home folder; the
-  compile and the other steps that need the tools run inside it. Without distrobox the setup says so.
-
 ## 0.3.0
 
 ### Added
@@ -25,6 +17,12 @@
   do are left out). RecompLauncher's prepare step gets it in its progress text too. The bar no longer stands still
   for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
   their expected time (up to 90 % of the step).
+
+### Fixed
+- **Linux: "the build stopped at Install the build tools" on Bazzite** (and other Fedora Atomic systems: Silverblue,
+  Kinoite, Bluefin), whose `dnf` refuses to install anything. There, and on SteamOS (which the setup refused until now),
+  the build tools now go into a distrobox container, `acr-build` (Arch Linux), which shares your home folder; the
+  compile and the other steps that need the tools run inside it. Without distrobox the setup says so.
 
 ## 0.2.1
 
