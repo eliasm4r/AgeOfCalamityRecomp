@@ -17,6 +17,10 @@
   do are left out). RecompLauncher's prepare step gets it in its progress text too. The bar no longer stands still
   for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
   their expected time (up to 90 % of the step).
+- **Language tab and a French menu**: the settings menu (F1) gets a Language tab with **Menu language** (Automatic,
+  English, Français; applies at once) and **Game language**, moved there from the Game tab. Automatic shows the menu in
+  the system's language when it is translated, else in English. The whole menu and the performance overlay are in
+  French; a text not translated yet shows in English.
 
 ## 0.2.1
 

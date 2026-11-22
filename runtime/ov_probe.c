@@ -868,8 +868,25 @@ static void probe_fonts(void) {
            (unsigned long long)size, path);
 }
 
+// The printf conversions of a text in order ("%.0f %%" -> "f%"), so a translation is checked to take the arguments the
+// English text takes. A space flag is not read as one: descriptions say "200 % draw" and are not formats.
+static void conversions(const char *t, char *o, size_t cap) {
+    size_t n = 0;
+    for (; *t && n + 1 < cap; t++) {
+        if (*t != '%') continue;
+        const char *q = t + 1;
+        while (*q && strchr("-+#0", *q)) q++;
+        while (*q >= '0' && *q <= '9') q++;
+        if (*q == '.') for (q++; *q >= '0' && *q <= '9'; q++) {}
+        while (*q && strchr("hlz", *q)) q++;
+        if (*q && strchr("diouxXeEfgGcsp%", *q)) o[n++] = *q, t = q;
+    }
+    o[n] = 0;
+}
+
 // The host catalog (ui_text.c): every menu id has English text, the software keyboard keeps its game-language rows,
-// and menu_text is English whatever ACR_MENU_LANG says.
+// and menu_text follows ACR_MENU_LANG when the menu is translated into it (each translation takes the English
+// text's printf arguments), English otherwise.
 static void probe_menu_text(void) {
     static const char *const langs[] = {"en", "ja", "fr", "de", "it", "es", "nl", "pt", "ru", "zh-Hans", "zh-Hant", "ko",
                                         "pt-BR"};
@@ -880,17 +897,29 @@ static void probe_menu_text(void) {
               "menu text id %d is too long for the description pane", id);
     }
     CHECK(!ui_text_defined("en", UI_TEXT_COUNT) && !*ui_text_in("ru", UI_TEXT_COUNT), "an id past the catalog gives text");
-    // other languages fall back to English for the menu, and keep their own keyboard texts
+    // languages without a menu translation fall back to English for it, and keep their own keyboard texts
     CHECK(!strcmp(ui_text_in("ru", UI_MENU_CONTINUE), ui_text_in("en", UI_MENU_CONTINUE)), "ru menu text is not English");
+    static const char *const menu_langs[] = {"fr"};
+    for (size_t l = 0; l < sizeof menu_langs / sizeof *menu_langs; l++)
+        for (int id = 0; id < (int)UI_TEXT_COUNT; id++) {
+            char a[64], b[64];
+            conversions(ui_text_in("en", (UiTextId)id), a, sizeof a);
+            conversions(ui_text_in(menu_langs[l], (UiTextId)id), b, sizeof b);
+            CHECK(!strcmp(a, b), "text id %d in %s takes \"%s\", English \"%s\"", id, menu_langs[l], b, a);
+        }
     CHECK(!strcmp(ui_text_in("ru", UI_SWKBD_OK), "ОК") && !strcmp(ui_text_in("de", UI_SWKBD_CANCEL), "Abbrechen") &&
           !strcmp(ui_text_in("en", UI_SWKBD_OK), "OK"), "keyboard texts changed");
     // language names: the same string in every row
     for (int id = UI_MENU_LANGNAME_EN; id <= UI_MENU_LANGNAME_PT_BR; id++)
         for (size_t i = 1; i < sizeof langs / sizeof *langs; i++)
             CHECK(!strcmp(ui_text_in(langs[i], (UiTextId)id), ui_text_in("en", (UiTextId)id)), "language name %d differs in %s", id, langs[i]);
-    // the menu stays English whatever the setting
+    // the menu language: a translated one is used, another falls back to English
+    cfg_set("ACR_MENU_LANG", "fr");
+    CHECK(!strcmp(menu_lang(), "fr") && !strcmp(menu_text(UI_MENU_CONTINUE), "Continuer"), "menu_text is not French");
+    CHECK(!strcmp(menu_text(UI_MENU_TAB_LANGUAGE), "Langue"), "the Language tab is not French");
     cfg_set("ACR_MENU_LANG", "ru");
-    CHECK(menu_text(UI_MENU_CONTINUE) == ui_text_in("en", UI_MENU_CONTINUE), "menu_text is not English");
+    CHECK(!strcmp(menu_lang(), "en") && menu_text(UI_MENU_CONTINUE) == ui_text_in("en", UI_MENU_CONTINUE),
+          "an untranslated menu language is not English");
     cfg_set("ACR_MENU_LANG", "");
 }
 

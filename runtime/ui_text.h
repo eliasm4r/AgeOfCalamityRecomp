@@ -11,12 +11,12 @@ typedef enum {
     UI_SWKBD_CANCEL,
     UI_SWKBD_PAD_HINT,       // how a controller answers
 
-    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Russian, Brazilian Portuguese and
-    // Simplified Chinese texts.
+    // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID: English for every id, and the menu languages
+    // (ui_text.c menu_lang) for each id they translate.
     UI_MENU_FIRST,
     UI_MENU_TITLE = UI_MENU_FIRST,
     UI_MENU_TAB_SCREEN, UI_MENU_TAB_GAME, UI_MENU_TAB_MODS, UI_MENU_TAB_SOUND, UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,
-    UI_MENU_TAB_ADVANCED,
+    UI_MENU_TAB_ADVANCED, UI_MENU_TAB_LANGUAGE,
     UI_MENU_CONTINUE, UI_MENU_QUIT,
     UI_MENU_ON, UI_MENU_OFF, UI_MENU_AUTO, UI_MENU_DEFAULT_MARK,      // "default" beside the default value
     UI_MENU_AFTER_RESTART,    // note on a setting that is read at start
@@ -244,5 +244,8 @@ int ui_text_defined(const char *lang, UiTextId id);
 // The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
 
-// Menu text: the port's menu and overlay are English (ui_text_in("en", id)).
+// The menu language: ACR_MENU_LANG when the catalog translates the menu into it, unset the system's language when it
+// does, else "en". The catalog row's own string.
+const char *menu_lang(void);
+// Menu and overlay text in the menu language (English for an id it does not translate).
 const char *menu_text(UiTextId id);
