@@ -105,13 +105,23 @@
       "defaults": { "display/fxaa": "1" }
     },
     {
-      "id": "dlaa", "label": "NVIDIA DLAA",
-      "help": "Anti-aliasing by NVIDIA DLSS: smooth edges and steady details. Needs an NVIDIA RTX graphics card; the setup downloads the DLSS library.",
+      "id": "dlaa", "label": "DLAA / FSR 3.1",
+      "help": "Temporal anti-aliasing: smooth edges and steady details. NVIDIA DLSS on RTX graphics cards (the setup downloads the DLSS library), AMD FSR 3.1 on the others.",
       "choices": [
         { "label": "Off", "set": { "display/dlaa": "0" } },
         { "label": "On", "set": { "display/dlaa": "1" } }
       ],
       "defaults": { "display/dlaa": "0" }
+    },
+    {
+      "id": "dlaa_engine", "label": "Upscaler",
+      "help": "Automatic: NVIDIA DLSS where the graphics card has it, else AMD FSR 3.1 (AMD, Intel and NVIDIA cards).",
+      "choices": [
+        { "label": "Automatic", "set": { "display/dlaa_engine": "auto" } },
+        { "label": "NVIDIA DLSS", "set": { "display/dlaa_engine": "dlss" } },
+        { "label": "AMD FSR 3.1", "set": { "display/dlaa_engine": "fsr3" } }
+      ],
+      "defaults": { "display/dlaa_engine": "auto" }
     },
     {
       "id": "vsync", "label": "V-Sync",

@@ -703,6 +703,8 @@ static void tab_screen(float scale) {
     // frame: the row stays out of the menu (settings.ini still takes contact_shadows) until it is
     if (vk_dlaa_missing()) opt_disable_next(UI_MENU_DLAA_MISSING);
     opt_toggle("ACR_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
+    static const UiTextId engine[] = {UI_MENU_DLAA_ENGINE_AUTO, UI_MENU_DLAA_ENGINE_DLSS, UI_MENU_DLAA_ENGINE_FSR3};
+    opt_choice("ACR_DLAA_ENGINE", UI_MENU_DLAA_ENGINE, engine, 3, UI_MENU_DLAA_ENGINE_DESC);
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
                                     UI_MENU_DLSS_PERFORMANCE};
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);

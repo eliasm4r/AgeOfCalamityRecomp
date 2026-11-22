@@ -62,7 +62,16 @@ half comes from nxnative's and MacNativeGames' Age of Calamity profiles.
   recording thread, FSR 1. BC1-BC7 textures upload as they are (the game uses no ASTC).
 - Shaders: the Ryujinx translator (MIT) runs as a separate process (`xlate`); translations and pipelines are cached
   on disk.
-- Optional NVIDIA DLSS/DLAA through the driver's NGX core (`vk_dlaa.c`, Windows only, needs `nvngx_dlss.dll`).
+- Optional NVIDIA DLSS/DLAA through the driver's NGX core (`vk_dlaa.c`, Windows only, needs `nvngx_dlss.dll`), or
+  AMD FSR 3.1 at the same point of the frame with the same inputs (`vk_fsr3.cpp`, the FidelityFX SDK 1.1.4 upscaler on
+  its Vulkan backend, any GPU; `dlaa_engine` auto|dlss|fsr3). FSR 3.1 takes the depth as R32F: each frame copies the
+  depth aspect of the game's D32F/S8 into it through a buffer. The game's depth is reversed and 0..1 (measured from the
+  scene's view-projection in the Hyrule Field charge: 1 at 64 units, 0 at 210,000; the units look like centimetres),
+  so `tools/ffx_shaders.py` builds the upscaler for inverted depth (TotK Recomp's header is for standard depth). The
+  near and far planes and the vertical field of view (37 degrees there) are read from the view-projection each frame
+  (`camera_planes`). One FSR 3.1 history serves every dynamic-resolution share of a target size, where NGX needs a
+  feature per share. Same cost as DLSS on an RTX 4070 at 1080p and 60 fps; its pipelines take about half a second
+  more at the first frame. Still in `#ifdef _WIN32` with NGX: Linux and the Deck need that part split out.
 
 ### 5. Frame pacing
 

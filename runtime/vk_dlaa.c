@@ -22,6 +22,7 @@
 #include "vk.h"
 #include "vk_dlaa.h"
 #include "vk_exec.h"
+#include "vk_fsr3.h"
 #include "vk_rec.h"
 #include "nvn_api.h"
 #include "dlaa_mv_spv.h"
@@ -97,6 +98,13 @@ int vk_dlaa_wanted(void) {
     return wanted;
 }
 
+// The engine behind the DLSS point, picked at start (ACR_DLAA_ENGINE): dlss, NVIDIA DLSS through NGX; fsr3, AMD FSR 3.1
+// (vk_fsr3.cpp) on any GPU; auto, DLSS where NGX reports it, else FSR 3.1. Both take the same picture, depth, motion
+// vectors and jitter at the same point of the frame (evaluate).
+enum { ENG_NONE, ENG_DLSS, ENG_FSR3 };
+static int engine;
+static int engine_may_dlss(void) { return strcmp(cfg_value("ACR_DLAA_ENGINE"), "fsr3") != 0; }
+
 // dlaa was on at start and vk_dlaa_init found no DLSS (no NVIDIA RTX, no NGX core, no nvngx_dlss.dll): the menu says so
 // instead of showing a switch that changes nothing.
 int vk_dlaa_missing(void) { return vk_dlaa_wanted() && N.tried && !N.available; }
@@ -145,7 +153,7 @@ static int listed(const char *const *list, uint32_t n, const char *s) {
 void vk_dlaa_instance_exts(const char **ext, uint32_t *n, uint32_t max) {
     unsigned ni = 0, nd = 0;
     const char **ie = NULL, **de = NULL;
-    if (!vk_dlaa_wanted() || !core_load() || !NGX_OK(N.req_ext(&ni, &ie, &nd, &de))) return;
+    if (!vk_dlaa_wanted() || !engine_may_dlss() || !core_load() || !NGX_OK(N.req_ext(&ni, &ie, &nd, &de))) return;
     for (unsigned i = 0; i < ni; i++)
         if (!listed(ext, *n, ie[i]) && *n < max) ext[(*n)++] = ie[i];
 }
@@ -154,7 +162,7 @@ void vk_dlaa_device_exts(const VkExtensionProperties *have, uint32_t nhave, cons
                          uint32_t max) {
     unsigned ni = 0, nd = 0;
     const char **ie = NULL, **de = NULL;
-    if (!vk_dlaa_wanted() || !core_load() || !NGX_OK(N.req_ext(&ni, &ie, &nd, &de))) return;
+    if (!vk_dlaa_wanted() || !engine_may_dlss() || !core_load() || !NGX_OK(N.req_ext(&ni, &ie, &nd, &de))) return;
     for (unsigned i = 0; i < nd; i++) {
         int ok = 0;
         for (uint32_t k = 0; k < nhave && !ok; k++) ok = !strcmp(have[k].extensionName, de[i]);
@@ -181,8 +189,25 @@ static int vtable_ok(void) {
     return ok;
 }
 
+static void ngx_init(void);
+
 void vk_dlaa_init(void) {
-    if (!vk_dlaa_wanted() || !core_load()) return;
+    if (!vk_dlaa_wanted()) return;
+    const char *want = cfg_value("ACR_DLAA_ENGINE");
+    if (engine_may_dlss()) ngx_init();
+    if (N.available) {
+        engine = ENG_DLSS;
+        return;
+    }
+    if (!strcmp(want, "dlss")) return;   // DLSS asked for and missing: the menu says so (vk_dlaa_missing)
+    // FSR 3.1 needs nothing of the driver beyond Vulkan 1.3: its context is made at the first frame (vk_fsr3.cpp)
+    engine = ENG_FSR3;
+    N.available = 1;
+    rt_log("dlaa: AMD FSR 3.1 anti-aliases and upscales the scene (dlaa_engine = %s)", want);
+}
+
+static void ngx_init(void) {
+    if (!core_load()) return;
     wchar_t wdir[MAX_PATH];
     DWORD len = GetModuleFileNameW(NULL, wdir, MAX_PATH);
     while (len && wdir[len - 1] != L'\\') len--;
@@ -230,6 +255,11 @@ static struct {
         VmaAllocation out_mem, mv_mem;
         VkImageView out_view, mv_view;
         NgxHandle *feat;
+        VkImage zc;              // FSR 3.1: the scene depth's copy as R32F (the SDK takes no D32F/S8), w x h,
+        VmaAllocation zc_mem;    // through the buffer zb
+        VkImageView zc_view;
+        VkBuffer zb;
+        VmaAllocation zb_mem;
         int ldr;                 // the feature takes the 8-bit tonemapped picture (the DLSS modes), not scene light
         uint64_t used;           // evals count when it last ran
     } sizes[4], *last;           // last: the one the previous DLAA frame ran with
@@ -297,7 +327,10 @@ static void free_size(struct Size *e) {
     if (e->mv_view) vkDestroyImageView(c->device, e->mv_view, NULL);
     if (e->out) vmaDestroyImage(c->vma, e->out, e->out_mem);
     if (e->mv) vmaDestroyImage(c->vma, e->mv, e->mv_mem);
-    if (e->feat) N.release(e->feat);
+    if (e->feat && engine == ENG_DLSS) N.release(e->feat);
+    if (e->zc_view) vkDestroyImageView(c->device, e->zc_view, NULL);
+    if (e->zc) vmaDestroyImage(c->vma, e->zc, e->zc_mem);
+    if (e->zb) vmaDestroyBuffer(c->vma, e->zb, e->zb_mem);
     memset(e, 0, sizeof *e);
 }
 
@@ -326,9 +359,19 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
     if (!image2d(ow, oh, VK_FORMAT_R16G16B16A16_SFLOAT, u, &e->out, &e->out_mem, &e->out_view) ||
         !image2d(sw, sh, VK_FORMAT_R16G16_SFLOAT, u, &e->mv, &e->mv_mem, &e->mv_view))   // at the feature's size
         return NULL;
-    VkImageMemoryBarrier2 ib[2];
-    VkImage im[2] = {e->out, e->mv};
-    for (int i = 0; i < 2; i++)
+    int nim = 2;
+    if (engine == ENG_FSR3) {
+        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = (VkDeviceSize)w * h * 4,
+                                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        if (!image2d(w, h, VK_FORMAT_R32_SFLOAT, u, &e->zc, &e->zc_mem, &e->zc_view) ||
+            vmaCreateBuffer(vk_ctx()->vma, &bi, &ai, &e->zb, &e->zb_mem, NULL) != VK_SUCCESS)
+            return NULL;
+        nim = 3;
+    }
+    VkImageMemoryBarrier2 ib[3];
+    VkImage im[3] = {e->out, e->mv, e->zc};
+    for (int i = 0; i < nim; i++)
         ib[i] = (VkImageMemoryBarrier2){.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                                         .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                         .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -337,7 +380,7 @@ static struct Size *size_for(VkCommandBuffer cb, uint32_t w, uint32_t h, uint32_
                                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = im[i],
                                         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 2,
+    VkDependencyInfo di = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = (uint32_t)nim,
                            .pImageMemoryBarriers = ib};
     vkCmdPipelineBarrier2(cb, &di);
     e->w = w, e->h = h, e->ow = ow, e->oh = oh, e->ldr = ldr, e->cw = sw, e->ch = sh;
@@ -604,6 +647,68 @@ static int perf_quality(uint32_t w, uint32_t ow) {
     return k >= 0.66 ? 2 : k >= 0.57 ? 1 : k >= 0.49 ? 0 : 3;
 }
 
+// The camera's near and far planes and vertical field of view, which FSR 3.1 takes the depth back to distances with,
+// from the scene's view-projection (D.cam_vp, vk_dlaa_draw): its last row is the view's forward axis (unit, find_vp),
+// its third row a * forward + b (a perspective), so clip depth over w is a + b / distance. Age of Calamity's depth is
+// reversed, 0..1 (measured in the Hyrule Field charge: a = -0.000305, b = 64.02, so 1 at 64 units and 0 at 210,000;
+// the units look like centimetres: 0.64 m to 2.1 km); the -1..1 mode would store the same window depth. The second
+// row's length is cot(fov / 2) (2.99 there: 37 degrees). Without a camera the last planes found stay, else defaults.
+static void camera_planes(float *near_m, float *far_m, float *fov_y) {
+    static float n = 64.0f, fa = 210000.0f, fov = 0.6458f;   // (the charge's)
+    if (D.cam_addr) {
+        const float *f = D.cam_vp;   // column k, component r: f[k * 4 + r]
+        double a = 0, l1 = 0, l3 = 0;
+        for (int k = 0; k < 3; k++)
+            a += (double)f[k * 4 + 2] * f[k * 4 + 3], l1 += (double)f[k * 4 + 1] * f[k * 4 + 1],
+                l3 += (double)f[k * 4 + 3] * f[k * 4 + 3];
+        a /= l3;
+        double b = f[14] - a * f[15], lo = nvn_depth_minus_w() ? -1.0 : 0.0;
+        // b > 0: the depth falls with the distance (reversed, the game's: 1 at near, 0 at far), else it rises
+        double nn = b > 0 ? b / (1.0 - a) : b / (lo - a), ff = b > 0 ? b / (lo - a) : b / (1.0 - a);
+        if (b <= 0) {
+            static int warned;
+            if (!warned++) rt_log("dlaa: the scene's depth is not reversed: FSR 3.1's shaders are built for reversed depth");
+        }
+        double fy = l1 > 1e-12 ? 2.0 * atan(sqrt(l3 / l1)) : 0;
+        if (nn > 1e-4 && ff > nn && isfinite(ff) && fy > 0.05 && fy < 3.0) {
+            if (fabs(nn - n) > 1e-3 * n || fabs(ff - fa) > 1e-3 * fa) {
+                static int logs;
+                if (logs++ < 8) rt_log("dlaa: camera planes %.3f .. %.1f, vertical field of view %.1f degrees", nn, ff,
+                                       fy * 57.29578);
+            }
+            n = (float)nn, fa = (float)ff, fov = (float)fy;
+        }
+    }
+    *near_m = n, *far_m = fa, *fov_y = fov;
+}
+
+// FSR 3.1 (vk_fsr3.cpp) in place of NGX: the depth goes to it as R32F, copied from the depth aspect of the game's
+// D32F/S8 through a buffer (no view of that format can be sampled as colour). One entry per target size: FSR 3.1 takes
+// the scene's share as it moves (dynamic resolution) without a new context or history. 1 when it ran.
+static int fsr_eval(VkExec *ex, struct Size *e, const VkExecTarget *t, const VkExecTarget *z, uint32_t sw, uint32_t sh,
+                    uint32_t ow, uint32_t oh, float jx, float jy, double dt) {
+    VkCommandBuffer cb = ex->cb;
+    VkBufferImageCopy rz = {.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, z->level, z->base_layer, 1},
+                            .imageExtent = {e->w, e->h, 1}};
+    vkCmdCopyImageToBuffer(cb, z->image, VK_IMAGE_LAYOUT_GENERAL, e->zb, 1, &rz);
+    full_barrier(cb);
+    rz.imageSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    vkCmdCopyBufferToImage(cb, e->zb, e->zc, VK_IMAGE_LAYOUT_GENERAL, 1, &rz);
+    full_barrier(cb);
+    Fsr3Frame f = {.color = t->image, .color_format = t->format, .depth = e->zc, .mv = e->mv, .out = e->out,
+                   .w = e->w, .h = e->h, .rw = sw, .rh = sh, .ow = ow, .oh = oh, .jx = jx, .jy = jy,
+                   .dt_ms = dt > 0 && dt < 100 ? (float)dt : 33.3f, .reset = D.reset, .fence = ex->fence,
+                   .meters_per_unit = 0.01f};   // (centimetres: camera_planes)
+    camera_planes(&f.near_m, &f.far_m, &f.fov_y);
+    if (!e->feat) {   // (marks the entry's first run: the log line, a new history)
+        e->feat = (NgxHandle *)(uintptr_t)1;
+        f.reset = 1;
+        rt_log("dlaa: FSR 3.1 on %ux%u targets -> %ux%u, %s input (format %d, depth format %d)", e->w, e->h, ow, oh,
+               e->ldr ? "tonemapped" : "scene light", (int)t->format, (int)z->format);
+    }
+    return fsr3_dispatch(cb, &f);
+}
+
 // src: DLSS's input, NULL for the armed light target (DLAA in place, scene light); otherwise the 8-bit tonemapped
 // picture at the scene size. dst: where DLSS's picture goes, NULL for the input itself. sw x sh: the part of the
 // input the scene was drawn in from its top-left corner (the game's dynamic resolution), the whole of it for DLAA.
@@ -619,11 +724,12 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
             if (D.sizes[i].out) free_size(&D.sizes[i]);
         D.last = NULL, D.preset_dirty = 0;
     }
-    struct Size *e = size_for(cb, tw, th, ow, oh, ldr, sw, sh);
+    int fsr = engine == ENG_FSR3;
+    struct Size *e = fsr ? size_for(cb, tw, th, ow, oh, ldr, tw, th) : size_for(cb, tw, th, ow, oh, ldr, sw, sh);
     uint32_t w = e ? e->cw : sw, h = e ? e->ch : sh;   // the feature's render size
     if (!e) return dl_fail("work image creation", 0);
     if (e != D.last) D.reset = 1, D.why[0]++;   // another size's history is from another moment
-    if (!D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail("parameter allocation", 0);
+    if (!fsr && !D.params && !NGX_OK(N.alloc_params(&D.params))) return dl_fail("parameter allocation", 0);
     NgxParam *p = D.params;
     VkImageView zv = vk_exec_target_view(z->img, z->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT, z->level,
                                          z->base_layer, 1, 0);
@@ -638,6 +744,17 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
         if (!no_mv) D.reset = 1, D.why[1]++;   // no camera: the history cannot be moved along
     }
     rec_drain();   // NGX records into the command buffer itself: the recorder thread must have made every call so far
+    if (D.last_color != t->image) D.reset = 1, D.why[2]++, D.last_color = t->image;
+    // The time since the previous evaluation, which DLSS weighs its history by (Age of Calamity runs at 30 fps, not
+    // the 60 assumed before); 60 fps before the first and after a gap (a pause, a load).
+    uint64_t now = kern_now_ns();
+    double dt = D.last_eval_ns ? (double)(now - D.last_eval_ns) / 1e6 : 0;
+    D.last_eval_ns = now;
+    if (fsr) {
+        if (!fsr_eval(ex, e, t, z, sw, sh, ow, oh, jx, jy, dt)) return dl_fail("FSR 3.1", 0);
+        w = sw, h = sh;
+        goto resolved;
+    }
     if (!e->feat) {
         p_setu(p, "CreationNodeMask", 1);
         p_setu(p, "VisibilityNodeMask", 1);
@@ -679,7 +796,6 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
                'A' + (int)(q == 0 ? pm : q == 3 ? pl : pk) - 1, ldr ? "tonemapped" : "scene light", (int)t->format,
                (int)z->format);
     }
-    if (D.last_color != t->image) D.reset = 1, D.why[2]++, D.last_color = t->image;
     VkImageView cv = vk_exec_target_view(t->img, t->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, t->level,
                                          t->base_layer, 1, 0);
     NgxResourceVK rc = res_image(cv, t->image, t->format, tw, th, VK_IMAGE_ASPECT_COLOR_BIT, 0);
@@ -700,11 +816,6 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
     p_setu(p, "DLSS.Render.Subrect.Dimensions.Height", sh);
     p_setf(p, "DLSS.Pre.Exposure", 1.0f);
     p_setf(p, "DLSS.Exposure.Scale", 1.0f);
-    // The time since the previous evaluation, which DLSS weighs its history by (Age of Calamity runs at 30 fps, not
-    // the 60 assumed before); 60 fps before the first and after a gap (a pause, a load).
-    uint64_t now = kern_now_ns();
-    double dt = D.last_eval_ns ? (double)(now - D.last_eval_ns) / 1e6 : 0;
-    D.last_eval_ns = now;
     p_setf(p, "FrameTimeDeltaInMsec", dt > 0 && dt < 100 ? (float)dt : 16.67f);
     NgxResult r = N.evaluate(cb, e->feat, p, NULL);
     if (!NGX_OK(r)) {
@@ -712,6 +823,7 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
                sh, w, h, tw, th, ow, oh);
         return dl_fail("DLSS evaluation", r);
     }
+resolved:
     D.reset = 0;
     D.last = e, e->used = D.evals + 1;
     full_barrier(cb);
@@ -724,7 +836,8 @@ static void evaluate(VkExec *ex, const VkExecTarget *src, const VkExecTarget *ds
     vkCmdBlitImage(cb, e->out, VK_IMAGE_LAYOUT_GENERAL, dst->image, VK_IMAGE_LAYOUT_GENERAL, 1, &b, VK_FILTER_NEAREST);
     full_barrier(cb);
     ex->recorded += 4;
-    vk_exec_draw_new_cb();   // NGX bound pipelines and descriptor sets of its own: the next draw binds everything again
+    vk_exec_draw_new_cb();   // NGX or FSR 3.1 bound pipelines and descriptor sets of their own: the next draw binds
+                             // everything again
     D.jdepth = z->image;
     next_jitter(sw, ow);
     if (++D.evals == 1 || D.evals % 3600 == 0)
@@ -881,7 +994,7 @@ int vk_dlaa_scale_draw(VkExec *ex) {
     if (sh > src->height) sh = src->height;
     if (sw != D.sub_w || sh != D.sub_h) {
         if (D.sub_logs++ < 8 || D.sub_logs % 100 == 0)
-            rt_log("dlaa: the game draws the scene at %ux%u of its %ux%u (dynamic resolution %.0f %%): DLSS takes that",
+            rt_log("dlaa: the game draws the scene at %ux%u of its %ux%u (dynamic resolution %.0f %%): the upscaler takes that",
                    sw, sh, src->width, src->height, 100.0 * f);
         D.sub_w = sw, D.sub_h = sh;
     }
