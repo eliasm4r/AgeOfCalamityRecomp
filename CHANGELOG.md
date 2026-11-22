@@ -18,6 +18,11 @@
   for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
   their expected time (up to 90 % of the step).
 
+### Fixed
+- **Crash when a mission starts** (issue #5, "vk: upload submit failed (-4)", seen on the Daruk mission): one kind
+  of indirect draw skipped the thread that records the GPU commands in order, so it ran before its render pass and
+  bindings and the GPU wrote to an invalid address. It now goes through the recorder like every other draw.
+
 ## 0.2.1
 
 ### Fixed
