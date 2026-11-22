@@ -105,6 +105,7 @@ TEXT = {
     "msys_broken": "the Python of the MSYS2 in {0} does not work: that MSYS2 is left as it is, the build uses its own "
                    "copy in {1}",
     "msys_own_bad": "the build's own MSYS2 in {0} does not work: delete that folder and build again",
+    "msys_unlocked": "removed the lock an interrupted install left: {0}",
     "tools_ok": "tools ready",
     "exit": "the command ended with code {0}",
     "no_win_linux": "the Windows version can only be built on Windows",
@@ -554,6 +555,7 @@ def tools_msys2(args) -> None:
         except StepFailed:
             out("MSYS2: core updated, second round")
         msys(args, "pacman -Syuu --noconfirm --disable-download-timeout")
+    msys_unlock(root)
     pkgs = [f"mingw-w64-ucrt-x86_64-{p}" for p in MSYS2_PKGS]
     q = capture([bash, "-lc", "pacman -Q " + " ".join(pkgs)], env=dict(os.environ, MSYSTEM="UCRT64"))
     if q.returncode != 0:
@@ -566,6 +568,22 @@ def tools_msys2(args) -> None:
     out(tr("msys_broken", root, MSYS2_OWN))
     args.msys2 = str(MSYS2_OWN)   # every later step reads it through msys_root
     tools_msys2(args)
+
+
+def msys_unlock(root: Path) -> None:
+    """Removes the lock an interrupted pacman left, which stops every later install. With any pacman running, or when
+    that cannot be told, the lock stays and pacman says so itself."""
+    lock = root / "var/lib/pacman/db.lck"
+    if not lock.exists():
+        return
+    p = capture(["tasklist", "/FI", "IMAGENAME eq pacman.exe", "/FO", "CSV", "/NH"])
+    if p.returncode or b"pacman.exe" in p.stdout.lower():
+        return
+    try:
+        lock.unlink()
+        out(tr("msys_unlocked", lock))
+    except OSError:
+        pass
 
 
 def msys_works(args) -> bool:

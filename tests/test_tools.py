@@ -419,6 +419,28 @@ class MakeBuildTest(unittest.TestCase):
         self.assertEqual(make_build.MSYS2_OWN.name, "msys64")
         self.assertNotEqual(make_build.MSYS2_OWN.parent, Path("C:/"))
 
+    def pacman_lock(self, d, returncode, stdout):
+        """msys_unlock with a lock on disk and tasklist's answer; True when the lock is still there."""
+        lock = d / "var/lib/pacman/db.lck"
+        lock.parent.mkdir(parents=True)
+        lock.write_bytes(b"")
+        answer = subprocess.CompletedProcess([], returncode, stdout, b"")
+        with mock.patch.object(make_build, "capture", lambda *a, **k: answer), mock.patch.object(make_build, "out"):
+            make_build.msys_unlock(d)
+        return lock.exists()
+
+    def test_stale_pacman_lock_is_removed(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(self.pacman_lock(Path(d), 0, b"INFO: No tasks are running"))
+
+    def test_lock_of_a_running_pacman_stays(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(self.pacman_lock(Path(d), 0, b'"pacman.exe","1234","Console","1","9,000 K"'))
+
+    def test_lock_stays_when_tasklist_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(self.pacman_lock(Path(d), 1, b""))
+
 
 class ReadOnlySystemTest(unittest.TestCase):
     """SteamOS / Bazzite: the build tools go into a distrobox (make_build.use_box)."""
