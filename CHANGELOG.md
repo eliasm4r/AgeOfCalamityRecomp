@@ -57,6 +57,11 @@
   the system's language when it is translated, else in English. The whole menu and the performance overlay are in
   French; a text not translated yet shows in English.
 
+### Fixed
+- **Crash when a mission starts** (issue #5, "vk: upload submit failed (-4)", seen on the Daruk mission): one kind
+  of indirect draw skipped the thread that records the GPU commands in order, so it ran before its render pass and
+  bindings and the GPU wrote to an invalid address. It now goes through the recorder like every other draw.
+
 ## 0.2.1
 
 ### Fixed
