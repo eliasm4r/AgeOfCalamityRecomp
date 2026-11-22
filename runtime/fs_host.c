@@ -565,7 +565,8 @@ static void storage_init(void *param) {
         need(snprintf(profile, sizeof profile, "%s", rt_config()->profile) < (int)sizeof profile, "profile path");
     uint64_t uid[2];
     char p[PATH_CAP];
-    make_dirs(profile);
+    // The profile itself may be a junction or symbolic link; links inside it stay refused (a save commit renames them).
+    if (!plat_dir_exists(profile)) make_dirs(profile);
     account_uid(uid);
     snprintf(p, sizeof p, "%s/save", profile);
     make_dirs(p);

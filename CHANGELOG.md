@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **A `profile` folder that is a junction or symbolic link** (saves kept on another disk) no longer stops the game at
+  start with "cannot create directory".
+
 ## 0.3.0
 
 ### Added
