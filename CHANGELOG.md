@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The game window comes to the front** when it opens, instead of staying behind the other windows. If Windows
+  refuses (you moved to another program during the start), its taskbar button flashes.
+
 ## 0.3.0
 
 ### Added

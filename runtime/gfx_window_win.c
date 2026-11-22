@@ -294,11 +294,11 @@ static void window_main(void *arg) {
     int cw, ch, ow, oh;
     cfg_window_size(&cw, &ch);
     outer_size(NULL, cw, ch, &ow, &oh);
-    // The window opens behind the user's windows without taking focus: it shows the game's blank loading frames for a
-    // while, and must not cover what the player works on meanwhile. The game still counts itself in focus until the
-    // first WM_ACTIVATEAPP, so loading goes on, and keyboard input waits for the foreground (input_win.c). Its taskbar
-    // button flashes until it is brought up, and ACR_FULLSCREEN waits for that first activation.
-    // ACR_BACKGROUND_WINDOW=1 (test runs): no flashing, never fullscreen at start, and F11 keeps the window's place.
+    // The window is prepared behind the user's windows, then comes to the front once it is ready. Windows can refuse
+    // that (the player went to another program during the start): its taskbar button then flashes until it is brought
+    // up. The game still counts itself in focus until the first WM_ACTIVATEAPP, so loading goes on, and keyboard input
+    // waits for the foreground (input_win.c).
+    // ACR_BACKGROUND_WINDOW=1 (test runs): stays behind, no flashing, never fullscreen at start, F11 keeps its place.
     // ACR_HIDDEN_WINDOW=1 (test runs on the player's machine): as the background window, and never shown at all; the
     // swapchain still presents to it.
     int hidden = cfg_get("ACR_HIDDEN_WINDOW") && atoi(cfg_get("ACR_HIDDEN_WINDOW"));
@@ -340,6 +340,10 @@ static void window_main(void *arg) {
     }
     plat_event_set(&g_wnd_ready);
     if (g_wnd_failed) return;
+    if (!background) {
+        SetWindowPos(g_hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetForegroundWindow(g_hwnd);
+    }
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
