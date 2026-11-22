@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 ### Fixed
 - **Build stopping on a PC that already has MSYS2** (`DLL load failed while importing binascii`): the build tools step
