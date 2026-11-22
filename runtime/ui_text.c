@@ -587,21 +587,25 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_PCSS] = "Ombres douces",
     [UI_MENU_PCSS_DESC] = "Ombres du soleil nettes là où un objet touche le sol et plus douces à mesure que l'ombre "
                           "s'éloigne (PCSS). 0 garde le filtre du jeu. Prend effet au prochain lancement.",
-    [UI_MENU_DLAA] = "NVIDIA DLSS / DLAA",
-    [UI_MENU_DLAA_DESC] = "NVIDIA DLSS pour la scène 3D (cartes NVIDIA RTX ; nvngx_dlss.dll à côté de "
-                          "AgeOfCalamityRecomp) : contours plus lisses et moins de scintillement. L'interface n'est pas "
-                          "touchée. Le mode ci-dessous fixe la résolution de départ. Prend effet après un redémarrage.",
-    [UI_MENU_DLSS] = "Mode DLSS",
-    [UI_MENU_DLSS_DESC] = "DLAA dessine la scène 3D en pleine résolution. Qualité, Équilibré et Performance la dessinent à "
-                          "67, 58 et 50 % et laissent DLSS l'agrandir, pour plus d'images par seconde ; ils remplacent "
-                          "l'échelle du rendu 3D. Prend effet après un redémarrage.",
-    [UI_MENU_DLSS_DLAA] = "DLAA (natif)", [UI_MENU_DLSS_QUALITY] = "Qualité", [UI_MENU_DLSS_BALANCED] = "Équilibré",
+    [UI_MENU_DLAA] = "DLSS / FSR 3.1",
+    [UI_MENU_DLAA_DESC] = "Anticrénelage temporel et mise à l'échelle de la scène 3D : contours plus lisses et moins de "
+                          "scintillement. NVIDIA DLSS sur les cartes RTX (nvngx_dlss.dll à côté de "
+                          "AgeOfCalamityRecomp), AMD FSR 3.1 sur toute autre carte graphique (le moteur "
+                          "ci-dessous). L'interface n'est pas touchée. Le mode ci-dessous fixe la résolution "
+                          "de départ. Prend effet après un redémarrage.",
+    [UI_MENU_DLSS] = "Mode",
+    [UI_MENU_DLSS_DESC] = "Natif (DLAA) dessine la scène 3D en pleine résolution. Qualité, Équilibré et Performance la "
+                          "dessinent à 67, 58 et 50 % et laissent DLSS ou FSR 3.1 l'agrandir, pour plus "
+                          "d'images par seconde ; ils remplacent l'échelle du rendu 3D. Prend effet après un "
+                          "redémarrage.",
+    [UI_MENU_DLSS_DLAA] = "Natif (DLAA)", [UI_MENU_DLSS_QUALITY] = "Qualité", [UI_MENU_DLSS_BALANCED] = "Équilibré",
     [UI_MENU_DLSS_PERFORMANCE] = "Performance",
     [UI_MENU_DLSS_PRESET] = "Modèle DLSS",
-    [UI_MENU_DLSS_PRESET_DESC] = "Le modèle DLSS utilisé. Automatique suit le conseil de NVIDIA pour chaque mode : K pour "
-                                 "DLAA, Qualité et Équilibré, M pour Performance. J : un peu moins de traînées derrière les "
-                                 "personnages en mouvement, un peu plus de scintillement. K : le modèle le plus net dans "
-                                 "tous les modes. S'applique tout de suite.",
+    [UI_MENU_DLSS_PRESET_DESC] = "Le modèle DLSS utilisé (DLSS seulement). Automatique suit le conseil de NVIDIA pour "
+                                 "chaque mode : K pour DLAA, Qualité et Équilibré, M pour Performance. J : un peu "
+                                 "moins de traînées derrière les personnages en mouvement, un peu plus de "
+                                 "scintillement. K : le modèle le plus net dans tous les modes. S'applique tout "
+                                 "de suite.",
     [UI_MENU_DLSS_PRESET_DEFAULT] = "Automatique", [UI_MENU_DLSS_PRESET_K] = "K (le plus net)",
     [UI_MENU_DLSS_PRESET_J] = "J (moins de traînées)",
     [UI_MENU_FXAA] = "Anticrénelage (FXAA)",
@@ -862,7 +866,7 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_VK_VALIDATION] = "Couche de validation",
     [UI_MENU_VK_VALIDATION_DESC] = "Vérifie chaque appel Vulkan et ralentit beaucoup le jeu.",
     [UI_MENU_VK_VALIDATION_MISSING] = "La couche de validation n'est pas installée.",
-    [UI_MENU_DLAA_MISSING] = "DLSS n'est pas disponible : il faut une carte NVIDIA RTX et nvngx_dlss.dll, que le build Windows télécharge. Relancez le build, ou mettez le fichier à côté de AgeOfCalamityRecomp.exe, et redémarrez.",
+    [UI_MENU_DLAA_MISSING] = "DLSS n'est pas disponible : il faut une carte NVIDIA RTX et nvngx_dlss.dll, que le build Windows télécharge. Relancez le build, ou mettez le fichier à côté de AgeOfCalamityRecomp.exe, et redémarrez. Ou réglez le moteur sur Automatique ou AMD FSR 3.1.",
     [UI_MENU_VK_DYN_VERTEX] = "État des sommets dynamique",
     [UI_MENU_VK_DYN_VERTEX_DESC] = "Force l'entrée de sommets dynamique, activée ou désactivée ; le défaut dépend du GPU.",
     [UI_MENU_VK_DYN_A2C] = "Alpha to coverage dynamique",
@@ -932,6 +936,27 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_ON] = "Modifications de code utilisées : %d fichiers.",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "Modifications de code utilisées : %d fichiers. Elles remplacent le patch %s du "
                                       "portage, qui reste désactivé tant que ce mod est actif.",
+    // FSR 3.1 and gyro calibration
+    [UI_MENU_DLAA_ENGINE] = "Moteur",
+    [UI_MENU_DLAA_ENGINE_DESC] = "Lequel est utilisé. Automatique : NVIDIA DLSS si la carte et nvngx_dlss.dll le "
+                                "permettent, sinon AMD FSR 3.1. FSR 3.1 marche sur les cartes AMD, Intel et "
+                                "NVIDIA. Prend effet après un redémarrage.",
+    [UI_MENU_DLAA_ENGINE_AUTO] = "Automatique",
+    [UI_MENU_DLAA_ENGINE_DLSS] = "NVIDIA DLSS",
+    [UI_MENU_DLAA_ENGINE_FSR3] = "AMD FSR 3.1",
+    [UI_MENU_FSR3_SHARPNESS] = "Netteté FSR 3.1",
+    [UI_MENU_FSR3_SHARPNESS_DESC] = "L'accentuation propre à FSR 3.1 sur la scène 3D, contre le flou de son accumulation "
+                                   "temporelle (FSR 3.1 seulement) ; 0 la désactive. S'applique tout de suite.",
+    [UI_MENU_GYRO_CALIBRATION] = "Calibration du gyroscope",
+    [UI_MENU_GYRO_CALIBRATION_DESC] = "Retire la dérive mesurée du gyroscope. Désactivé : le gyroscope brut.",
+    [UI_MENU_CALIBRATE_GYRO] = "Calibrer le gyroscope",
+    [UI_MENU_CALIBRATE_GYRO_DESC] = "Posez la manette sur une surface plane, appuyez, et ne la touchez plus pendant 2 "
+                                    "secondes. La visée ne dérive plus sur le côté. Gardé pour cette manette.",
+    [UI_MENU_CALIB_NONE] = "non calibré",
+    [UI_MENU_CALIB_COLLECTING] = "ne bougez plus...",
+    [UI_MENU_CALIB_DONE] = "calibré",
+    [UI_MENU_CALIB_FAILED] = "pas de données du gyroscope",
+    [UI_MENU_CALIB_MOVED] = "elle a bougé, recommencez",
 };
 
 #define SWKBD_ONLY(name, ...) static const char *const name[UI_TEXT_COUNT] = {SWKBD(__VA_ARGS__)}
