@@ -706,6 +706,7 @@ static void tab_screen(float scale) {
     opt_toggle("ACR_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
     static const UiTextId engine[] = {UI_MENU_DLAA_ENGINE_AUTO, UI_MENU_DLAA_ENGINE_DLSS, UI_MENU_DLAA_ENGINE_FSR3};
     opt_choice("ACR_DLAA_ENGINE", UI_MENU_DLAA_ENGINE, engine, 3, UI_MENU_DLAA_ENGINE_DESC);
+    opt_slider("ACR_FSR3_SHARPNESS", UI_MENU_FSR3_SHARPNESS, 0, 100, UI_MENU_FSR3_SHARPNESS_DESC, 5, "%.0f %%");
     static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
                                     UI_MENU_DLSS_PERFORMANCE};
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);

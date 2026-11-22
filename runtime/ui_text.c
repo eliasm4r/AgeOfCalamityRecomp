@@ -135,6 +135,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                  "restart.",
     [UI_MENU_DLAA_ENGINE_AUTO] = "Automatic", [UI_MENU_DLAA_ENGINE_DLSS] = "NVIDIA DLSS",
     [UI_MENU_DLAA_ENGINE_FSR3] = "AMD FSR 3.1",
+    [UI_MENU_FSR3_SHARPNESS] = "FSR 3.1 sharpness",
+    [UI_MENU_FSR3_SHARPNESS_DESC] = "FSR 3.1's own sharpening of the 3D scene, against the softness of its temporal "
+                                    "accumulation (FSR 3.1 only); 0 turns it off. Applies at once.",
     [UI_MENU_DLSS] = "Mode",
     [UI_MENU_DLSS_DESC] = "Native (DLAA) draws the 3D scene at full resolution. Quality, Balanced and Performance draw it at "
                           "67, 58 and 50 % and let DLSS or FSR 3.1 scale it up, for more frames per second; they replace the 3D render "

@@ -708,10 +708,14 @@ static int fsr_eval(VkExec *ex, struct Size *e, const VkExecTarget *t, const VkE
     rz.imageSubresource = (VkImageSubresourceLayers){VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     vkCmdCopyBufferToImage(cb, e->zb, e->zc, VK_IMAGE_LAYOUT_GENERAL, 1, &rz);
     full_barrier(cb);
+    // FSR 3.1's own sharpening (RCAS; fsr3_sharpness, live): its temporal accumulation softens the picture; 80 % by
+    // default, as TotK Recomp has it
+    int sharp = cfg_int("ACR_FSR3_SHARPNESS");
+    sharp = sharp < 0 ? 0 : sharp > 100 ? 100 : sharp;
     Fsr3Frame f = {.color = t->image, .color_format = t->format, .depth = e->zc, .mv = e->mv, .out = e->out,
                    .w = e->w, .h = e->h, .rw = sw, .rh = sh, .ow = ow, .oh = oh, .jx = jx, .jy = jy,
                    .dt_ms = dt > 0 && dt < 100 ? (float)dt : 33.3f, .reset = D.reset, .fence = ex->fence,
-                   .meters_per_unit = 0.01f};   // (centimetres: camera_planes)
+                   .meters_per_unit = 0.01f, .sharpness = sharp / 100.0f};   // (centimetres: camera_planes)
     camera_planes(&f.near_m, &f.far_m, &f.fov_y);
     if (!e->feat) {   // (marks the entry's first run: the log line, a new history)
         e->feat = (NgxHandle *)(uintptr_t)1;

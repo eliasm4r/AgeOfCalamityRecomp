@@ -6,7 +6,8 @@
 - **AMD FSR 3.1**: the DLSS / DLAA setting now also works on AMD and Intel graphics cards, on NVIDIA cards without
   DLSS, and on Linux and the Steam Deck (built there, not yet tried on a Linux device; DLSS stays Windows only). A new **Upscaler** row (Screen tab, and in RecompLauncher) picks it: **Automatic** (default)
   takes NVIDIA DLSS where the card and `nvngx_dlss.dll` have it, else FSR 3.1; **NVIDIA DLSS** or **AMD FSR 3.1**
-  force one. FSR 3.1 takes the same picture, depth, motion vectors and jitter as DLSS, in every mode: Native (DLAA)
+  force one. **FSR 3.1 sharpness** (0-100 %, default 80, applies at once) sets its own sharpening.
+  FSR 3.1 takes the same picture, depth, motion vectors and jitter as DLSS, in every mode: Native (DLAA)
   anti-aliases the scene at full size, Quality, Balanced and Performance draw it smaller and scale it up. In a
   Hyrule Field battle at 1080p and 60 fps it costs the same as DLSS. The AMD FidelityFX SDK's upscaler (MIT) is built
   into the game, as in TotK Recomp.
