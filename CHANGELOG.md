@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+### Fixed
+- **Build stopping at "Install the build tools" with "could not lock database"**: an MSYS2 install that was interrupted
+  left a lock file behind, and every later build stopped on it. The setup now removes that lock when no `pacman` is
+  running.
+
 ## 0.3.1
 
 ### Fixed
