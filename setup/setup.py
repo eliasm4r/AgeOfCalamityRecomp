@@ -570,16 +570,20 @@ class App:
 
         buttons = ttk.Frame(f)
         buttons.grid(row=10, column=0, columnspan=3, sticky="we", pady=(14, 0))
-        buttons.columnconfigure(2, weight=1)
+        buttons.columnconfigure(3, weight=1)
         self.details_button = ttk.Button(buttons, text=T["details"], command=self.toggle_details)
         self.details_button.grid(row=0, column=0, padx=(0, 8))
         self.extra_button = ttk.Button(buttons, text=T["check"], command=lambda: self.start(True))
         self.extra_button.grid(row=0, column=1)
+        # shown once a build has failed: the report then holds the setup's and the build's logs (issue #6 had none)
+        self.report_button = ttk.Button(buttons, text=T["report"], command=self.make_report)
+        self.report_button.grid(row=0, column=2, padx=(8, 0))
+        self.report_button.grid_remove()
         self.main_button = ttk.Button(buttons, text=T["update"] if installed else T["build"],
                                       command=lambda: self.start(False), default="active")
-        self.main_button.grid(row=0, column=3, padx=(0, 8))
+        self.main_button.grid(row=0, column=4, padx=(0, 8))
         self.close_button = ttk.Button(buttons, text=T["close"], command=self.close)
-        self.close_button.grid(row=0, column=4)
+        self.close_button.grid(row=0, column=5)
         f.columnconfigure(0, weight=1)
         self.folder.trace_add("write", lambda *change: self.refresh())
         self.install.trace_add("write", lambda *change: self.refresh())
@@ -780,6 +784,7 @@ class App:
         for w in self.inputs:
             w.configure(state="disabled")
         self.extra_button.grid_remove()
+        self.report_button.grid_remove()
         self.main_button.configure(state="disabled")
         self.close_button.configure(text=T["cancel"])
         self.build.start()
@@ -847,6 +852,7 @@ class App:
         title = failed["title"] if failed else T["build"]
         self.status.set(T["failed"].format(step=title))
         self.main_button.configure(text=T["rebuild"])
+        self.report_button.grid()
         if self.need_wsl:
             return self.offer_wsl()
         messagebox.showerror(T["window"], T["failed_box"].format(step=title, note=(failed or {}).get("note", ""),

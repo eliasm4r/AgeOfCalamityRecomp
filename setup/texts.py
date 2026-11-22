@@ -72,7 +72,8 @@ TEXTS = {
     "done": "The game is built.",
     "done_deck": "The Steam Deck folder is ready: copy it to your Deck (see the README).",
     "failed": "The build stopped: {step}",
-    "failed_box": "The build stopped at \"{step}\".\n\n{note}\n\nThe full log is in {path}",
+    "failed_box": "The build stopped at \"{step}\".\n\n{note}\n\nThe full log is in {path}. To report it, press "
+                  "\"Report a problem...\": it makes a zip of the logs to attach.",
     "cancelled": "Build stopped.",
     "no_python": "Could not start Python: {error}",
     "update_note": "The game is already installed here. Update installs this version over it without your NSPs: "

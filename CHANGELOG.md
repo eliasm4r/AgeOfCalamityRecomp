@@ -23,6 +23,12 @@
   Kinoite, Bluefin), whose `dnf` refuses to install anything. There, and on SteamOS (which the setup refused until now),
   the build tools now go into a distrobox container, `acr-build` (Arch Linux), which shares your home folder; the
   compile and the other steps that need the tools run inside it. Without distrobox the setup says so.
+- **Windows build stopped after the game code with "DLL load failed while importing _rust"** (issue #6): the RomFS
+  index and the shader preparation read the already decrypted game data, but imported the decryption library
+  (`cryptography`) anyway, and an MSYS2 whose `cryptography` cannot load its DLL (an MSYS2 updated only in part)
+  stopped there. They no longer need it.
+- **No "Report a problem..." button when the build failed** (issue #6): the setup had it only once the game was
+  installed. It now appears next to "Check files" as soon as a build stops, and the error box points to it.
 
 ## 0.2.1
 
