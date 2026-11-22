@@ -323,10 +323,11 @@ class Build:
             elif line.startswith("@@STEP "):
                 parts = line[7:].split(" ", 2)
                 self.events.put(("step", (parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "")))
-            elif line.startswith("@@PROGRESS "):
+            elif line.startswith("@@PROGRESS "):   # "<0-1> [seconds left]"
                 try:
-                    self.events.put(("progress", float(line[11:])))
-                except ValueError:
+                    parts = line[11:].split()
+                    self.events.put(("progress", (float(parts[0]), int(parts[1]) if len(parts) > 1 else None)))
+                except (ValueError, IndexError):
                     pass
             elif line.startswith("@@NEED wsl"):
                 self.events.put(("wsl", None))
@@ -670,6 +671,7 @@ class App:
         self.need_wsl = False
         self.started = time.monotonic()
         self.fraction = None   # the build's own "@@PROGRESS" figure, once it prints one
+        self.left = None       # and the seconds it says are left
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
@@ -695,7 +697,8 @@ class App:
                         step["note"] = note
             self.show_progress()
         elif kind == "progress":
-            self.fraction = max(self.fraction or 0.0, min(1.0, value))
+            self.fraction = max(self.fraction or 0.0, min(1.0, value[0]))
+            self.left = value[1]
             self.show_progress()
         elif kind == "log":
             self.add_log(value)
@@ -714,8 +717,10 @@ class App:
         if current:
             n = self.steps.index(current) + 1
             minutes = int(time.monotonic() - self.started) // 60
+            # The time left once the build has measured this PC a little (its first figure is only the steps' guess)
+            left = T["left"].format(n=max(1, (self.left + 59) // 60)) if self.left is not None and minutes else ""
             self.status.set(f"{int(100 * fraction)} %  ·  " + T["step"].format(n=n, total=total, title=current["title"])
-                            + (f"  ({minutes} min)" if minutes else ""))
+                            + (f"  ·  {left}" if left else ""))
 
     def build_ended(self, result):
         self.build = None

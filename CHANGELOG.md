@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **The setup shows the time left** ("about 12 min left") next to the step, once the build has measured the PC for a
+  minute: each step's expected time, scaled by how fast this PC went on the steps done so far (steps with nothing to
+  do are left out). RecompLauncher's prepare step gets it in its progress text too. The bar no longer stands still
+  for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
+  their expected time (up to 90 % of the step).
+
 ## 0.2.1
 
 ### Fixed
