@@ -214,6 +214,14 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_INVERT_DESC] = "Mirrors this axis of the gamepad's stick.",
 
     [UI_MENU_MOTION] = "Motion controls", [UI_MENU_MOTION_DESC] = "Aiming with the controller's gyroscope.",
+    [UI_MENU_GYRO_CALIBRATION] = "Gyro calibration",
+    [UI_MENU_GYRO_CALIBRATION_DESC] = "Takes the measured drift off the gyroscope. Off: the raw gyroscope.",
+    [UI_MENU_CALIBRATE_GYRO] = "Calibrate gyro",
+    [UI_MENU_CALIBRATE_GYRO_DESC] = "Put the controller down on a flat surface, press, and leave it still for 2 "
+                                    "seconds. It stops the aim drifting to the side. Kept for this controller.",
+    [UI_MENU_CALIB_NONE] = "not calibrated", [UI_MENU_CALIB_COLLECTING] = "keep it still...",
+    [UI_MENU_CALIB_DONE] = "calibrated", [UI_MENU_CALIB_FAILED] = "no gyro data",
+    [UI_MENU_CALIB_MOVED] = "it moved, try again",
     [UI_MENU_RUMBLE_STRENGTH] = "Vibration strength",
     [UI_MENU_RUMBLE_STRENGTH_DESC] = "How strong the controller vibrates.",
     [UI_MENU_RUMBLE_CURVE] = "Vibration curve",

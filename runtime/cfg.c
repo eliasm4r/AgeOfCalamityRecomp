@@ -40,7 +40,7 @@ static const char *const known[] = {
     "DESC_TEMPLATE", "DEVICE_PROFILE", "DIAG", "DIRTY_CENSUS", "DLAA", "DLAA_ENGINE", "DLAA_JITTER", "DLAA_MV", "DLSS", "DLSS_PRESET", "FSR3_DEBUG", "FSR3_FP16", "FSR3_SHARPNESS", "FSR3_VIEW", "DUMP", "CMD_OOM", "CTL_TRACE", "DUMP_BUF", "DUMP_DIR", "DYNAMIC_RES",
     "DUMP_LOG", "DUMP_LOG_VKFMT", "DUMP_MAX", "PERF_LOG", "ATTACK_SHOTS", "ATTACK_DUMP", "HIT_SHOTS", "HIT_DUMP", "MARK_DUMP", "DARK_SECS", "DUMP_RAW", "DUMP_VBIN", "EXEFS", "FEEDBACK", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
     "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FPS60", "FPS_LIMIT", "FRAME_QUEUE", "FREEZE_IDLE", "FREEZE_SHADOW", "FREE_CORES",
-    "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "HANG_SECS", "HDR", "HDR_GAME_NITS",
+    "FULLSCREEN", "FXAA", "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GYRO_BIAS_PAD", "GYRO_BIAS_X", "GYRO_BIAS_Y", "GYRO_BIAS_Z", "GYRO_CALIBRATION", "HANG_SECS", "HDR", "HDR_GAME_NITS",
     "HDR_PEAK_NITS", "HDR_UI_NITS", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "INVERT_LX", "INVERT_LY", "INVERT_RX", "INVERT_RY", "LANG", "LIB_PREBUILD",
     "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LSTICK_DEADZONE", "MEMORY", "MENU_LANG", "MENU_TEST",
     "MENU_TEST_DIR", "MENU_TEST_FOCUS", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MIRROR_WB", "MODS_DIR", "MODS_DISABLED", "MODS_ORDER", "MODS_REBUILD", "MOTION", "MOUSE_SENS", "MOVIE_HOST", "MOVIE_PACE", "MUTE", "MUTE_BACKGROUND",
@@ -77,7 +77,8 @@ static const struct { const char *key, *section; } sections[] = {
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"},
     {"VOLUME", "audio"}, {"MUTE", "audio"}, {"MUTE_BACKGROUND", "audio"}, {"AUDIO_DEVICE", "audio"},
     {"INVERT_LX", "input"}, {"INVERT_LY", "input"}, {"INVERT_RX", "input"}, {"INVERT_RY", "input"},
-    {"MOTION", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
+    {"MOTION", "input"}, {"GYRO_CALIBRATION", "input"}, {"GYRO_BIAS_X", "input"}, {"GYRO_BIAS_Y", "input"},
+    {"GYRO_BIAS_Z", "input"}, {"GYRO_BIAS_PAD", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
     {"PAD_LAYOUT", "input"}, {"PROMPTS", "input"}, {"STICK_DEADZONE", "input"}, {"LSTICK_DEADZONE", "input"}, {"RSTICK_DEADZONE", "input"},
     {"MOUSE_SENS", "input"}, {"WALK_KEY", "input"}, {"WALK_SCALE", "input"}, {"INPUT_RECORD", "input"},
     {"BIND_A", "input"}, {"BIND_B", "input"}, {"BIND_X", "input"}, {"BIND_Y", "input"}, {"BIND_LCLICK", "input"},
@@ -140,7 +141,9 @@ static const CfgMeta metas[] = {
     {"AUDIO_DEVICE", "", NULL, LIVE},   // audio_mixer.c output_worker: a device name, empty for the system default
     {"INVERT_LX", "0", "0|1", LIVE}, {"INVERT_LY", "0", "0|1", LIVE}, {"INVERT_RX", "0", "0|1", LIVE},
     {"INVERT_RY", "0", "0|1", LIVE},
-    {"MOTION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
+    // GYRO_CALIBRATION: subtract the bias the Calibrate gyro row measured (motion_fusion.c). The bias itself
+    // (GYRO_BIAS_X/Y/Z, GYRO_BIAS_PAD: the controller it belongs to) has no row here, so Reset all keeps it.
+    {"MOTION", "1", "0|1", LIVE}, {"GYRO_CALIBRATION", "1", "0|1", LIVE}, {"RUMBLE_STRENGTH", "130", "0..300", LIVE}, {"RUMBLE_CURVE", "0.6", "0.2..1.5", LIVE},
     {"RUMBLE_TRIGGERS", "0", "0|1", LIVE}, {"PAD_LAYOUT", "nintendo", "auto|nintendo|xbox|playstation", LIVE},
     {"PROMPTS", "nintendo", "nintendo|xbox|playstation", RESTART},
     {"STICK_DEADZONE", "8", "0..50", LIVE},

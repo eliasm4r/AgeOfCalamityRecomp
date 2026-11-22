@@ -11,6 +11,15 @@
   anti-aliases the scene at full size, Quality, Balanced and Performance draw it smaller and scale it up. In a
   Hyrule Field battle at 1080p and 60 fps it costs the same as DLSS. The AMD FidelityFX SDK's upscaler (MIT) is built
   into the game, as in TotK Recomp.
+- **Gyro calibration** (Controls tab, **Calibrate gyro**): put the controller down, press, and leave it still for two
+  seconds. The gyroscope's resting drift is measured and taken off every reading, so the aim no longer creeps to the
+  side; the result is kept in `settings.ini` for that controller and loaded again when it connects. A controller that
+  moved during the measure is refused. **Gyro calibration** turns the correction off without losing it.
+
+### Fixed
+- Gyro aiming: held still, the controller's "down" is put right within a second (it took about two), so an aim up or
+  down no longer turns the camera to the side as well after a quick move; and the motion starts from the controller's
+  first real reading instead of from a sensor that has not reported yet. Both from TotK Recomp.
 
 ## 0.3.0
 

@@ -598,8 +598,85 @@ static void probe_feedback(uint32_t pid, uint32_t style) {
           near3(ms[0].dir, 1, 0, 0, 0.01),
           "fusion restart: %d states in the frame of the Start, %d after one sample (sampling %lld, angle %.4f rev)", same,
           next, (long long)ms[0].sampling, (double)ms[0].angle[2]);
-    printf("hid feedback: vibration handles %#x %#x, six-axis %#x, at rest when stopped; fusion quarter turn %.4f rev\n",
-           vh[0], vh[1], sh[0], quarter);
+    free(m);
+
+    // A sensor just switched on reads zero: no state until the first reading, which levels the frame. The reference up
+    // in controller coordinates is (dir[2], dir[5], dir[8]): against the measured gravity.
+    MotionFusion *f = motion_new();
+    t = 1000000000ull;
+    const double unread[3] = {0, 0, 0}, tilt[3] = {0, -0.5, -0.8660254};   // gravity 30 degrees about x
+    for (int i = 0; i < 5; i++) motion_feed(f, unread, still, t += 4000000);
+    int before = motion_read(f, ms, 16, t + 1000000);
+    motion_feed(f, tilt, still, t += 4000000);
+    int after = motion_read(f, ms, 16, t + 1000000);
+    CHECK(before == 0 && after == 1 && fabs(ms[0].dir[2]) < 0.01 && fabs(ms[0].dir[5] - 0.5) < 0.01 &&
+          fabs(ms[0].dir[8] - 0.866) < 0.01,
+          "first reading: %d states before it, %d after, up (%.3f %.3f %.3f)", before, after, (double)ms[0].dir[2],
+          (double)ms[0].dir[5], (double)ms[0].dir[8]);
+    // Held still with a wrong down (the gravity turned 30 degrees under a frame levelled flat): the still gain puts it
+    // right within a second (30 x e^-4: 0.5 degree; the moving gain 0.5/s would leave 18)
+    free(f);
+    f = motion_new();
+    motion_feed(f, down, still, t += 4000000);
+    for (int i = 0; i < 250; i++) motion_feed(f, tilt, still, t += 4000000);
+    motion_read(f, ms, 1, t + 1000000);
+    double cosine = ms[0].dir[5] * 0.5 + ms[0].dir[8] * 0.8660254;
+    double off = acos(cosine > 1 ? 1 : cosine) * 180 / M_PI;
+    CHECK(off < 2, "held still, a 30 degree wrong down is %.2f degrees after 1 s", off);
+    free(f);
+
+    // Gyro calibration: a controller lying still with a factory bias (one Pro Controller reads 0.14 rad/s on z). The
+    // attempt skips 125 samples and averages 250; then the bias comes off every sample and the yaw stays put.
+    cfg_set("ACR_GYRO_CALIBRATION", "1");
+    f = motion_new();
+    const double bias[3] = {0.01, -0.02, 0.14};
+    motion_calibrate_start(f, "probe pad", t);
+    int collecting = motion_calib_poll(f, t);
+    for (int i = 0; i < 375; i++) {
+        double noisy[3] = {bias[0] + (i & 1 ? 0.005 : -0.005), bias[1], bias[2] + (i & 2 ? 0.004 : -0.004)};
+        motion_feed(f, down, noisy, t += 4000000);
+    }
+    int done = motion_calib_poll(f, t);
+    for (int i = 0; i < 250; i++) motion_feed(f, down, bias, t += 4000000);
+    motion_read(f, ms, 1, t + 1000000);
+    double yaw_cal = ms[0].angle[2];
+    CHECK(collecting == MOTION_CALIB_COLLECTING && done == MOTION_CALIB_DONE && fabs(yaw_cal) < 0.0005 &&
+          fabs(ms[0].gyro[2]) < 1e-4,
+          "calibration: states %d then %d, yaw after 1 s %.5f rev (0.0223 uncorrected)", collecting, done, yaw_cal);
+    // A moving controller is rejected and the bias in effect stays
+    motion_calibrate_start(f, "probe pad", t);
+    for (int i = 0; i < 375; i++) {
+        double shaken[3] = {bias[0], bias[1], bias[2] + (i & 4 ? 0.3 : -0.3)};
+        motion_feed(f, down, shaken, t += 4000000);
+    }
+    int moved = motion_calib_poll(f, t);
+    uint64_t mark = t;
+    motion_read(f, ms, 1, t + 1000000);
+    double yaw_shaken = ms[0].angle[2];
+    for (int i = 0; i < 250; i++) motion_feed(f, down, bias, t += 4000000);
+    motion_read(f, ms, 1, t + 1000000);
+    double yaw_kept = ms[0].angle[2] - yaw_shaken;
+    // Switched off: the raw gyro again, the bias kept for when it comes back on
+    cfg_set("ACR_GYRO_CALIBRATION", "0");
+    for (int i = 0; i < 250; i++) motion_feed(f, down, bias, t += 4000000);
+    motion_read(f, ms, 1, t + 1000000);
+    double raw_rate = ms[0].gyro[2] * 2 * M_PI;
+    const char *reset[] = {"ACR_GYRO_CALIBRATION"};
+    cfg_reset(reset, 1);
+    CHECK(moved == MOTION_CALIB_MOVED && fabs(yaw_kept) < 0.0005 && fabs(raw_rate - bias[2]) < 1e-4,
+          "calibration: shaken attempt state %d (%d moved), yaw with the kept bias %.5f rev, off: %.4f rad/s (raw %.2f)",
+          moved, MOTION_CALIB_MOVED, yaw_kept, raw_rate, bias[2]);
+    // No samples for 5 s: the attempt gives up; a controller with a bias keeps it, one without shows the failure
+    motion_calibrate_start(f, "probe pad", mark);
+    int kept = motion_calib_poll(f, t + 6000000000ull);
+    motion_bias_reset(f);
+    motion_calibrate_start(f, "probe pad", t);
+    int failed = motion_calib_poll(f, t + 6000000000ull);
+    CHECK(kept == MOTION_CALIB_DONE && failed == MOTION_CALIB_FAILED, "calibration timeout: %d with a bias, %d without",
+          kept, failed);
+    free(f);
+    printf("hid feedback: vibration handles %#x %#x, six-axis %#x, at rest when stopped; fusion quarter turn %.4f rev, "
+           "held-still down %.2f deg, calibrated yaw %.5f rev\n", vh[0], vh[1], sh[0], quarter, off, yaw_cal);
 }
 
 static void probe_input(void) {

@@ -902,6 +902,18 @@ static void tab_controls(float scale) {
         ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
     }
     opt_toggle("ACR_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
+    opt_toggle("ACR_GYRO_CALIBRATION", UI_MENU_GYRO_CALIBRATION, UI_MENU_GYRO_CALIBRATION_DESC);
+    // The measured bias belongs to one controller (input.c pad_bias_select): the value says whether the open one has
+    // one, and the state of an attempt while it runs (about 1.5 s) and after it.
+    if (motion_calibration_enabled() && input_motion_enabled()) {
+        static const UiTextId calib[] = {UI_MENU_CALIB_NONE, UI_MENU_CALIB_COLLECTING, UI_MENU_CALIB_DONE,
+                                         UI_MENU_CALIB_FAILED, UI_MENU_CALIB_MOVED};
+        int st = input_motion_calib_state(nullptr, 0);
+        if (opt_button("##calibrate_gyro", UI_MENU_CALIBRATE_GYRO, UI_MENU_CALIBRATE_GYRO_DESC,
+                       menu_text(calib[st >= 0 && st <= MOTION_CALIB_MOVED ? st : 0])) &&
+            st != MOTION_CALIB_COLLECTING)
+            input_motion_calibrate();
+    }
     opt_slider("ACR_RUMBLE_STRENGTH", UI_MENU_RUMBLE_STRENGTH, 0, 300, UI_MENU_RUMBLE_STRENGTH_DESC, 10, "%.0f %%");
     opt_slider("ACR_RUMBLE_CURVE", UI_MENU_RUMBLE_CURVE, 0.2f, 1.5f, UI_MENU_RUMBLE_CURVE_DESC, 0.05f, "%.2f");
     opt_toggle("ACR_RUMBLE_TRIGGERS", UI_MENU_RUMBLE_TRIGGERS, UI_MENU_RUMBLE_TRIGGERS_DESC);
