@@ -299,6 +299,19 @@ class ProgressTest(unittest.TestCase):
         self.assertAlmostEqual(value, (5 + 480 * 0.475) / 885, places=3)
         self.assertAlmostEqual(left / ((885 - 5 - 480 * 0.475) * 250 / (5 + 480 * 0.475)), 1, places=2)
 
+    def test_quick_step_weighs_nothing(self):
+        p = self.p
+        p.start([("tools", None), ("winbuild", None)], False)
+        p.step(0)
+        self.now += 1   # the tools were already there: 1 s for a weight of 120
+        p.finish("ok")
+        p.step(1)
+        value, left = self.last()
+        self.assertEqual(left, 480)   # the guessed pace, not 1/120 of it
+        self.now += 120
+        p.line("[20/100] cc main.c")   # 91 weight seconds took 120 s: this PC's pace, slower than the guess
+        self.assertAlmostEqual(self.last()[1] / ((480 - 480 * 0.19) * 120 / (480 * 0.19)), 1, places=2)
+
     def test_skipped_step_weighs_nothing(self):
         p = self.p
         p.start([("romfs", None), ("winbuild", None)], False)

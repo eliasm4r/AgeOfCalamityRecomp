@@ -178,6 +178,7 @@ SHADERS_XLATE = re.compile(r"prepare: (\d+) of (\d+) pairs")
 SHADERS_BUILD = re.compile(r"preparation progress: (\d+) of (\d+) variants")
 ROMFS_BYTES = re.compile(r"romfs progress: (\d+) of (\d+) MiB")   # tools/merge_romfs.py
 TICK = 2.0   # seconds between the ticker's looks
+QUICK = 0.1  # a step done in under this share of its weight in seconds had nothing to do (Progress.finish)
 
 
 class Progress:
@@ -213,9 +214,12 @@ class Progress:
             self.report()
 
     def finish(self, result: str):
-        """The current step ended with result (ok or skip)."""
+        """The current step ended with result (ok or skip). A step done in under QUICK of its weight had nothing to do
+        (the tools already installed: 1 s for a weight of 120) and counts as skipped: as done work it made this PC look
+        100 times faster than it is, and the first minutes showed seconds left."""
         with self.lock:
-            if result == "skip":
+            took = time.monotonic() - self.step_started
+            if result == "skip" or took < QUICK * WEIGHTS.get(self.plan[self.index], 10):
                 self.skipped.add(self.index)
             else:
                 self.spent += time.monotonic() - self.step_started
@@ -297,7 +301,8 @@ class Progress:
         minute = (left + 59) // 60
         if value - self.shown[0] < 0.002 and minute == self.shown[1] and value < 1:
             return
-        self.shown = (max(value, self.shown[0]), minute)
+        value = max(value, self.shown[0])   # a step found to have had nothing to do leaves the total: never go back
+        self.shown = (value, minute)
         if self.prepare:
             out(f"progress {value:.3f} {tr('t_' + self.plan[self.index])} ({tr('left', minute)})")
         else:
