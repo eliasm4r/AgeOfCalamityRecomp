@@ -101,6 +101,33 @@ static void log_dir(char *dir, size_t cap) {
     }
 }
 
+// A lost GPU device leaves <log dir>/device-lost; the next run reads it once (diag_lost_last_run) and turns on what
+// names the draw at the next loss (vk_exec_draw.c crumb_mark).
+static void lost_path(char *path, size_t cap) {
+    log_dir(path, cap);
+    size_t n = strlen(path);
+    snprintf(path + n, cap - n, "/device-lost");
+}
+
+void diag_lost_mark(void) {
+    char path[PLAT_PATH_MAX * 3];
+    lost_path(path, sizeof path);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fputs("The last run of the game lost the GPU device (game.log). The next run puts a breadcrumb on every draw.\n", f);
+    fclose(f);
+}
+
+int diag_lost_last_run(void) {
+    char path[PLAT_PATH_MAX * 3];
+    lost_path(path, sizeof path);
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    fclose(f);
+    remove(path);
+    return 1;
+}
+
 // input.c: where this run records its input when nothing else says, NULL for no recording.
 const char *diag_record_path(void) {
     static char path[PLAT_PATH_MAX * 3 + 96];

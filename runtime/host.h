@@ -236,6 +236,8 @@ void diag_read(uint64_t bytes);                            // RomFS bytes read
 void diag_open(const char *what, const char *path);       // a file opened (fs_trace), the last ones go in a report
 const char *diag_record_path(void);                        // input.c: this run's default input recording, or NULL
 void diag_attack_button(int y);                            // input.c: the regular attack button's state, every poll
+void diag_lost_mark(void);                                 // vk_device.c: the device was lost; the next run is told
+int diag_lost_last_run(void);                              // 1 once when the last run lost the device (clears the mark)
 void diag_exit(void);
 void diag_mark_user(void);                                 // ui/menu.cpp: "Mark this moment" in the quick menu                                      // prof_write: a last report as the game exits
 void diag_rumble(float amp);                               // ov_input.c: a vibration starts

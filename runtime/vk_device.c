@@ -443,6 +443,7 @@ void vk_device_fault_report(VkResult r) {
     plat_mutex_lock(&lock);
     if (done) { plat_mutex_unlock(&lock); return; }
     done = 1;
+    diag_lost_mark();
     vk_crumbs_report();
     VkCtx *c = vk_ctx();
     PFN_vkGetDeviceFaultInfoEXT get =
