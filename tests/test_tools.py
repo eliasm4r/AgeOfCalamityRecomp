@@ -7,6 +7,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -343,6 +344,27 @@ class ProgressTest(unittest.TestCase):
         p.start([("winbuild", None)], True)
         p.step(0)
         self.assertEqual(self.lines[-1], "progress 0.000 " + make_build.tr("t_winbuild") + " (about 8 min left)")
+
+
+class NoCryptographyTest(unittest.TestCase):
+    """MSYS2's Python runs romfs_index.py and prepare_shaders.py on decrypted data: neither may need cryptography."""
+
+    def test_readers_import_without_cryptography(self):
+        import builtins
+        import importlib
+        real = builtins.__import__
+
+        def block(name, *a, **k):
+            if name.startswith("cryptography"):
+                raise ImportError("blocked " + name)
+            return real(name, *a, **k)
+
+        saved = {n: sys.modules.pop(n) for n in ("nx", "romfs_index", "prepare_shaders") if n in sys.modules}
+        self.addCleanup(sys.modules.update, saved)
+        with mock.patch.object(builtins, "__import__", block):
+            for name in ("nx", "romfs_index", "prepare_shaders"):
+                importlib.import_module(name)
+                sys.modules.pop(name, None)
 
 
 class MakeBuildTest(unittest.TestCase):
