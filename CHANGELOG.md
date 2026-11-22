@@ -1,26 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Added
-- **AMD FSR 3.1**: the DLSS / DLAA setting now also works on AMD and Intel graphics cards, on NVIDIA cards without
-  DLSS, and on Linux and the Steam Deck (built there, not yet tried on a Linux device; DLSS stays Windows only). A new **Upscaler** row (Screen tab, and in RecompLauncher) picks it: **Automatic** (default)
-  takes NVIDIA DLSS where the card and `nvngx_dlss.dll` have it, else FSR 3.1; **NVIDIA DLSS** or **AMD FSR 3.1**
-  force one. **FSR 3.1 sharpness** (0-100 %, default 80, applies at once) sets its own sharpening.
-  FSR 3.1 takes the same picture, depth, motion vectors and jitter as DLSS, in every mode: Native (DLAA)
-  anti-aliases the scene at full size, Quality, Balanced and Performance draw it smaller and scale it up. In a
-  Hyrule Field battle at 1080p and 60 fps it costs the same as DLSS. The AMD FidelityFX SDK's upscaler (MIT) is built
-  into the game, as in TotK Recomp.
-- **Gyro calibration** (Controls tab, **Calibrate gyro**): put the controller down, press, and leave it still for two
-  seconds. The gyroscope's resting drift is measured and taken off every reading, so the aim no longer creeps to the
-  side; the result is kept in `settings.ini` for that controller and loaded again when it connects. A controller that
-  moved during the measure is refused. **Gyro calibration** turns the correction off without losing it.
-
-### Fixed
-- Gyro aiming: held still, the controller's "down" is put right within a second (it took about two), so an aim up or
-  down no longer turns the camera to the side as well after a quick move; and the motion starts from the controller's
-  first real reading instead of from a sensor that has not reported yet. Both from TotK Recomp.
-
 ## 0.3.0
 
 ### Added
@@ -38,10 +17,29 @@
   do are left out). RecompLauncher's prepare step gets it in its progress text too. The bar no longer stands still
   for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
   their expected time (up to 90 % of the step).
+- **AMD FSR 3.1**: the DLSS / DLAA setting now also works on AMD and Intel graphics cards, on NVIDIA cards without
+  DLSS, and on Linux and the Steam Deck (built there, not yet tried on a Linux device; DLSS stays Windows only). A new **Upscaler** row (Screen tab, and in RecompLauncher) picks it: **Automatic** (default)
+  takes NVIDIA DLSS where the card and `nvngx_dlss.dll` have it, else FSR 3.1; **NVIDIA DLSS** or **AMD FSR 3.1**
+  force one. **FSR 3.1 sharpness** (0-100 %, default 80, applies at once) sets its own sharpening.
+  FSR 3.1 takes the same picture, depth, motion vectors and jitter as DLSS, in every mode: Native (DLAA)
+  anti-aliases the scene at full size, Quality, Balanced and Performance draw it smaller and scale it up. In a
+  Hyrule Field battle at 1080p and 60 fps it costs the same as DLSS. The AMD FidelityFX SDK's upscaler (MIT) is built
+  into the game, as in TotK Recomp.
+- **Gyro calibration** (Controls tab, **Calibrate gyro**): put the controller down, press, and leave it still for two
+  seconds. The gyroscope's resting drift is measured and taken off every reading, so the aim no longer creeps to the
+  side; the result is kept in `settings.ini` for that controller and loaded again when it connects. A controller that
+  moved during the measure is refused. **Gyro calibration** turns the correction off without losing it.
+- **Language tab and a French menu**: the settings menu (F1) gets a Language tab with **Menu language** (Automatic,
+  English, Français; applies at once) and **Game language**, moved there from the Game tab. Automatic shows the menu in
+  the system's language when it is translated, else in English. The whole menu and the performance overlay are in
+  French; a text not translated yet shows in English.
 - **`ACR_CRUMB_DRAWS=1` works with the recorder thread on** (it needed `ACR_VK_RECORDER=0` before): after a lost GPU
   device the log names the shaders of the draw the GPU was in. A diagnostic only: it slows the GPU a lot.
 
 ### Fixed
+- **Crash when a mission starts** (issue #5, "vk: upload submit failed (-4)", seen on the Daruk mission): one kind
+  of indirect draw skipped the thread that records the GPU commands in order, so it ran before its render pass and
+  bindings and the GPU wrote to an invalid address. It now goes through the recorder like every other draw.
 - **Linux: "the build stopped at Install the build tools" on Bazzite** (and other Fedora Atomic systems: Silverblue,
   Kinoite, Bluefin), whose `dnf` refuses to install anything. There, and on SteamOS (which the setup refused until now),
   the build tools now go into a distrobox container, `acr-build` (Arch Linux), which shares your home folder; the
@@ -52,15 +50,9 @@
   stopped there. They no longer need it.
 - **No "Report a problem..." button when the build failed** (issue #6): the setup had it only once the game was
   installed. It now appears next to "Check files" as soon as a build stops, and the error box points to it.
-- **Language tab and a French menu**: the settings menu (F1) gets a Language tab with **Menu language** (Automatic,
-  English, Français; applies at once) and **Game language**, moved there from the Game tab. Automatic shows the menu in
-  the system's language when it is translated, else in English. The whole menu and the performance overlay are in
-  French; a text not translated yet shows in English.
-
-### Fixed
-- **Crash when a mission starts** (issue #5, "vk: upload submit failed (-4)", seen on the Daruk mission): one kind
-  of indirect draw skipped the thread that records the GPU commands in order, so it ran before its render pass and
-  bindings and the GPU wrote to an invalid address. It now goes through the recorder like every other draw.
+- Gyro aiming: held still, the controller's "down" is put right within a second (it took about two), so an aim up or
+  down no longer turns the camera to the side as well after a quick move; and the motion starts from the controller's
+  first real reading instead of from a sensor that has not reported yet. Both from TotK Recomp.
 
 ## 0.2.1
 
