@@ -901,6 +901,7 @@ static void tab_controls(float scale) {
         opt_choice("ACR_PROMPTS", UI_MENU_PROMPTS, prompts, 3, UI_MENU_PROMPTS_DESC, note);
         ask = restart && opt_button("##restart", UI_MENU_RESTART, UI_MENU_RESTART_DESC);
     }
+    opt_toggle("ACR_AIM_LEFT_STICK", UI_MENU_AIM_LEFT_STICK, UI_MENU_AIM_LEFT_STICK_DESC);
     opt_toggle("ACR_MOTION", UI_MENU_MOTION, UI_MENU_MOTION_DESC);
     opt_toggle("ACR_GYRO_CALIBRATION", UI_MENU_GYRO_CALIBRATION, UI_MENU_GYRO_CALIBRATION_DESC);
     // The measured bias belongs to one controller (input.c pad_bias_select): the value says whether the open one has

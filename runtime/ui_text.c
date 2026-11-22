@@ -213,6 +213,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_INVERT_RX] = "Invert right stick X (camera)", [UI_MENU_INVERT_RY] = "Invert right stick Y (camera)",
     [UI_MENU_INVERT_DESC] = "Mirrors this axis of the gamepad's stick.",
 
+    [UI_MENU_AIM_LEFT_STICK] = "Aim with the left stick",
+    [UI_MENU_AIM_LEFT_STICK_DESC] = "The game's original aiming: the left stick also moves the aim of the bow and the other "
+                                    "aimed actions. Off: only the right stick aims. Applies at once.",
     [UI_MENU_MOTION] = "Motion controls", [UI_MENU_MOTION_DESC] = "Aiming with the controller's gyroscope.",
     [UI_MENU_GYRO_CALIBRATION] = "Gyro calibration",
     [UI_MENU_GYRO_CALIBRATION_DESC] = "Takes the measured drift off the gyroscope. Off: the raw gyroscope.",
@@ -947,6 +950,9 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_FSR3_SHARPNESS] = "Netteté FSR 3.1",
     [UI_MENU_FSR3_SHARPNESS_DESC] = "L'accentuation propre à FSR 3.1 sur la scène 3D, contre le flou de son accumulation "
                                    "temporelle (FSR 3.1 seulement) ; 0 la désactive. S'applique tout de suite.",
+    [UI_MENU_AIM_LEFT_STICK] = "Viser avec le stick gauche",
+    [UI_MENU_AIM_LEFT_STICK_DESC] = "La visée d'origine du jeu : le stick gauche déplace aussi la visée de l'arc et des "
+                                    "autres actions visées. Désactivé : seul le stick droit vise. S'applique tout de suite.",
     [UI_MENU_GYRO_CALIBRATION] = "Calibration du gyroscope",
     [UI_MENU_GYRO_CALIBRATION_DESC] = "Retire la dérive mesurée du gyroscope. Désactivé : le gyroscope brut.",
     [UI_MENU_CALIBRATE_GYRO] = "Calibrer le gyroscope",

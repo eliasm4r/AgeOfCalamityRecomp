@@ -89,6 +89,7 @@ typedef enum {
     UI_MENU_INVERT_LX, UI_MENU_INVERT_LY, UI_MENU_INVERT_RX, UI_MENU_INVERT_RY, UI_MENU_INVERT_DESC,
 
     // Controls
+    UI_MENU_AIM_LEFT_STICK, UI_MENU_AIM_LEFT_STICK_DESC,
     UI_MENU_MOTION, UI_MENU_MOTION_DESC,
     UI_MENU_GYRO_CALIBRATION, UI_MENU_GYRO_CALIBRATION_DESC,   // the switch that applies the measured bias
     UI_MENU_CALIBRATE_GYRO, UI_MENU_CALIBRATE_GYRO_DESC,       // the row that measures it, then its states:

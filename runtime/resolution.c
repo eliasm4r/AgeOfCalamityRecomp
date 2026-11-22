@@ -248,6 +248,14 @@ void res_present(void) {
     unsigned v = cfg_version();
     if (v == seen) return;
     seen = v;
+    // ACR_AIM_LEFT_STICK (Controls tab): the game's own aiming, where the left stick moves the aim too (set aimstick off).
+    static int aim = -2;
+    if (aim == -2) aim = rt_patch_set("aimstick");
+    int right_only = !cfg_bool("ACR_AIM_LEFT_STICK");
+    if (aim >= 0 && rt_patch_enabled(aim) != right_only) {
+        rt_patch_switch(aim, right_only);
+        rt_log("input: aiming with %s", right_only ? "the right stick only" : "both sticks");
+    }
     if (set == -2) set = rt_patch_set("dynres");
     int off = !strcmp(cfg_value("ACR_DYNAMIC_RES"), "off");
     if (set < 0 || rt_patch_enabled(set) == off) return;
