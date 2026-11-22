@@ -265,6 +265,73 @@ class DumpSourcesTest(unittest.TestCase):
             self.assertEqual(make_build.dump_args(args), ["--nsp", d / "elsewhere.nsp"])
 
 
+class ProgressTest(unittest.TestCase):
+    """make_build's progress and time left, on a fake clock, without its ticker thread."""
+
+    def setUp(self):
+        from unittest import mock
+        self.now = 1000.0
+        patcher = mock.patch.object(make_build.time, "monotonic", lambda: self.now)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.p = make_build.Progress()
+        self.p.ticker = "none"   # no thread: the test calls tick()
+        self.lines = []
+        real = make_build.out
+        make_build.out = self.lines.append
+        self.addCleanup(setattr, make_build, "out", real)
+
+    def last(self):
+        value, left = self.lines[-1].split()[1:]
+        return float(value), int(left)
+
+    def test_weights_first_then_this_pc(self):
+        p = self.p
+        p.start([("check", None), ("winbuild", None), ("shaders", None)], False)
+        p.step(0)
+        self.assertEqual(self.last(), (0.0, 885))   # 5 + 480 + 400 weight seconds, nothing measured yet
+        self.now += 10
+        p.finish("ok")
+        p.step(1)
+        self.now += 240   # this PC builds at half the guessed speed
+        p.line("[50/100] cc main.c")
+        value, left = self.last()
+        self.assertAlmostEqual(value, (5 + 480 * 0.475) / 885, places=3)
+        self.assertAlmostEqual(left / ((885 - 5 - 480 * 0.475) * 250 / (5 + 480 * 0.475)), 1, places=2)
+
+    def test_skipped_step_weighs_nothing(self):
+        p = self.p
+        p.start([("romfs", None), ("winbuild", None)], False)
+        p.step(0)
+        p.finish("skip")
+        p.step(1)
+        self.assertEqual(self.last(), (0.0, 480))
+
+    def test_silent_step_moves_with_time(self):
+        p = self.p
+        p.start([("tools", None), ("winbuild", None)], False)
+        p.step(0)
+        self.now += 60
+        p.tick()
+        self.assertAlmostEqual(self.last()[0], 60 / 600, places=3)   # half of tools' 120 s
+        self.now += 1000
+        p.tick()
+        self.assertAlmostEqual(self.last()[0], 0.9 * 120 / 600, places=3)   # never past 90 % on time alone
+
+    def test_romfs_bytes(self):
+        p = self.p
+        p.start([("romfs", None)], False)
+        p.step(0)
+        p.line("romfs progress: 5000 of 20000 MiB")
+        self.assertAlmostEqual(self.last()[0], 0.25, places=3)
+
+    def test_prepare_line(self):
+        p = self.p
+        p.start([("winbuild", None)], True)
+        p.step(0)
+        self.assertEqual(self.lines[-1], "progress 0.000 " + make_build.tr("t_winbuild") + " (about 8 min left)")
+
+
 class MakeBuildTest(unittest.TestCase):
     def test_run_collects_problem_lines(self):
         found = []

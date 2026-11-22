@@ -67,6 +67,7 @@ TEXTS = {
     "confirm_cancel": "The build is still running. Stop it?",
     "step": "Step {n} of {total}: {title}...",
     "starting": "Starting...",
+    "left": "about {n} min left",
     "checked": "Files checked: all good.",
     "done": "The game is built.",
     "done_deck": "The Steam Deck folder is ready: copy it to your Deck (see the README).",

@@ -21,8 +21,11 @@ import argparse
 import os
 import re
 import shutil
+import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -113,6 +116,56 @@ def run_hactool(args: list, log: Path) -> int:
     return p.returncode
 
 
+class Bytes:
+    """Prints "romfs progress: <done> of <total> MiB" every few seconds while hactool writes (tools/make_build.py
+    moves its bar with it): the NCAs extracted so far, then the image. hactool itself prints nothing until it ends."""
+
+    def __init__(self, total: int):
+        self.total, self.before, self.measure = max(1, total), 0, None
+        self.stop = threading.Event()
+        threading.Thread(target=self.loop, daemon=True).start()
+
+    def watch(self, measure):
+        """measure() gives the bytes written so far by the running hactool; None stops watching."""
+        self.measure = measure
+
+    def done(self, n: int):
+        self.before += n
+        self.measure = None
+        self.show(0)
+
+    def show(self, now: int):
+        mib = min(self.before + now, self.total) >> 20
+        sys.stdout.write(f"romfs progress: {mib} of {self.total >> 20} MiB\n")
+        sys.stdout.flush()
+
+    def loop(self):
+        while not self.stop.wait(3.0):
+            measure = self.measure
+            if measure:
+                try:
+                    self.show(measure())
+                except OSError:   # a file renamed or removed while it was measured
+                    pass
+
+
+def tree_bytes(d: Path) -> int:
+    return sum(p.stat().st_size for p in d.rglob("*") if p.is_file()) if d.is_dir() else 0
+
+
+def file_bytes(p: Path) -> int:
+    return p.stat().st_size if p.is_file() else 0
+
+
+def image_size() -> int:
+    """Bytes of the merged 1.3.0 RomFS (tools/data/known-builds.json), 11 GiB when the table has none."""
+    try:
+        known = json.loads((ROOT / "tools/data/known-builds.json").read_text(encoding="utf-8"))
+        return int(known["builds"]["1.3.0"]["romfs_image_size"]) or 11 << 30
+    except (OSError, ValueError, KeyError):
+        return 11 << 30
+
+
 def last_line(log: Path) -> str:
     """hactool's last line in log: what stopped it."""
     lines = [l.strip() for l in log.read_text(encoding="utf-8", errors="replace").splitlines() if l.strip()]
@@ -164,14 +217,20 @@ def main() -> int:
     # 3. NCAs of both NSPs (the base is ~11 GB) and the merge. Each NSP is extracted into <name>.part, renamed once
     # every file is there at its size: a run cut short extracts again instead of merging half-written NCAs.
     for name in ("base", "update"):
-        d, part = TMP / name, TMP / f"{name}.part"
+        d = TMP / name
         if d.is_dir() and extraction_gap(nsps[name], d):   # left incomplete by an earlier version of this script
             shutil.rmtree(d)
-        if not d.is_dir():
+    todo = [n for n in ("base", "update") if not (TMP / n).is_dir()]
+    bytes_ = Bytes(sum(nsps[n].stat().st_size for n in todo) + image_size())
+    for name in ("base", "update"):
+        d, part = TMP / name, TMP / f"{name}.part"
+        if name in todo:
             print(f"Extracting {name}.nsp ...", flush=True)
             shutil.rmtree(part, ignore_errors=True)
             log = WORK / f"extract-{name}.log"
+            bytes_.watch(lambda part=part: tree_bytes(part))
             code = run_hactool(["-t", "pfs0", "--disablekeywarns", f"--outdir={part}", str(nsps[name])], log)
+            bytes_.done(nsps[name].stat().st_size)
             gap = "" if code else extraction_gap(nsps[name], part)
             if code or gap:
                 shutil.rmtree(part, ignore_errors=True)
@@ -186,6 +245,7 @@ def main() -> int:
     # For a BKTR section hactool ignores --romfs; only --section1 writes the image (the final RomFS level, without the
     # hash levels). -y checks the six IVFC levels.
     print("Merging the RomFS (base + 1.3.0); this takes a few minutes ...", flush=True)
+    bytes_.watch(lambda: file_bytes(OUT))
     code = run_hactool(["-x", "-y", "--disablekeywarns", "--suppresskeys", "-k", str(HAC_HOME / ".switch" / "prod.keys"),
                         f"--basenca={base_nca}", f"--section1={OUT}", str(upd_nca)], LOG)
     text = LOG.read_text(encoding="utf-8", errors="replace")
@@ -196,6 +256,8 @@ def main() -> int:
     if code or re.search(r"\(FAIL\)|\(INVALID\)|Failed to|Error:", checked) or levels != 6:
         OUT.unlink(missing_ok=True)
         fail(f"the merge did not verify (code {code}, good IVFC levels: {levels}/6). See {LOG}")
+    bytes_.done(image_size())
+    bytes_.stop.set()
     if not OUT.is_file() or OUT.stat().st_size < 2**30:
         fail(f"hactool verified but did not write {OUT}. NCAs kept in {TMP} for another try. See {LOG}")
 

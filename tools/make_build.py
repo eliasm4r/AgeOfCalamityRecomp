@@ -3,8 +3,9 @@
 Runs on Windows (the release's embedded Python, or MSYS2's) and on Linux (the system python3: this script needs only
 the standard library; the tools it calls run in ~/.venvs/AgeOfCalamityRecomp, which the tools step makes).
 
-Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; "@@PROGRESS <0-1>" is the whole build's progress; every
-other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setup to offer installing WSL):
+Steps (each prints "@@STEP <id> <run|ok|fail|skip> <text>"; "@@PROGRESS <0-1> <seconds left>" is the whole build's
+progress; every other line is log; the last line is "@@DONE ok|fail"; "@@NEED wsl" asks the setup to offer installing
+WSL):
 
   check     the dump folder (NSPs of the base, update 1.3.0 and DLCs, and prod.keys; each package is identified by
             its contents, not its file name, and an update of another version is refused), free disk and memory
@@ -45,6 +46,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -100,6 +102,7 @@ TEXT = {
     "no_win_linux": "the Windows version can only be built on Windows",
     "missing_file": "missing {0}",
     "folder_ok": "folder ready: {0}",
+    "left": "about {0} min left",
     "no_xlate": "the Windows shader translator is missing (prebuilt/xlate/win-x64) and there is no .NET to build it",
     "no_bash": "Git Bash is not in C:/Program Files/Git (sending uses its ssh and scp)",
     "unexpected": "Unexpected ERROR: {0}",
@@ -138,11 +141,15 @@ def tr(key: str, *a) -> str:
 LOG = None   # build/logs/forge-<time>.log: everything printed, for the launcher's Report button
 
 
+OUT_LOCK = threading.Lock()   # the progress ticker prints too
+
+
 def out(line: str) -> None:
-    print(line, flush=True)
-    if LOG:
-        LOG.write(line + "\n")
-        LOG.flush()
+    with OUT_LOCK:
+        print(line, flush=True)
+        if LOG:
+            LOG.write(line + "\n")
+            LOG.flush()
 
 
 def step(sid: str, state: str, text: str = "") -> None:
@@ -153,12 +160,15 @@ class StepFailed(Exception):
     pass
 
 
-# ---- overall progress: "@@PROGRESS <0-1>" (with --prepare: "progress <0-1> <step title>", RecompLauncher's format)
-# Each step weighs about what it takes on a first build (seconds on an 8-core PC); inside a step the C generator's
-# "emitted a/b chunks" and ninja's "[n/m]" lines move it forward. In a step that compiles, the first ninja run is the
-# game code (most of the time) and any later one is the runtime.
+# ---- overall progress: "@@PROGRESS <0-1> <seconds left>" (with --prepare: "progress <0-1> <step title> (about n min
+# left)", RecompLauncher's format). Each step weighs about what it takes on a first build (seconds on an 8-core PC);
+# inside a step the C generator's "emitted a/b chunks", ninja's "[n/m]" lines, the shader counts and the RomFS merge's
+# byte counts move it forward. In a step that compiles, the first ninja run is the game code (most of the time) and any
+# later one is the runtime. A step with no such lines moves with the time it is expected to take, up to 90 %, so the
+# bar never sits still for minutes.
 WEIGHTS = {"check": 5, "tools": 120, "extract": 30, "romfs": 300, "dlc": 60, "deck": 900, "wingen": 40,
            "winxlate": 5, "winbuild": 480, "windist": 15, "prompts": 3, "dlss": 10, "shaders": 400, "send": 60}
+MEASURED = {"romfs", "deck", "wingen", "winbuild", "shaders"}
 NINJA = re.compile(r"^\[(\d+)/(\d+)\] ")
 EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
 # The shaders step (gfx_shader.c, vk_pipeline.c): first the translation ("prepare: n of m pairs", the whole step on
@@ -166,60 +176,132 @@ EMITTED = re.compile(r"emitted (\d+)/(\d+) chunks")
 # variants").
 SHADERS_XLATE = re.compile(r"prepare: (\d+) of (\d+) pairs")
 SHADERS_BUILD = re.compile(r"preparation progress: (\d+) of (\d+) variants")
+ROMFS_BYTES = re.compile(r"romfs progress: (\d+) of (\d+) MiB")   # tools/merge_romfs.py
+TICK = 2.0   # seconds between the ticker's looks
 
 
 class Progress:
+    """The whole build's progress and the time it has left. The weights are a first guess of each step's seconds; the
+    time left is the weight still to do times this PC's pace (seconds spent per weight done, measured on the steps that
+    did work: a skipped step costs no time and teaches nothing)."""
+
     def __init__(self):
-        self.plan, self.index, self.inside, self.shown, self.prepare = [], 0, 0.0, -1.0, False
+        self.plan, self.index, self.inside, self.prepare = [], 0, 0.0, False
         self.ninja_totals = []
+        self.skipped = set()        # indexes of the steps that had nothing to do
+        self.spent = 0.0            # seconds and weight of the finished steps that did work
+        self.spent_weight = 0.0
+        self.step_started = time.monotonic()
+        self.shown = (-1.0, None)
+        self.lock = threading.RLock()
+        self.ticker = None
+
+    def weight(self, i: int) -> float:
+        return 0.0 if i in self.skipped else WEIGHTS.get(self.plan[i], 10)
 
     def start(self, plan, prepare):
-        self.plan, self.prepare = [sid for sid, _ in plan], prepare
+        with self.lock:
+            self.plan, self.prepare = [sid for sid, _ in plan], prepare
+        if self.ticker is None:
+            self.ticker = threading.Thread(target=self.tick_forever, daemon=True)
+            self.ticker.start()
 
     def step(self, index):
-        self.index, self.inside, self.ninja_totals = index, 0.0, []
-        self.report()
+        with self.lock:
+            self.index, self.inside, self.ninja_totals = index, 0.0, []
+            self.step_started = time.monotonic()
+            self.report()
+
+    def finish(self, result: str):
+        """The current step ended with result (ok or skip)."""
+        with self.lock:
+            if result == "skip":
+                self.skipped.add(self.index)
+            else:
+                self.spent += time.monotonic() - self.step_started
+                self.spent_weight += self.weight(self.index)
+            self.inside = 1.0
 
     def line(self, text):
-        if not self.plan:
-            return
-        sid = self.plan[self.index]
-        if sid == "shaders":
-            for pattern, low, high in ((SHADERS_XLATE, 0.0, 0.9), (SHADERS_BUILD, 0.9, 1.0)):
-                m = pattern.search(text)
+        with self.lock:
+            if not self.plan:
+                return
+            sid = self.plan[self.index]
+            if sid == "shaders":
+                for pattern, low, high in ((SHADERS_XLATE, 0.0, 0.9), (SHADERS_BUILD, 0.9, 1.0)):
+                    m = pattern.search(text)
+                    if m:
+                        self.advance(low + (high - low) * int(m[1]) / max(1, int(m[2])))
+                return
+            if sid == "romfs":
+                m = ROMFS_BYTES.search(text)
                 if m:
-                    self.advance(low + (high - low) * int(m[1]) / max(1, int(m[2])))
-            return
-        m = EMITTED.search(text)
-        if m:   # the generator: all of wingen, the first tenth of the Deck step
-            done = int(m[1]) / max(1, int(m[2]))
-            self.advance(done * (0.1 if sid == "deck" else 1.0))
-            return
-        m = NINJA.match(text)
-        if m:
-            total = int(m[2])
-            if total not in self.ninja_totals:
-                self.ninja_totals.append(total)
-            first = self.ninja_totals.index(total) == 0
-            low, high = ((0.1 if sid == "deck" else 0.0), 0.95) if first else (0.95, 1.0)
-            self.advance(low + (high - low) * int(m[1]) / max(1, total))
+                    self.advance(int(m[1]) / max(1, int(m[2])))
+                return
+            m = EMITTED.search(text)
+            if m:   # the generator: all of wingen, the first tenth of the Deck step
+                done = int(m[1]) / max(1, int(m[2]))
+                self.advance(done * (0.1 if sid == "deck" else 1.0))
+                return
+            m = NINJA.match(text)
+            if m:
+                total = int(m[2])
+                if total not in self.ninja_totals:
+                    self.ninja_totals.append(total)
+                first = self.ninja_totals.index(total) == 0
+                low, high = ((0.1 if sid == "deck" else 0.0), 0.95) if first else (0.95, 1.0)
+                self.advance(low + (high - low) * int(m[1]) / max(1, total))
 
     def advance(self, inside):
         if inside > self.inside:
-            self.inside = inside
+            self.inside = min(1.0, inside)
             self.report()
 
+    def tick(self):
+        """Every TICK seconds: a step without progress lines moves with its expected time; the time left is shown
+        again when its minute changes."""
+        with self.lock:
+            if not self.plan or self.inside >= 1.0:
+                return
+            if self.plan[self.index] not in MEASURED:
+                expected = WEIGHTS.get(self.plan[self.index], 10) * self.pace()
+                self.advance(min(0.9, (time.monotonic() - self.step_started) / max(1.0, expected)))
+            self.report()
+
+    def tick_forever(self):
+        while True:
+            time.sleep(TICK)
+            self.tick()
+
+    def pace(self) -> float:
+        """Seconds per weight on this PC: finished steps that did work, plus the running one when its own lines measure
+        it (a silent step only moves with this pace: counting it would feed its guess back); 1 (the weights' own guess)
+        until a minute of weight is done."""
+        seconds, weight = self.spent, self.spent_weight
+        if self.plan and self.plan[self.index] in MEASURED and self.inside > 0:
+            seconds += time.monotonic() - self.step_started
+            weight += self.weight(self.index) * self.inside
+        return seconds / weight if weight >= 60 and seconds > 0 else 1.0
+
+    def figures(self) -> tuple:
+        """(fraction done, seconds left) of the work this build does."""
+        weights = [self.weight(i) for i in range(len(self.plan))]
+        done = sum(weights[:self.index]) + weights[self.index] * self.inside
+        total = max(1.0, sum(weights))
+        return min(1.0, done / total), int((total - done) * self.pace())
+
     def report(self):
-        weights = [WEIGHTS.get(sid, 10) for sid in self.plan]
-        done = sum(weights[:self.index]) + weights[self.index] * self.inside if self.plan else 0
-        value = min(1.0, done / max(1, sum(weights)))
-        if value - self.shown < 0.002 and value < 1:
+        if not self.plan:
             return
-        self.shown = value
+        value, left = self.figures()
+        minute = (left + 59) // 60
+        if value - self.shown[0] < 0.002 and minute == self.shown[1] and value < 1:
+            return
+        self.shown = (max(value, self.shown[0]), minute)
         if self.prepare:
-            out(f"progress {value:.3f} {tr('t_' + self.plan[self.index])}")
+            out(f"progress {value:.3f} {tr('t_' + self.plan[self.index])} ({tr('left', minute)})")
         else:
-            out(f"@@PROGRESS {value:.3f}")
+            out(f"@@PROGRESS {value:.3f} {left}")
 
 
 PROGRESS = Progress()
@@ -816,6 +898,7 @@ def main() -> int:
         PROGRESS.step(n)
         try:
             r = fn(args)
+            PROGRESS.finish(r or "ok")
             step(sid, r or "ok", title)
         except StepFailed as e:
             out(f"ERROR: {e}")
