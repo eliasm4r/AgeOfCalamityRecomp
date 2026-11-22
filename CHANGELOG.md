@@ -17,10 +17,8 @@
   do are left out). RecompLauncher's prepare step gets it in its progress text too. The bar no longer stands still
   for minutes: the RomFS merge reports the bytes hactool has written, and the steps that print no progress move with
   their expected time (up to 90 % of the step).
-- **A crash that loses the GPU names the draw the next time** (issue #5, "vk: upload submit failed (-4)"): the game
-  leaves a mark when the GPU device is lost, and the next start puts a marker before every draw, so if the crash
-  comes back the log names the shaders of the draw the GPU was in. Nothing to set; the start after that is normal
-  again. The markers now also work with the recorder thread on (they needed `ACR_VK_RECORDER=0` before).
+- **`ACR_CRUMB_DRAWS=1` works with the recorder thread on** (it needed `ACR_VK_RECORDER=0` before): after a lost GPU
+  device the log names the shaders of the draw the GPU was in. A diagnostic only: it slows the GPU a lot.
 
 ## 0.2.1
 

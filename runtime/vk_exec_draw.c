@@ -1647,10 +1647,8 @@ static VkBufferView texel_view(uint64_t h, int storage) {
 
 // ---- ACR_CRUMB_DRAWS=1 (diagnosis): a GPU breadcrumb before every draw and dispatch, and a ring of the shaders each
 // used (cache key prefixes, as the shader-cache file names), so a lost device names the draw the GPU was in (vk_crumbs.c
-// vk_crumbs_report). The crumb goes through the recorder when it records the part. On by itself for the run after one
-// that lost the device (diag_lost_last_run): a player who meets the loss again sends a log that names the draw (issue
-// #5: "write invalid at 0" at a mission start, on a GPU and a save we do not have). Each crumb is two marker writes,
-// the second waiting for the commands before it: the GPU runs slower that run.
+// vk_crumbs_report). The crumb goes through the recorder when it records the part. Each crumb is two marker writes,
+// the second waiting for the commands before it: the GPU runs slower (about 30 fps at 140 %), so never on by itself.
 #define CRUMB_RING 16384
 typedef struct { uint32_t seq; char what[60]; } CrumbRec;
 static CrumbRec crumb_ring[CRUMB_RING];
@@ -1666,13 +1664,8 @@ static void key8(const GfxShader *s, char *o) {
 static void crumb_mark(VkExec *ex, const GfxShader *a, const GfxShader *b) {
     if (crumb_on < 0) {
         const char *e = cfg_get("ACR_CRUMB_DRAWS");
-        if (e && *e) {
-            crumb_on = strcmp(e, "0") != 0;
-            if (crumb_on) rt_log("vk: a GPU breadcrumb before every draw and dispatch (ACR_CRUMB_DRAWS)");
-        } else if ((crumb_on = diag_lost_last_run())) {
-            rt_log("vk: the last run lost the GPU: a GPU breadcrumb before every draw and dispatch this run, so a "
-                   "loss names the draw (slower GPU; ACR_CRUMB_DRAWS=0 turns it off)");
-        }
+        crumb_on = e && *e && strcmp(e, "0") != 0;
+        if (crumb_on) rt_log("vk: a GPU breadcrumb before every draw and dispatch (ACR_CRUMB_DRAWS)");
     }
     if (!crumb_on) return;
     uint32_t n = ++crumb_seq & 0x0fffffff;
