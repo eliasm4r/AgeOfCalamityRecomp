@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import extract  # noqa: E402
 import nx  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -98,12 +99,14 @@ def copy_verified(sec: nx.SectionReader, dst: Path) -> tuple[int, str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
+    extract.add_source_args(ap)
     ap.add_argument("--keys", type=Path, default=None, help="default: prod.keys in the game folder")
     ap.add_argument("--out", type=Path, default=ROOT / "build" / "v130")
     ap.add_argument("--force", action="store_true", help="extracts again even with the image on disk")
     args = ap.parse_args(argv)
-    keys = nx.load_keys(args.keys or args.game_dir / "prod.keys")
+    game_dir = extract.game_dir_of(args)
+    nx.require(bool(args.keys or game_dir), "--keys is needed when no game folder is given")
+    keys = nx.load_keys(args.keys or game_dir / "prod.keys")
     args.out.mkdir(parents=True, exist_ok=True)
     manifest_path = args.out / "dlc.json"
     try:
@@ -111,7 +114,7 @@ def main(argv=None) -> int:
     except (OSError, ValueError, KeyError):
         old = {}
     found = []
-    for path in sorted(p for p in args.game_dir.rglob("*.nsp")):
+    for path in (p for p in extract.package_paths(game_dir, args.nsp) if p.suffix.lower() == ".nsp"):
         with path.open("rb") as f:
             _, entries = nx.container_entries(f, path.stat().st_size)
             tickets = nx.common_tickets(f, entries)
@@ -144,9 +147,9 @@ def main(argv=None) -> int:
     found.sort(key=lambda e: e["index"])
     manifest_path.write_text(json.dumps({"dlc": found}, indent=1) + "\n", encoding="utf-8")
     if not found:
-        print(f"No DLC in {args.game_dir} (the game runs without them)")
+        print(f"No DLC in {extract.sources_text(game_dir, args.nsp)} (the game runs without them)")
     else:
-        print(f"{len(found)} DLCs em {args.out} ({sum(e['size'] for e in found) / 2**30:.2f} GiB)")
+        print(f"{len(found)} DLCs in {args.out} ({sum(e['size'] for e in found) / 2**30:.2f} GiB)")
     return 0
 
 

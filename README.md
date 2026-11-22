@@ -70,7 +70,8 @@ yet (above 60 the game steps by the real time of each frame, as in the TotK reco
    - on Windows, choose where to install the game (about 26 GB; `%LOCALAPPDATA%\AgeOfCalamityRecomp` by default);
    - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
      update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
-     identifies them by their contents;
+     identifies them by their contents. If your files are in different places, choose **I choose each file on its
+     own** and pick the base game, the update, `prod.keys` and each DLC (**Add...**) where they are;
    - tick **Windows (this PC)**, **Steam Deck / Linux**, or both;
    - press **Build** and let the PC work. The first time takes **20 to 30 minutes**; **Show details** shows the full log.
 4. When it is done, press **Play**. Later, start the game from the **AgeOfCalamityRecomp** shortcut (Start Menu, and

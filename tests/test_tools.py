@@ -200,7 +200,7 @@ class InventoryTest(unittest.TestCase):
         buf = io.StringIO()
         try:
             with redirect_stdout(buf):
-                rc = extract.cmd_inventory(SimpleNamespace(game_dir=Path(".")), {})
+                rc = extract.cmd_inventory(SimpleNamespace(game_dir=Path("."), nsp=[]), {})
         finally:
             extract.scan = real
         return rc, [l.split(" ", 2)[1:] for l in buf.getvalue().splitlines() if l.startswith("@@PROBLEM ")]
@@ -226,6 +226,43 @@ class InventoryTest(unittest.TestCase):
     def test_every_problem_has_a_message_for_the_player(self):
         for code in ("base", "update", "updates", "wrong_update"):
             self.assertIn("p_" + code, make_build.TEXT)
+
+
+class DumpSourcesTest(unittest.TestCase):
+    """The dump as one folder, as files chosen one by one (--nsp), or both: each package once."""
+
+    def layout(self, d):
+        d = Path(d)
+        (d / "dump" / "sub").mkdir(parents=True)
+        for name in ("dump/a.nsp", "dump/sub/b.XCI", "dump/notes.txt", "elsewhere.nsp"):
+            (d / name).write_bytes(b"x")
+        return d
+
+    @unittest.skipUnless(extract, "no cryptography package")
+    def test_package_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = self.layout(d)
+            got = extract.package_paths(d / "dump", [d / "elsewhere.nsp", d / "dump" / "a.nsp"])
+            self.assertEqual(sorted(p.name for p in got), ["a.nsp", "b.XCI", "elsewhere.nsp"])
+            self.assertEqual([p.name for p in extract.package_paths(None, [d / "elsewhere.nsp"])], ["elsewhere.nsp"])
+
+    @unittest.skipUnless(extract, "no cryptography package")
+    def test_folder_default_only_without_chosen_files(self):
+        from types import SimpleNamespace
+        self.assertEqual(extract.game_dir_of(SimpleNamespace(game_dir=None, nsp=[])), extract.ROOT / "Game Files")
+        self.assertIsNone(extract.game_dir_of(SimpleNamespace(game_dir=None, nsp=[Path("a.nsp")])))
+        self.assertEqual(extract.game_dir_of(SimpleNamespace(game_dir=Path("x"), nsp=[Path("a.nsp")])), Path("x"))
+
+    def test_make_build_passes_the_sources_on(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as d:
+            d = self.layout(d)
+            args = SimpleNamespace(game_dir=d / "dump", nsp=[d / "elsewhere.nsp", d / "dump" / "a.nsp"])
+            self.assertEqual(sorted(p.name for p in make_build.dump_nsps(args)), ["a.nsp", "elsewhere.nsp"])
+            self.assertEqual(make_build.dump_args(args), ["--game-dir", d / "dump", "--nsp", d / "elsewhere.nsp",
+                                                          "--nsp", d / "dump" / "a.nsp"])
+            args = SimpleNamespace(game_dir=None, nsp=[d / "elsewhere.nsp"])
+            self.assertEqual(make_build.dump_args(args), ["--nsp", d / "elsewhere.nsp"])
 
 
 class MakeBuildTest(unittest.TestCase):

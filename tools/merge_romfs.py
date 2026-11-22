@@ -2,7 +2,7 @@
 
 The launcher runs this on Windows and Linux:
 
-  python tools/merge_romfs.py [--game-dir "Game Files"] [--keys <prod.keys>]
+  python tools/merge_romfs.py [--game-dir "Game Files"] [--nsp <file> ...] [--keys <prod.keys>]
 
 1. prepares build/v130/tmp/hactool-home/.switch/{prod,title}.keys (tools/extract.py hactool-home; values never shown),
    the home of every hactool run, so key files of the player's own (~/.switch) are never read;
@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import extract  # noqa: E402
 import nx  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,16 +58,15 @@ def hactool() -> Path:
     fail("hactool not found (" + ", ".join(str(c) for c in cands) + ")")
 
 
-def find_nsps(game_dir: Path, keys: Path) -> tuple[Path, Path]:
-    """The base and update 1.3.0 NSPs, found by their contents (tools/extract.py scan: title id and version from the
-    .cnmt), whatever the file name."""
-    import extract
-    pkgs = [p for p in extract.scan(game_dir, nx.load_keys(keys)) if p["container"] == "nsp"]
+def find_nsps(game_dir: Path | None, nsps: list, keys: Path) -> tuple[Path, Path]:
+    """The base and update 1.3.0 NSPs of the folder and the files chosen on their own, found by their contents
+    (tools/extract.py scan: title id and version from the .cnmt), whatever the file name."""
+    pkgs = [p for p in extract.scan(extract.package_paths(game_dir, nsps), nx.load_keys(keys)) if p["container"] == "nsp"]
     out = []
     for role, what in (("base", "of the base game (01002B00111A2000)"), ("update", "of update 1.3.0 (01002B00111A2800)")):
         found = [p["path"] for p in pkgs if p["role"] == role]
         if len(found) != 1:
-            fail(f"expected 1 NSP {what} in {game_dir}, found {len(found)}")
+            fail(f"expected 1 NSP {what} in {extract.sources_text(game_dir, nsps)}, found {len(found)}")
         out.append(found[0])
     return out[0], out[1]
 
@@ -135,10 +135,13 @@ def extraction_gap(nsp: Path, d: Path) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--game-dir", type=Path, default=ROOT / "Game Files")
+    extract.add_source_args(ap)
     ap.add_argument("--keys", type=Path, help="default: prod.keys in the game folder")
     args = ap.parse_args()
-    keys = args.keys or args.game_dir / "prod.keys"
+    game_dir = extract.game_dir_of(args)
+    if not (args.keys or game_dir):
+        fail("--keys is needed when no game folder is given")
+    keys = args.keys or game_dir / "prod.keys"
     if OUT.exists():
         print(f"{OUT} already exists; delete it to redo it")
         return 0
@@ -146,15 +149,16 @@ def main() -> int:
     print(f"hactool: {hac}", flush=True)
 
     # 1. keys for hactool (extract.py never prints values)
-    subprocess.run([sys.executable, str(ROOT / "tools/extract.py"), "hactool-home", "--game-dir", str(args.game_dir),
-                    "--keys", str(keys)], check=True)
+    subprocess.run([sys.executable, str(ROOT / "tools/extract.py"), "hactool-home", "--keys", str(keys)]
+                   + (["--game-dir", str(game_dir)] if game_dir else []) + [a for n in args.nsp for a in ("--nsp", str(n))],
+                   check=True)
     if not (HAC_HOME / ".switch" / "title.keys").is_file():
         fail("extract.py hactool-home did not create the keys")
 
     # 2. the NSPs under ASCII names
     inp = TMP / "in"
     inp.mkdir(parents=True, exist_ok=True)
-    base_nsp, update_nsp = find_nsps(args.game_dir, keys)
+    base_nsp, update_nsp = find_nsps(game_dir, args.nsp, keys)
     nsps = {"base": link_or_copy(base_nsp, inp / "base.nsp"), "update": link_or_copy(update_nsp, inp / "update.nsp")}
 
     # 3. NCAs of both NSPs (the base is ~11 GB) and the merge. Each NSP is extracted into <name>.part, renamed once

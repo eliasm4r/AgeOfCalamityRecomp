@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Each file of the dump can be chosen on its own**: the setup asks for one folder with everything, or, with "I
+  choose each file on its own", for the base game, the update, `prod.keys` and the DLCs one by one, wherever they
+  are (another disk, separate folders). The choices are kept for the next build. The build tools take the same
+  files with `--nsp <file>` (repeatable) and `--keys`, with or without `--game-dir`.
+
 ## 0.2.1
 
 ### Fixed

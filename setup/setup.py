@@ -218,11 +218,14 @@ def shell_folder(identifier):
 
 # ---- the setup's own settings (setup.ini)
 class Settings:
-    KEYS = ("game_dir", "deck_host", "win_work", "wsl_distro", "deck", "windows", "send", "with_romfs", "shortcut")
+    KEYS = ("game_dir", "source", "base_nsp", "update_nsp", "dlc_nsps", "keys_file", "deck_host", "win_work", "wsl_distro",
+            "deck", "windows", "send", "with_romfs", "shortcut")
 
     def __init__(self):
         self.path = ROOT / "setup.ini"
-        self.values = {"game_dir": "", "deck_host": "deck@steamdeck", "win_work": "", "wsl_distro": "",
+        # source: "folder" (game_dir holds everything) or "files" (each one chosen; dlc_nsps separated by "|")
+        self.values = {"game_dir": "", "source": "folder", "base_nsp": "", "update_nsp": "", "dlc_nsps": "",
+                       "keys_file": "", "deck_host": "deck@steamdeck", "win_work": "", "wsl_distro": "",
                        "deck": "0" if WIN else "1", "windows": "1" if WIN else "0", "send": "0", "with_romfs": "1",
                        "shortcut": "1"}
         for line in read_text(self.path).splitlines():
@@ -263,6 +266,19 @@ def scan_dump(folder):
                 found["dlc"] += 1
         if seen > 20000:
             break
+    return found
+
+
+def scan_files(base, update, keys, dlcs):
+    """The files chosen one by one, in scan_dump's form. The build's check step identifies them by content."""
+    found = {"exists": True, "nsp": 0, "base": False, "update": False, "dlc": 0, "keys": False, "gone": set()}
+    for name, value in (("base", base), ("update", update), ("keys", keys)):
+        if value and Path(value).is_file():
+            found[name] = True
+            found["nsp"] += name != "keys"
+        elif value:
+            found["gone"].add(name)
+    found["dlc"] = sum(1 for d in dlcs if Path(d).is_file())
     return found
 
 
@@ -433,12 +449,50 @@ class App:
             self.install_note = ttk.Label(place, wraplength=WIDTH, justify="left")
             self.install_note.grid(row=2, column=0, columnspan=2, sticky="w")
             self.inputs += [entry, button]
-        ttk.Label(f, text=T["folder"]).grid(row=3, column=0, columnspan=3, sticky="w")
+        # The dump: one folder with everything, or each file chosen on its own (make_build.py --nsp / --keys)
+        src = ttk.Frame(f)
+        src.grid(row=3, column=0, columnspan=3, sticky="we")
+        src.columnconfigure(0, weight=1)
+        self.source = tkinter.StringVar(value="files" if s["source"] == "files" else "folder")
+        self.source_inputs = []
+        for i, (value, text) in enumerate((("folder", T["source_folder"]), ("files", T["source_files"]))):
+            radio = ttk.Radiobutton(src, text=text, value=value, variable=self.source, command=self.refresh)
+            radio.grid(row=i, column=0, sticky="w")
+            self.source_inputs.append(radio)
+        self.folder_panel = ttk.Frame(src)
+        self.folder_panel.grid(row=2, column=0, sticky="we", pady=(6, 0))
+        self.folder_panel.columnconfigure(0, weight=1)
+        ttk.Label(self.folder_panel, text=T["folder"]).grid(row=0, column=0, columnspan=2, sticky="w")
         self.folder = tkinter.StringVar(value=s["game_dir"])
-        self.folder_entry = ttk.Entry(f, textvariable=self.folder, width=70)
-        self.folder_entry.grid(row=4, column=0, columnspan=2, sticky="we", pady=(2, 6))
-        self.folder_button = ttk.Button(f, text=T["browse"], command=self.choose_folder)
-        self.folder_button.grid(row=4, column=2, sticky="e", padx=(8, 0), pady=(2, 6))
+        self.folder_entry = ttk.Entry(self.folder_panel, textvariable=self.folder, width=70)
+        self.folder_entry.grid(row=1, column=0, sticky="we", pady=(2, 6))
+        self.folder_button = ttk.Button(self.folder_panel, text=T["browse"], command=self.choose_folder)
+        self.folder_button.grid(row=1, column=1, sticky="e", padx=(8, 0), pady=(2, 6))
+        self.files_panel = ttk.Frame(src)
+        self.files_panel.grid(row=2, column=0, sticky="we", pady=(6, 6))
+        self.files_panel.columnconfigure(1, weight=1)
+        self.picks = {}
+        for i, (key, label) in enumerate((("base_nsp", T["base"]), ("update_nsp", T["update_nsp"]),
+                                          ("keys_file", T["keys"]))):
+            self.picks[key] = tkinter.StringVar(value=s[key])
+            ttk.Label(self.files_panel, text=label).grid(row=i, column=0, sticky="w", padx=(0, 8))
+            entry = ttk.Entry(self.files_panel, textvariable=self.picks[key], width=56)
+            entry.grid(row=i, column=1, sticky="we", pady=2)
+            button = ttk.Button(self.files_panel, text=T["browse"], command=lambda k=key, l=label: self.choose_file(k, l))
+            button.grid(row=i, column=2, sticky="e", padx=(8, 0), pady=2)
+            self.picks[key].trace_add("write", lambda *change: self.refresh())
+            self.source_inputs += [entry, button]
+        self.dlcs = [d for d in s["dlc_nsps"].split("|") if d]
+        ttk.Label(self.files_panel, text=T["dlc"]).grid(row=3, column=0, sticky="nw", padx=(0, 8), pady=(4, 0))
+        self.dlc_text = ttk.Label(self.files_panel, wraplength=WIDTH - 260, justify="left")
+        self.dlc_text.grid(row=3, column=1, sticky="w", pady=(4, 0))
+        dlc_buttons = ttk.Frame(self.files_panel)
+        dlc_buttons.grid(row=3, column=2, sticky="e", padx=(8, 0), pady=(4, 0))
+        add = ttk.Button(dlc_buttons, text=T["add"], command=self.add_dlcs)
+        add.grid(row=0, column=0)
+        clear = ttk.Button(dlc_buttons, text=T["clear"], command=self.clear_dlcs)
+        clear.grid(row=1, column=0, pady=(2, 0))
+        self.source_inputs += [add, clear]
 
         found = ttk.Frame(f)
         found.grid(row=5, column=0, columnspan=3, sticky="w", pady=(0, 12))
@@ -458,7 +512,7 @@ class App:
         self.with_romfs = tkinter.BooleanVar(value=s["with_romfs"] == "1")
         self.send = tkinter.StringVar(value="ssh" if s["send"] == "1" else "copy")
         self.host = tkinter.StringVar(value=s["deck_host"])
-        self.inputs += [self.folder_entry, self.folder_button]
+        self.inputs += [self.folder_entry, self.folder_button] + self.source_inputs
         note = {"foreground": "#666", "wraplength": WIDTH - 40, "justify": "left"}
         row = 0
         if WIN:
@@ -546,23 +600,35 @@ class App:
             self.dump_cleared = False
             if self.settings.values["game_dir"]:
                 return self.folder.set(self.settings.values["game_dir"])
+        files = self.source.get() == "files"
+        (self.files_panel if files else self.folder_panel).grid()
+        (self.folder_panel if files else self.files_panel).grid_remove()
         if not self.build:
-            for w in (self.folder_entry, self.folder_button):
+            for w in [self.folder_entry, self.folder_button] + self.source_inputs:
                 w.configure(state="disabled" if self.updating else "normal")
-        found = scan_dump(self.folder.get().strip().strip('"'))
-        unnamed = found["nsp"] >= 2 and not (found["base"] or found["update"])
+        names = [Path(d).name for d in self.dlcs]
+        self.dlc_text.configure(text=T["dlc_chosen"].format(n=len(names), names=", ".join(names)) if names
+                                else T["dlc_none"])
+        if files:
+            found = scan_files(*(self.picks[k].get().strip().strip('"') for k in ("base_nsp", "update_nsp", "keys_file")),
+                               self.dlcs)
+            found["exists"] = not self.updating   # an update reads no NSPs
+        else:
+            found = scan_dump(self.folder.get().strip().strip('"'))
+        unnamed = not files and found["nsp"] >= 2 and not (found["base"] or found["update"])
         for name, mark, text in self.found:
             if not found["exists"]:
                 mark.configure(text="", foreground="")
-                text.configure(text=T["no_folder"] if name == "base" and self.folder.get().strip() else "")
+                text.configure(text=T["no_folder"] if name == "base" and not files and self.folder.get().strip() else "")
                 continue
+            missing = T["no_file"] if name in found.get("gone", ()) else T["missing"]
             if name == "dlc":
                 ok, detail = found["dlc"] > 0, T["dlc_found"].format(n=found["dlc"])
             elif name == "keys":
-                ok, detail = found["keys"], T["found"] if found["keys"] else T["missing"]
+                ok, detail = found["keys"], T["found"] if found["keys"] else missing
             else:
                 ok = found[name] or unnamed
-                detail = T["found"] if found[name] else T["unnamed"] if unnamed else T["missing"]
+                detail = T["found"] if found[name] else T["unnamed"] if unnamed else missing
             optional = name == "dlc"
             mark.configure(text="\u2713" if ok else ("\u2013" if optional else "\u2717"),
                            foreground="#1a7f37" if ok else ("#666" if optional else "#c62828"))
@@ -587,6 +653,30 @@ class App:
         path = filedialog.askdirectory(parent=self.root, title=T["folder_title"], initialdir=self.folder.get() or None)
         if path:
             self.folder.set(str(Path(path)))
+
+    def choose_file(self, key, label):
+        keys = key == "keys_file"
+        kinds = [(T["key_files"], "*.keys")] if keys else [(T["nsp_files"], "*.nsp *.NSP")]
+        now = self.picks[key].get().strip().strip('"')
+        path = filedialog.askopenfilename(parent=self.root, title=T["file_title"].format(what=label),
+                                          initialdir=str(Path(now).parent) if now else None,
+                                          filetypes=kinds + [(T["all_files"], "*")])
+        if path:
+            self.picks[key].set(str(Path(path)))
+
+    def add_dlcs(self):
+        start = self.dlcs[-1] if self.dlcs else self.picks["base_nsp"].get().strip().strip('"')
+        paths = filedialog.askopenfilenames(parent=self.root, title=T["dlc_title"],
+                                            initialdir=str(Path(start).parent) if start else None,
+                                            filetypes=[(T["nsp_files"], "*.nsp *.NSP"), (T["all_files"], "*")])
+        for path in paths or ():
+            if str(Path(path)) not in self.dlcs:
+                self.dlcs.append(str(Path(path)))
+        self.refresh()
+
+    def clear_dlcs(self):
+        self.dlcs = []
+        self.refresh()
 
     def choose_install(self):
         path = filedialog.askdirectory(parent=self.root, title=T["install_title"], initialdir=self.install.get() or None)
@@ -615,8 +705,12 @@ class App:
 
     def save_choices(self):
         s = self.settings.values
-        if not self.updating:   # an update leaves the NSP folder of the last build in setup.ini
+        if not self.updating:   # an update leaves the NSPs of the last build in setup.ini
             s["game_dir"] = self.folder.get().strip().strip('"')
+            s["source"] = self.source.get()
+            for key, var in self.picks.items():
+                s[key] = var.get().strip().strip('"')
+            s["dlc_nsps"] = "|".join(self.dlcs)
         s["windows"] = "1" if self.windows.get() else "0"
         s["deck"] = "1" if self.deck.get() else "0"
         s["with_romfs"] = "1" if self.with_romfs.get() else "0"
@@ -649,7 +743,12 @@ class App:
                 return messagebox.showwarning(T["window"], str(error), parent=self.root)
         self.save_choices()
         s = self.settings.values
-        args = ["--update"] if self.updating else ["--game-dir", s["game_dir"]]
+        if self.updating:
+            args = ["--update"]
+        elif s["source"] == "files":   # each file chosen on its own: no folder is searched
+            args = [a for n in [s["base_nsp"], s["update_nsp"]] + self.dlcs for a in ("--nsp", n)] + ["--keys", s["keys_file"]]
+        else:
+            args = ["--game-dir", s["game_dir"]]
         if deck:
             args.append("--deck")
             if self.with_romfs.get():
