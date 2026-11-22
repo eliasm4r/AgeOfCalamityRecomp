@@ -33,6 +33,10 @@
   stopped there. They no longer need it.
 - **No "Report a problem..." button when the build failed** (issue #6): the setup had it only once the game was
   installed. It now appears next to "Check files" as soon as a build stops, and the error box points to it.
+- **Language tab and a French menu**: the settings menu (F1) gets a Language tab with **Menu language** (Automatic,
+  English, Français; applies at once) and **Game language**, moved there from the Game tab. Automatic shows the menu in
+  the system's language when it is translated, else in English. The whole menu and the performance overlay are in
+  French; a text not translated yet shows in English.
 
 ## 0.2.1
 

@@ -145,7 +145,7 @@ static const CfgMeta metas[] = {
     {"LSTICK_DEADZONE", "", "0..50", LIVE}, {"RSTICK_DEADZONE", "", "0..50", LIVE},
     {"MOUSE_SENS", "1", "0..10", LIVE},
     {"WALK_KEY", "none", NULL, LIVE}, {"WALK_SCALE", "0.51", "0.2..0.9", LIVE},
-    {"MENU_LANG", "", "en", LIVE},
+    {"MENU_LANG", "", "en|fr", LIVE},   // ui_text.c menu_lang: unset follows the system's language
     {"AMIIBO_DIR", "", NULL, LIVE},
     // Advanced: scheduling
     {"ASYNC_PREEMPT", "1", "0|1|2", RESTART}, {"REPLAY_ASYNC", "1", "0|1", RESTART},

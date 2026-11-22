@@ -333,7 +333,7 @@ static int vk_up(const MenuTarget *t) {
 // A catalog row also holds menu text (Simplified Chinese), so every string of the row goes into the builder: the merged
 // font must cover the whole menu of that language, not only its name. Made again when the window height changes; the old
 // texture goes after the queue is idle (CreateFontsTexture).
-static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x0400, 0x052F, 0x2010, 0x2027, 0};
+static const ImWchar kRanges[] = {0x0020, 0x017F, 0x0400, 0x052F, 0x2010, 0x2027, 0};   // Latin-1, Extended-A (œ)
 static const struct { const char *lang; UiTextId name; } kCjk[] = {
     {"ja", UI_MENU_LANGNAME_JA}, {"ko", UI_MENU_LANGNAME_KO}, {"zh-Hans", UI_MENU_LANGNAME_ZH_HANS},
     {"zh-Hant", UI_MENU_LANGNAME_ZH_HANT},
@@ -434,7 +434,8 @@ extern "C" void menu_vk_release(void) {
 // ACR_MENU_TEST_SET=<frame>:<key>=<value>[,<key>=<value>...][;<frame>:...]: cfg_set of each key (ACR_ prefix
 // optional) at that presented frame; changes live settings with no input, menu open or not. settings.ini is written only by
 // the pseudo-key SAVE=1 (cfg_save, as a row change does; a failed write shows the menu's save note).
-enum { TAB_SCREEN, TAB_GAME, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_ADVANCED, TAB_MODS, TAB_CHEATS, TAB_COUNT };
+enum { TAB_SCREEN, TAB_GAME, TAB_LANGUAGE, TAB_SOUND, TAB_CONTROLS, TAB_AMIIBO, TAB_ADVANCED, TAB_MODS, TAB_CHEATS,
+       TAB_COUNT };
 enum { TEST_PAGE_FRAMES = 30, TEST_SETS = 16 };
 struct TestSet { uint64_t frame; char key[64], value[64]; };
 static struct {
@@ -722,11 +723,31 @@ static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
     opt_toggle("ACR_FRAME_QUEUE", UI_MENU_FRAME_QUEUE, UI_MENU_FRAME_QUEUE_DESC);
-    row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
     if (opt_choice("ACR_OPERATION_MODE", UI_MENU_OPERATION_MODE, mode, 2, UI_MENU_OPERATION_MODE_DESC))
         ov_operation_mode_changed();
     opt_toggle("ACR_ASSUME_FOCUS", UI_MENU_ASSUME_FOCUS, UI_MENU_ASSUME_FOCUS_DESC);
+    opt_end();
+}
+
+// The menu language: Automatic (unset) and each language the menu is translated into, under its own name. The menu
+// redraws in the new language at once (menu_text reads the setting).
+static void row_menu_lang(void) {
+    static const struct { const char *code; UiTextId name; } langs[] = {
+        {"en", UI_MENU_LANGNAME_EN}, {"fr", UI_MENU_LANGNAME_FR},
+    };
+    enum { N = sizeof langs / sizeof *langs + 1 };
+    const char *vals[N], *names[N];
+    vals[0] = "";
+    names[0] = menu_text(UI_MENU_MENU_LANG_AUTO);
+    for (int i = 1; i < N; i++) vals[i] = langs[i - 1].code, names[i] = menu_text(langs[i - 1].name);
+    opt_choice_list("ACR_MENU_LANG", UI_MENU_MENU_LANG, vals, names, N, UI_MENU_MENU_LANG_DESC);
+}
+
+static void tab_language(float scale) {
+    opt_begin("##language", scale);
+    row_menu_lang();
+    row_game_lang();
     opt_end();
 }
 
@@ -1061,7 +1082,8 @@ static void tab_advanced(float scale) {
     }
 }
 
-static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,     UI_MENU_TAB_SOUND,
+static const UiTextId kTabNames[TAB_COUNT] = {UI_MENU_TAB_SCREEN,   UI_MENU_TAB_GAME,     UI_MENU_TAB_LANGUAGE,
+                                              UI_MENU_TAB_SOUND,
                                               UI_MENU_TAB_CONTROLS, UI_MENU_TAB_AMIIBO,   UI_MENU_TAB_ADVANCED,
                                               UI_MENU_TAB_MODS,     UI_MENU_TAB_CHEATS};
 static int g_tab;               // the tab shown
@@ -1239,6 +1261,7 @@ static void layout_menu(uint32_t w, uint32_t h, float scale) {
             switch (k) {
             case TAB_SCREEN: tab_screen(scale); break;
             case TAB_GAME: tab_game(scale); break;
+            case TAB_LANGUAGE: tab_language(scale); break;
             case TAB_MODS: tab_mods(scale); break;
             case TAB_SOUND: tab_sound(scale); break;
             case TAB_CONTROLS: tab_controls(scale); break;

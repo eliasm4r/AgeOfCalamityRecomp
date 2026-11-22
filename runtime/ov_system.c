@@ -94,6 +94,16 @@ static const char *switch_language(const char *tag) {
 // The game's language as a Switch language code (ACR_LANG, else ACR_LOCALE, else the Windows user locale). Astral Chain
 // accepts "zh-Hans" and "zh-Hant" for Chinese and falls back to Japanese for "zh-CN" and "zh-TW", so those two
 // spellings, which older settings.ini files and menus wrote, are mapped to them.
+const char *ov_system_language(void) {
+    const char *tag = cfg_get("ACR_LOCALE");
+    char sys[85] = "en-US";
+    if (!tag || !*tag) {
+        if (*plat_user_locale()) snprintf(sys, sizeof sys, "%s", plat_user_locale());
+        tag = sys;
+    }
+    return switch_language(tag);
+}
+
 const char *ov_language(void) {
     static const char *const codes[] = {"ja", "en-US", "fr", "de", "it", "es", "ko", "nl", "pt", "ru",
                                         "en-GB", "fr-CA", "es-419", "zh-Hans", "zh-Hant", "pt-BR"};
@@ -105,13 +115,7 @@ const char *ov_language(void) {
             if (!strcmp(code, codes[i])) return codes[i];
         rt_fatal("ACR_LANG '%s' is not a Switch language code", code);
     }
-    const char *tag = cfg_get("ACR_LOCALE");
-    char sys[85] = "en-US";
-    if (!tag || !*tag) {
-        if (*plat_user_locale()) snprintf(sys, sizeof sys, "%s", plat_user_locale());
-        tag = sys;
-    }
-    return switch_language(tag);
+    return ov_system_language();
 }
 
 // LanguageCode GetDesiredLanguage(): char[8] in x0

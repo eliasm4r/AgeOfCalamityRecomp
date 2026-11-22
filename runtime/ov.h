@@ -12,6 +12,7 @@
 int ov_handheld(void);                     // ACR_OPERATION_MODE=handheld (default docked); fatal on another value
 void ov_operation_mode_changed(void);      // the setting changed while the game runs: report it, notify the game
 void ov_operation_mode_test_tick(void);    // ACR_TEST_OPMODE test hook, at every present
+const char *ov_system_language(void);      // the system's language as a Switch code, whatever ACR_LANG says
 const char *ov_language(void);             // the game's language, a Switch language code ("en-US", "zh-Hans", ...)
 
 // ---- ov_settings.c
