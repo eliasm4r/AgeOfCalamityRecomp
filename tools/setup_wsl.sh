@@ -12,6 +12,10 @@ MINIMAL=0
 
 if [ "$(id -u)" = 0 ]; then
     SUDO=()
+elif [ -f /run/.containerenv ] || [ -f /.dockerenv ]; then
+    # a distrobox container (tools/make_build.py on SteamOS, Bazzite and other read-only systems): its sudo asks no
+    # password, and there is no terminal or polkit agent inside
+    SUDO=(sudo -n)
 elif [ -t 0 ] && command -v sudo >/dev/null; then
     SUDO=(sudo)
 elif command -v pkexec >/dev/null; then

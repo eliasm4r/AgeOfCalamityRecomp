@@ -129,8 +129,11 @@ TEXT = {
     "stale_romfs": "the romfs.bin of an earlier attempt is not the 1.3.0 one ({0} bytes): building it again",
     "romfs_size": "the merged RomFS has {0} bytes, the 1.3.0 one has {1}: check that the base game and the update are "
                    "the right ones (base v0 and update 1.3.0)",
-    "steamos": "SteamOS does not let the build tools be installed (the system is read-only). Build on a Windows or "
-                "Linux PC and copy the dist/steamdeck folder here (README, Steam Deck section)",
+    "readonly": "this system does not let the build tools be installed (read-only system: SteamOS, Bazzite or "
+                 "another Fedora Atomic) and has no distrobox to put them in. Install distrobox, or build on a Windows "
+                 "or Linux PC and copy the dist/steamdeck folder here (README, Steam Deck section)",
+    "box": "read-only system: the build tools go into a distrobox container, {0} (Arch Linux; the first time it "
+            "downloads the image and the tools, a few minutes)",
 }
 
 
@@ -316,7 +319,7 @@ def run(cmd, cwd=None, env=None, problems=None) -> None:
     """Runs a command, its output going to the log line by line; a non-zero exit fails the step. problems: a list that
     receives the (code, detail) of each "@@PROBLEM <code> <detail>" line the command prints."""
     env = dict(env or os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", WSL_UTF8="1")
-    p = subprocess.Popen([str(c) for c in cmd], cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    p = subprocess.Popen([str(c) for c in box_wrap(cmd)], cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          stdin=subprocess.DEVNULL)
     for raw in iter(p.stdout.readline, b""):
         line = raw.decode("utf-8", "replace").rstrip("\r\n").replace("\x00", "")
@@ -331,7 +334,7 @@ def run(cmd, cwd=None, env=None, problems=None) -> None:
 
 def capture(cmd, env=None) -> subprocess.CompletedProcess:
     env = dict(env or os.environ, WSL_UTF8="1")
-    return subprocess.run([str(c) for c in cmd], capture_output=True, env=env, stdin=subprocess.DEVNULL)
+    return subprocess.run([str(c) for c in box_wrap(cmd)], capture_output=True, env=env, stdin=subprocess.DEVNULL)
 
 
 def wsl_path(p: Path) -> str:
@@ -550,14 +553,56 @@ def tools_msys2(args) -> None:
         msys(args, "pacman -S --needed --noconfirm --disable-download-timeout " + " ".join(pkgs))
 
 
-def steamos_readonly() -> bool:
-    """SteamOS (Steam Deck, Steam Machine) with its read-only system and no compiler: pacman cannot install there."""
+# Systems whose package manager cannot add the build tools: SteamOS (read-only; pacman refuses) and Fedora Atomic
+# (Bazzite, Silverblue, Kinoite, Bluefin: rpm-ostree, whose dnf refuses to install). There the tools go into a
+# distrobox container, as these systems advise for development tools: it shares the home folder (the game folder, the
+# venv, the build folder) and runs every command that needs them (box_wrap). Without distrobox the build stops there.
+BOX = "acr-build"
+BOX_IMAGE = "docker.io/library/archlinux:latest"   # (tools/setup_wsl.sh's pacman path: what WSL builds with)
+
+
+def system_readonly() -> bool:
+    if WIN:
+        return False
+    if Path("/run/ostree-booted").exists():
+        return True
     try:
         text = Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
     ids = {l.split("=", 1)[1].strip().strip('"') for l in text.splitlines() if l.startswith("ID=")}
-    return "steamos" in ids and not (shutil.which("clang") and shutil.which("ninja"))
+    return "steamos" in ids
+
+
+def host_tools() -> bool:
+    return bool(shutil.which("clang") and shutil.which("ninja"))
+
+
+_use_box = None
+
+
+def use_box() -> bool:
+    """The build tools live in the distrobox BOX (a read-only system with distrobox and no compiler of its own)."""
+    global _use_box
+    if _use_box is None:
+        _use_box = system_readonly() and bool(shutil.which("distrobox")) and not host_tools()
+    return _use_box
+
+
+def box_wrap(cmd: list) -> list:
+    """A command that runs the tools' Python (the venv, made inside the box: its interpreter is the box's) goes
+    through distrobox enter on a system that keeps the tools there. The working folder and the home folder are the
+    same inside."""
+    if use_box() and cmd and str(cmd[0]) == str(VENV_PY):
+        return ["distrobox", "enter", BOX, "--"] + list(cmd)
+    return list(cmd)
+
+
+def box_create() -> None:
+    have = capture(["distrobox", "list", "--no-color"])
+    names = {c.strip() for line in have.stdout.decode("utf-8", "replace").splitlines() for c in line.split("|")}
+    if BOX not in names:
+        run(["distrobox", "create", "--yes", "--name", BOX, "--image", BOX_IMAGE])
 
 
 def s_tools(args) -> str:
@@ -566,9 +611,13 @@ def s_tools(args) -> str:
             tools_wsl(args)
         if args.windows:
             tools_msys2(args)
+    elif use_box():
+        out(tr("box", BOX))
+        box_create()
+        run(["distrobox", "enter", BOX, "--", "bash", ROOT / "tools/setup_wsl.sh", "--minimal"], cwd=str(ROOT))
     else:
-        if steamos_readonly():
-            raise StepFailed(tr("steamos"))
+        if system_readonly() and not host_tools():
+            raise StepFailed(tr("readonly"))
         run(["bash", ROOT / "tools/setup_wsl.sh", "--minimal"], cwd=str(ROOT))
     out(tr("tools_ok"))
     return "ok"

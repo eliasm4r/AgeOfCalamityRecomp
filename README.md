@@ -79,7 +79,9 @@ yet (above 60 the game steps by the real time of each frame, as in the TotK reco
    controller. The extracted zip can be deleted once the game is installed.
 
 The setup downloads the free build tools it needs (about 2 GB: a compiler, and on Windows a private WSL Linux for
-the Steam Deck version), extracts the game code from your files, translates it and compiles it.
+the Steam Deck version), extracts the game code from your files, translates it and compiles it. On systems whose
+packages cannot be installed (SteamOS, Bazzite and other Fedora Atomic systems) it puts the tools in a distrobox
+container named `acr-build` (distrobox comes with Bazzite and recent SteamOS).
 
 > [!TIP]
 > **Windows says it "protected your PC"?** The setup is not signed: click *More info*, then *Run anyway*.
@@ -110,9 +112,11 @@ With **RecompLauncher**, the game is built again by itself after an update.
 | Linux for Windows (Steam Deck version only) | WSL distro **AgeOfCalamityRecomp**, in `%LOCALAPPDATA%\AgeOfCalamityRecomp\wsl` | about 6 GB |
 | The Windows compiler (Windows version only) | `C:\msys64` (MSYS2), if you did not have it | about 3 GB |
 | Linux: build folder and Python packages | `~/AgeOfCalamityRecomp-build`, `~/.venvs/AgeOfCalamityRecomp` | about 6 GB |
+| SteamOS, Bazzite: the build tools' container | distrobox `acr-build` | about 2 GB |
 
 To remove everything, delete the install folder; on Windows also run `wsl --unregister AgeOfCalamityRecomp` and delete
-`C:\msys64` if the setup installed it; on Linux delete `~/AgeOfCalamityRecomp-build` and `~/.venvs/AgeOfCalamityRecomp`.
+`C:\msys64` if the setup installed it; on Linux delete `~/AgeOfCalamityRecomp-build` and `~/.venvs/AgeOfCalamityRecomp`
+(and `distrobox rm acr-build` if the setup made it).
 </details>
 
 ### Requirements
