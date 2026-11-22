@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Aiming**: the left stick no longer moves the aim of the bow and the other aimed actions, only the right stick does.
+
 ## 0.3.0
 
 ### Added
