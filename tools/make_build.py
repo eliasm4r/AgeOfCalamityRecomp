@@ -64,6 +64,11 @@ MSYS2_SFX = ("https://github.com/msys2/msys2-installer/releases/download/2026-09
 # python-cryptography and python-lz4: tools/build.py's host step indexes the RomFS (romfs_index.py imports nx.py).
 MSYS2_PKGS = ["clang", "lld", "llvm", "ninja", "sdl3", "opus", "libvpx", "zstd", "vulkan-headers", "vulkan-loader",
               "vulkan-memory-allocator", "python", "python-cryptography", "python-lz4"]
+# What the build imports in MSYS2's Python. An MSYS2 the player keeps for other projects can list these packages and
+# still miss a DLL after a partial update; it is left alone and the build installs this copy. The folder above msys64
+# is ours because the MSYS2 archive unpacks into <parent>/msys64: with C:/ as the parent it would write over C:/msys64.
+MSYS2_CHECK = "import base64, hashlib, ssl, urllib.request, zlib, lzma, cryptography.hazmat.primitives.ciphers, lz4.block"
+MSYS2_OWN = Path("C:/AgeOfCalamityRecomp-tools/msys64")
 GIB = 2**30
 
 TEXT = {
@@ -97,6 +102,9 @@ TEXT = {
     "msys_get": "downloading MSYS2 ({0:.0f} MB, first time only)...",
     "msys_hash": "the download of {0} does not match its pinned hash",
     "msys_pkgs": "installing the compiler and libraries into MSYS2 (~1.5 GB, first time only)...",
+    "msys_broken": "the Python of the MSYS2 in {0} does not work: that MSYS2 is left as it is, the build uses its own "
+                   "copy in {1}",
+    "msys_own_bad": "the build's own MSYS2 in {0} does not work: delete that folder and build again",
     "tools_ok": "tools ready",
     "exit": "the command ended with code {0}",
     "no_win_linux": "the Windows version can only be built on Windows",
@@ -551,6 +559,23 @@ def tools_msys2(args) -> None:
     if q.returncode != 0:
         out(tr("msys_pkgs"))
         msys(args, "pacman -S --needed --noconfirm --disable-download-timeout " + " ".join(pkgs))
+    if msys_works(args):
+        return
+    if root == MSYS2_OWN:
+        raise StepFailed(tr("msys_own_bad", root))
+    out(tr("msys_broken", root, MSYS2_OWN))
+    args.msys2 = str(MSYS2_OWN)   # every later step reads it through msys_root
+    tools_msys2(args)
+
+
+def msys_works(args) -> bool:
+    """MSYS2's Python imports what the build needs, in the environment the build runs it in."""
+    p = capture([msys_root(args) / "usr/bin/bash.exe", "-lc", "python3 -c " + sh_quote(MSYS2_CHECK)],
+                env=dict(os.environ, MSYSTEM="UCRT64", CHERE_INVOKING="1"))
+    if p.returncode:
+        lines = ((p.stdout or b"") + (p.stderr or b"")).decode("utf-8", "replace").strip().splitlines()
+        out(lines[-1] if lines else f"python3 ended with code {p.returncode}")
+    return p.returncode == 0
 
 
 # Systems whose package manager cannot add the build tools: SteamOS (read-only; pacman refuses) and Fedora Atomic
