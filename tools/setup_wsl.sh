@@ -48,6 +48,8 @@ elif command -v pacman >/dev/null; then
         echo "Creating the pacman keyring (first time)..."
         "${SUDO[@]}" sh -c 'pacman-key --init >/dev/null 2>&1 && pacman-key --populate archlinux >/dev/null 2>&1'
     fi
+    # a build stopped during the install leaves pacman's lock in the private distro; only root, with no pacman running
+    if [ "$(id -u)" = 0 ] && command -v pgrep >/dev/null && ! pgrep -x pacman >/dev/null; then rm -f /var/lib/pacman/db.lck; fi
     pkgs=(clang lld llvm ninja python make curl tar vulkan-headers)
     [ $MINIMAL = 0 ] && pkgs+=(python-pip git pkgconf gdb time sdl3 opus libvpx zstd vulkan-icd-loader)
     "${SUDO[@]}" pacman -Syu --noconfirm --needed "${pkgs[@]}"

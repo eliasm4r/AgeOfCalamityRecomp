@@ -22,6 +22,7 @@ Two places it runs from:
 import ctypes
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -111,6 +112,8 @@ def default_install():
 def install_problem(text):
     """Why this install folder cannot be used, or "". Plain ASCII paths only: MSYS2, hactool and WSL all read it."""
     if not text or not Path(text).is_absolute() or not text.isascii() or any(c in text[2:] for c in '<>:"|?*%&^!;'):
+        return T["plain_folder"]
+    if WIN and not re.match(r"[A-Za-z]:[\\/]", text):   # a network path: MSYS2 and the hard links need a drive
         return T["plain_folder"]
     if len(text) > LONGEST_FOLDER:
         return T["long_folder"]
@@ -249,7 +252,7 @@ def scan_dump(folder):
     if not path or not path.is_dir():
         return found
     found["exists"] = True
-    found["keys"] = (path / "prod.keys").is_file()
+    found["keys"] = (path / "prod.keys").is_file() or (path / "prod.keys.txt").is_file()
     seen = 0
     for top, dirs, files in os.walk(path):
         for name in files:

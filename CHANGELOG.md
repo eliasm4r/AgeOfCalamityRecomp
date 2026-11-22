@@ -5,7 +5,17 @@
 ### Fixed
 - **Build stopping at "Install the build tools" with "could not lock database"**: an MSYS2 install that was interrupted
   left a lock file behind, and every later build stopped on it. The setup now removes that lock when no `pacman` is
-  running.
+  running, on Windows and in the private WSL distro.
+- **An interrupted or outdated MSYS2**: a first install that was cut off now resumes, and an MSYS2 that cannot get the
+  packages is left alone while the build uses its own copy.
+- **Busy download servers**: downloads and packages are tried again after a pause instead of stopping the build.
+- **A `PYTHONHOME`, `PYTHONPATH` or inherited `PATH`** on the PC no longer breaks MSYS2's Python.
+- **Update with the game open** now says to close it, instead of failing with a file error.
+- **Drives**: FAT32 is refused at the start with a clear message, exFAT counts the extra 11 GB it needs, a network path
+  is refused, and MSYS2's drive is checked for free space.
+- **A shader preparation failure** (a graphics driver crash) no longer fails the build: the game works and prepares
+  them while it plays.
+- **`prod.keys.txt`** (saved by Notepad with the extension hidden) is accepted.
 
 ## 0.3.1
 

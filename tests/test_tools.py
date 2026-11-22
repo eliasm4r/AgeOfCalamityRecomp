@@ -419,6 +419,38 @@ class MakeBuildTest(unittest.TestCase):
         self.assertEqual(make_build.MSYS2_OWN.name, "msys64")
         self.assertNotEqual(make_build.MSYS2_OWN.parent, Path("C:/"))
 
+    def test_msys2_that_cannot_get_packages_moves_to_our_copy(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            theirs, own = d / "theirs/msys64", d / "own/msys64"
+            for root in (theirs, own):
+                (root / "usr/bin").mkdir(parents=True)
+                (root / "usr/bin/bash.exe").write_bytes(b"")
+            args = argparse.Namespace(msys2=str(theirs))
+            answers = iter((1, 0))   # pacman -Q: theirs lacks the packages, ours has them
+            listed = lambda *a, **k: subprocess.CompletedProcess([], next(answers), b"", b"")
+            with mock.patch.object(make_build, "MSYS2_OWN", own), mock.patch.object(make_build, "capture", listed), \
+                    mock.patch.object(make_build, "pacman", side_effect=make_build.StepFailed("404")), \
+                    mock.patch.object(make_build, "msys_works", return_value=True), mock.patch.object(make_build, "out"):
+                make_build.tools_msys2(args)
+            self.assertEqual(args.msys2, str(own))
+
+    def test_pacman_tries_again_then_succeeds(self):
+        args = argparse.Namespace(msys2="unused")
+        with mock.patch.object(make_build, "msys_unlock"), mock.patch.object(make_build, "out"), \
+                mock.patch.object(make_build.time, "sleep") as pause, \
+                mock.patch.object(make_build, "msys", side_effect=[make_build.StepFailed("429"), None]) as commands:
+            make_build.pacman(args, "-S x")
+        self.assertEqual(commands.call_count, 2)
+        pause.assert_called_once()
+
+    def test_msys_env_drops_the_players_python(self):
+        with mock.patch.dict(make_build.os.environ, {"PYTHONHOME": "C:/x", "PYTHONPATH": "C:/y", "MSYS2_PATH_TYPE": "inherit"}):
+            env = make_build.msys_env()
+        self.assertNotIn("PYTHONHOME", env)
+        self.assertNotIn("PYTHONPATH", env)
+        self.assertEqual(env["MSYS2_PATH_TYPE"], "minimal")
+
     def pacman_lock(self, d, returncode, stdout):
         """msys_unlock with a lock on disk and tasklist's answer; True when the lock is still there."""
         lock = d / "var/lib/pacman/db.lck"

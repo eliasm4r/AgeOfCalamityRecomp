@@ -40,6 +40,7 @@ Nothing here reads or prints key values: the key file's path goes to the tools t
 """
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -69,6 +70,8 @@ MSYS2_PKGS = ["clang", "lld", "llvm", "ninja", "sdl3", "opus", "libvpx", "zstd",
 # is ours because the MSYS2 archive unpacks into <parent>/msys64: with C:/ as the parent it would write over C:/msys64.
 MSYS2_CHECK = "import base64, hashlib, ssl, urllib.request, zlib, lzma, cryptography.hazmat.primitives.ciphers, lz4.block"
 MSYS2_OWN = Path("C:/AgeOfCalamityRecomp-tools/msys64")
+PACMAN_WAITS = (30, 90)
+MSYS2_GB = 5   # the base and the compiler packages
 GIB = 2**30
 
 TEXT = {
@@ -102,8 +105,13 @@ TEXT = {
     "msys_get": "downloading MSYS2 ({0:.0f} MB, first time only)...",
     "msys_hash": "the download of {0} does not match its pinned hash",
     "msys_pkgs": "installing the compiler and libraries into MSYS2 (~1.5 GB, first time only)...",
-    "msys_broken": "the Python of the MSYS2 in {0} does not work: that MSYS2 is left as it is, the build uses its own "
-                   "copy in {1}",
+    "msys_broken": "the MSYS2 in {0} cannot be used for the build: it is left as it is, the build uses its own copy "
+                   "in {1}",
+    "msys_retry": "the package download failed (the servers may be busy): trying again in {0} s",
+    "no_net": "could not download {0}: check the internet connection and build again ({1})",
+    "game_open": "the game is running from this folder: close it and press the button again",
+    "fat32": "the drive of the install folder is FAT32, which cannot hold the 10.9 GB game data: choose an NTFS or "
+             "exFAT drive",
     "msys_own_bad": "the build's own MSYS2 in {0} does not work: delete that folder and build again",
     "msys_unlocked": "removed the lock an interrupted install left: {0}",
     "tools_ok": "tools ready",
@@ -120,6 +128,8 @@ TEXT = {
     "dlss_kept": "a DLSS library of another version is already in the game folder: kept",
     "dlss_failed": "WARNING: NVIDIA DLSS could not be downloaded ({0}). The game runs without DLAA; the next build tries again",
     "shaders_kept": "the shaders are already prepared for this translator",
+    "shaders_failed": "WARNING: the shaders could not be prepared ({0}). The game works and prepares them while you "
+                      "play, with some stutter; the next build tries again",
     "update_from": "update: from the game data the first build extracted ({0}), without the NSPs",
     "no_extracted": "the game data the first build extracted is not in {0}: choose the folder with your NSPs and "
                     "prod.keys and build again",
@@ -372,9 +382,27 @@ def msys_root(args) -> Path:
     return Path(args.msys2 or os.environ.get("ACR_MSYS2", "") or "C:/msys64")
 
 
+def msys_env() -> dict:
+    """MSYS2's own environment: a PYTHONHOME or an inherited Windows PATH makes its Python load the wrong DLLs."""
+    env = {k: v for k, v in os.environ.items() if k.upper() not in ("PYTHONHOME", "PYTHONPATH")}
+    return dict(env, MSYSTEM="UCRT64", CHERE_INVOKING="1", MSYS2_PATH_TYPE="minimal")
+
+
 def msys(args, script: str) -> None:
-    env = dict(os.environ, MSYSTEM="UCRT64", CHERE_INVOKING="1")
-    run([msys_root(args) / "usr/bin/bash.exe", "-lc", script], cwd=str(ROOT), env=env)
+    run([msys_root(args) / "usr/bin/bash.exe", "-lc", script], cwd=str(ROOT), env=msys_env())
+
+
+def pacman(args, options: str) -> None:
+    """pacman, again after a pause when it fails: the mirrors answer 429 to a burst of downloads."""
+    for wait in PACMAN_WAITS:
+        msys_unlock(msys_root(args))
+        try:
+            return msys(args, "pacman " + options)
+        except StepFailed:
+            out(tr("msys_retry", wait))
+            time.sleep(wait)
+    msys_unlock(msys_root(args))
+    msys(args, "pacman " + options)
 
 
 def tool_python() -> str:
@@ -423,6 +451,14 @@ def s_check(args) -> None:
         raise StepFailed(tr("send_deck"))
     # Space: the RomFS merge holds the NCAs (~11 GB) and the image (10.9 GB) at once; each build ~6-8 GB.
     need = (23 if not (ROOT / "build/v130/romfs.bin").is_file() else 0) + 7 * args.deck + 9 * args.windows
+    if WIN:
+        fs = volume_fs(ROOT)
+        if fs in ("FAT", "FAT32"):
+            raise StepFailed(tr("fat32"))
+        if args.windows and fs == "EXFAT" and not (ROOT / "dist/windows/romfs/romfs.bin").exists():
+            need += 11   # no hard links there: the game folder gets its own copy of romfs.bin
+        if args.windows and not args.check_only and game_open():
+            raise StepFailed(tr("game_open"))
     free = shutil.disk_usage(ROOT).free / 1e9
     out(f"{ROOT}: {free:.0f} GB")
     if free < need:
@@ -430,6 +466,25 @@ def s_check(args) -> None:
     ram = mem_gib()
     if ram and ram < 7.5:
         out(tr("ram", ram))
+
+
+def volume_fs(path: Path) -> str:
+    """The file system of the drive holding path (NTFS, EXFAT, FAT32...), "" when Windows does not say."""
+    import ctypes
+    name = ctypes.create_unicode_buffer(32)
+    ok = ctypes.windll.kernel32.GetVolumeInformationW(Path(path).resolve().anchor, None, 0, None, None, None, name, 32)
+    return name.value.upper() if ok else ""
+
+
+def game_open() -> bool:
+    """Windows refuses to open a running exe for writing, and only this folder's copy counts."""
+    try:
+        open(ROOT / "dist/windows/AgeOfCalamityRecomp.exe", "r+b").close()
+    except PermissionError:
+        return True
+    except OSError:
+        pass
+    return False
 
 
 def dump_nsps(args) -> list:
@@ -518,16 +573,23 @@ def download(url: str, sha: str, dst: Path) -> None:
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     part = dst.with_suffix(".part")
-    with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
-        total, got, mark = int(r.headers.get("Content-Length") or 0), 0, 0
-        h = hashlib.sha256()
-        while chunk := r.read(1 << 20):
-            f.write(chunk)
-            h.update(chunk)
-            got += len(chunk)
-            if total and got * 10 // total > mark:
-                mark = got * 10 // total
-                out(f"  {got / 1e6:.0f} / {total / 1e6:.0f} MB")
+    for wait in (5, 20, 0):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
+                total, got, mark = int(r.headers.get("Content-Length") or 0), 0, 0
+                h = hashlib.sha256()
+                while chunk := r.read(1 << 20):
+                    f.write(chunk)
+                    h.update(chunk)
+                    got += len(chunk)
+                    if total and got * 10 // total > mark:
+                        mark = got * 10 // total
+                        out(f"  {got / 1e6:.0f} / {total / 1e6:.0f} MB")
+            break
+        except (OSError, http.client.HTTPException):
+            if not wait:
+                raise
+            time.sleep(wait)
     if h.hexdigest() != sha:
         part.unlink(missing_ok=True)
         raise StepFailed(tr("msys_hash", dst.name))
@@ -537,14 +599,25 @@ def download(url: str, sha: str, dst: Path) -> None:
 def tools_msys2(args) -> None:
     root = msys_root(args)
     bash = root / "usr/bin/bash.exe"
-    if not bash.is_file():
+    # Written before the first file of a copy we install: an interrupted install has a bash but is not usable.
+    mark = ROOT / "build" / "msys2-installing"
+    if not bash.is_file() or (mark.is_file() and mark.read_text(encoding="utf-8") == str(root)):
+        free = shutil.disk_usage(root.anchor).free / 1e9
+        if free < MSYS2_GB:
+            raise StepFailed(tr("disk", root.anchor, free, MSYS2_GB))
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        mark.write_text(str(root), encoding="utf-8")
         url, sha = MSYS2_SFX
         out(tr("msys_get", 43))
         sfx = ROOT / "build" / "dl" / url.rsplit("/", 1)[1]
-        download(url, sha, sfx)
+        try:
+            download(url, sha, sfx)
+        except (OSError, http.client.HTTPException) as e:
+            raise StepFailed(tr("no_net", url.rsplit("/", 1)[1], e))
         # the self-extracting archive makes <parent>/msys64
         run([sfx, "-y", f"-o{root.parent}"])
         if root.name != "msys64":
+            shutil.rmtree(root, ignore_errors=True)   # the part an interrupted install left
             (root.parent / "msys64").rename(root)
         sfx.unlink(missing_ok=True)
         msys(args, "true")   # first start: makes the home folder and the pacman keyring
@@ -554,15 +627,19 @@ def tools_msys2(args) -> None:
             msys(args, "pacman -Syuu --noconfirm --disable-download-timeout")
         except StepFailed:
             out("MSYS2: core updated, second round")
-        msys(args, "pacman -Syuu --noconfirm --disable-download-timeout")
-    msys_unlock(root)
+        pacman(args, "-Syuu --noconfirm --disable-download-timeout")
+        mark.unlink(missing_ok=True)
     pkgs = [f"mingw-w64-ucrt-x86_64-{p}" for p in MSYS2_PKGS]
-    q = capture([bash, "-lc", "pacman -Q " + " ".join(pkgs)], env=dict(os.environ, MSYSTEM="UCRT64"))
-    if q.returncode != 0:
-        out(tr("msys_pkgs"))
-        msys(args, "pacman -S --needed --noconfirm --disable-download-timeout " + " ".join(pkgs))
-    if msys_works(args):
-        return
+    try:
+        if capture([bash, "-lc", "pacman -Q " + " ".join(pkgs)], env=msys_env()).returncode != 0:
+            out(tr("msys_pkgs"))
+            pacman(args, "-S --needed --noconfirm --disable-download-timeout " + " ".join(pkgs))
+    except (StepFailed, OSError):   # an old or half-updated MSYS2 of the player's cannot get the packages
+        if root == MSYS2_OWN:
+            raise
+    else:
+        if msys_works(args):
+            return
     if root == MSYS2_OWN:
         raise StepFailed(tr("msys_own_bad", root))
     out(tr("msys_broken", root, MSYS2_OWN))
@@ -576,7 +653,10 @@ def msys_unlock(root: Path) -> None:
     lock = root / "var/lib/pacman/db.lck"
     if not lock.exists():
         return
-    p = capture(["tasklist", "/FI", "IMAGENAME eq pacman.exe", "/FO", "CSV", "/NH"])
+    try:
+        p = capture(["tasklist", "/FI", "IMAGENAME eq pacman.exe", "/FO", "CSV", "/NH"])
+    except OSError:
+        return
     if p.returncode or b"pacman.exe" in p.stdout.lower():
         return
     try:
@@ -589,7 +669,7 @@ def msys_unlock(root: Path) -> None:
 def msys_works(args) -> bool:
     """MSYS2's Python imports what the build needs, in the environment the build runs it in."""
     p = capture([msys_root(args) / "usr/bin/bash.exe", "-lc", "python3 -c " + sh_quote(MSYS2_CHECK)],
-                env=dict(os.environ, MSYSTEM="UCRT64", CHERE_INVOKING="1"))
+                env=msys_env())
     if p.returncode:
         lines = ((p.stdout or b"") + (p.stderr or b"")).decode("utf-8", "replace").strip().splitlines()
         out(lines[-1] if lines else f"python3 ended with code {p.returncode}")
@@ -811,7 +891,7 @@ def s_windist(args) -> str:
     # from "/": ldd resolves like the loader, current folder included, and a shell that keeps the caller's folder
     # (CHERE_INVOKING) would find the launcher's own SDL3.dll there instead of MSYS2's and leave the game without one
     p = capture([msys_root(args) / "usr/bin/bash.exe", "-lc", f"cd / && ldd {sh_quote(msys_path(dist / 'AgeOfCalamityRecomp.exe'))}"],
-                env=dict(os.environ, MSYSTEM="UCRT64"))
+                env=msys_env())
     lines = p.stdout.decode("utf-8", "replace").splitlines()
     dlls = [l.split("=>")[1].split("(")[0].strip() for l in lines if "/ucrt64/" in l]
     for d in dlls:
@@ -869,9 +949,12 @@ DLSS_LICENSE = "https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt"
 
 def gpu_names() -> list:
     """The display adapters Windows knows (Win32_VideoController), empty when the query fails."""
-    p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                        "(Get-CimInstance Win32_VideoController).Name"],
-                       capture_output=True, creationflags=0x08000000)
+    try:
+        p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                            "(Get-CimInstance Win32_VideoController).Name"],
+                           capture_output=True, creationflags=0x08000000)
+    except OSError:
+        return []
     return [l.strip() for l in p.stdout.decode("utf-8", "replace").splitlines() if l.strip()]
 
 
@@ -915,7 +998,11 @@ def s_shaders(args) -> str:
             and prepared_version(done) >= PREPARED_VERSION):
         out(tr("shaders_kept"))
         return "skip"
-    msys(args, f"python3 -u tools/prepare_shaders.py {sh_quote(msys_path(dist))}")
+    try:
+        msys(args, f"python3 -u tools/prepare_shaders.py {sh_quote(msys_path(dist))}")
+    except StepFailed as e:   # the game is built and translates what is missing while it plays
+        out(tr("shaders_failed", e))
+        return "skip"
     return "ok"
 
 
@@ -959,6 +1046,8 @@ def main() -> int:
     if not (args.keys or args.game_dir):
         ap.error("--keys is needed when no game folder is given")
     args.keys = (args.keys or args.game_dir / "prod.keys").expanduser()
+    if not args.keys.is_file() and args.keys.with_name("prod.keys.txt").is_file():   # saved by Notepad, extension hidden
+        args.keys = args.keys.with_name("prod.keys.txt")
     if args.win_work is None:
         args.win_work = Path("C:/AgeOfCalamityRecomp-win") if Path("C:/AgeOfCalamityRecomp-win/host").is_dir() else ROOT / "build/win"
     if args.prepare:   # the build for this PC: Windows folder on Windows, Deck/Linux folder on Linux
@@ -1013,7 +1102,10 @@ def main() -> int:
         # What was forged and from which version: the launcher shows the build screen again when VERSION changes
         # (an update unpacked over the folder) and the play screen once the folder for this PC is there.
         state = ROOT / "build" / "forge-state.json"
-        old = json.loads(state.read_text(encoding="utf-8")) if state.is_file() else {}
+        try:
+            old = json.loads(state.read_text(encoding="utf-8"))
+        except (OSError, ValueError):   # missing, or cut short by a crash: the build itself is done
+            old = {}
         old.update({"version": VERSION, "time": time.strftime("%Y-%m-%d %H:%M:%S")})
         old["deck"] = old.get("deck", False) or args.deck
         old["windows"] = old.get("windows", False) or args.windows
