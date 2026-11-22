@@ -687,6 +687,8 @@ static void tab_screen(float scale) {
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
     row_render_scale();
+    static const UiTextId dynres[] = {UI_MENU_DYNAMIC_RES_GAME, UI_MENU_DYNAMIC_RES_OFF};
+    opt_choice("ACR_DYNAMIC_RES", UI_MENU_DYNAMIC_RES, dynres, 2, UI_MENU_DYNAMIC_RES_DESC);
     static const UiTextId up[] = {UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR};
     opt_choice("ACR_UPSCALER", UI_MENU_UPSCALER, up, 2, UI_MENU_UPSCALER_DESC);
     opt_slider("ACR_SHARPNESS", UI_MENU_SHARPNESS, 0, 100, UI_MENU_SHARPNESS_DESC, 5, "%.0f %%");

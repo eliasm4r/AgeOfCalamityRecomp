@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Dynamic resolution setting** (Screen tab, and in RecompLauncher): in battles the game draws the 3D scene smaller
+  for a moment when frames run late; in a charge across Hyrule Field at 60 fps it went down to 70 % of its height for
+  a few seconds, a softer picture. **Off (full size)** keeps the scene at its full size every frame (patch set
+  `dynres`); **Game** (default) leaves it to the game. Applies at once. Clearing the game's enable bytes instead, as
+  the community "Locked" cheats do, held a battle's loading screen forever.
+
 ## 0.2.1
 
 ### Fixed

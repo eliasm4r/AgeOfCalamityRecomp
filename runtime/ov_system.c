@@ -210,17 +210,20 @@ void ov_operation_mode_changed(void) {
 }
 
 // Diagnosis, at every present: ACR_PEEK=<addr>:<words>[,<addr>:<words>...] logs that many 32-bit words of guest memory
-// at each address every 60 presents (GPU-written lists as the CPU sees them after write-back).
+// at each address every 60 presents, or every ACR_PEEK_EVERY (GPU-written lists as the CPU sees them after write-back).
 void ov_peek_tick(void) {
     static int state = -1;
     static uint64_t frames;
+    static uint64_t every = 60;
     static char spec[256];
     if (state < 0) {
         const char *e = cfg_get("ACR_PEEK");
         state = e && *e && strlen(e) < sizeof spec;
         if (state) strcpy(spec, e);
+        const char *n = cfg_get("ACR_PEEK_EVERY");
+        if (n && atoi(n) > 0) every = (uint64_t)atoi(n);
     }
-    if (!state || ++frames % 60) return;
+    if (!state || ++frames % every) return;
     char tmp[256], *save = NULL;
     strcpy(tmp, spec);
     for (char *t = strtok_r(tmp, ",", &save); t; t = strtok_r(NULL, ",", &save)) {

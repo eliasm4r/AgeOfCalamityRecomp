@@ -72,6 +72,12 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "at 200 %. Below the 1920 x 1080 game resolution it stops at 85 %, and the scene keeps "
                                   "at most 3840 x 2160 pixels (200 % of 1920 x 1080, 100 % of 3840 x 2160).",
     [UI_MENU_RENDER_SCALE_GAME] = "Game (75 %)",
+    [UI_MENU_DYNAMIC_RES] = "Dynamic resolution",
+    [UI_MENU_DYNAMIC_RES_DESC] = "In heavy fights the game draws the 3D scene smaller for a moment to keep its frame rate "
+                                 "(down to 70 % of its height in a large charge across Hyrule Field). "
+                                 "Off keeps the scene at the size of the 3D render scale at all times: sharper in those "
+                                 "moments, for more GPU work. Applies at once.",
+    [UI_MENU_DYNAMIC_RES_GAME] = "Game", [UI_MENU_DYNAMIC_RES_OFF] = "Off (full size)",
     [UI_MENU_UPSCALER] = "Scaling to the window",
     [UI_MENU_UPSCALER_DESC] = "How the picture is scaled when the window is larger than the game resolution. FSR keeps "
                               "edges and detail sharper than bilinear.",

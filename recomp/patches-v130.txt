@@ -307,6 +307,15 @@ site cursor main ce4fdc bd41e183 bd41e183 @page:x12 bd400184 1e240863   # ldr s3
 set  event ACR_PATCH_EVENT 1
 site event main 857d7c 1100054a @page:x12 b940058c 0b0c014a   # add w10,w10,#1 -> ldr w12,[page+4] ; add w10,w10,w12
 site event main 857da0 5100054a 4b0c014a                      # sub w10,w10,#1 -> sub w10,w10,w12
+# Dynamic resolution (runtime/resolution.c, ACR_DYNAMIC_RES): each frame main+0x8c3600 picks the cap of the scene's
+# height in the game's 1440x810 units (810, or 720 / 540 by two mode bytes at main+0x277f77d / +0x277f77f) and stores
+# it at main+0x277cb78 (main+0x8c368c), which the scene is drawn at. In a battle (state 3) main+0x8c3684 branches past
+# that store to main+0x8c3c0c, where the game lowers the height when frames run late (byte main+0x277cb8e set) or keeps
+# the last one (clear, as while a battle loads). In a charge across Hyrule Field at 60 fps it went down to 567 (70 %) for
+# a few seconds. The set skips the branch, so the cap is stored every frame. Clearing the four bytes at main+0x277cb8c
+# instead, as the community "Locked" cheats do, held a battle's loading screen forever.
+set  dynres ACR_PATCH_DYNRES 0
+site dynres main 8c3684 54002c40 d503201f   # b.eq main+0x8c3c0c -> nop
 
 # main: 1090 spin waits
 spin main 8de78 8deac   # 6 instructions; loads
