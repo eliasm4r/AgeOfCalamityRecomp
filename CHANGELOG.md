@@ -4,7 +4,7 @@
 
 ### Fixed
 - **Title screen above 60 fps** (#10): Continue played the camera zoom twice and never reached the world map. It now
-  plays once and goes to the map at every frame rate.
+  plays once, without a jump, and goes to the map at every frame rate. The title screen itself runs at 60 fps.
 
 ## 0.3.2
 

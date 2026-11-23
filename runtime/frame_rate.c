@@ -44,6 +44,9 @@ static uint64_t last_ns;
 // main+0x2780448: the game's update count, +1 per update of its update thread (main+0x166d980; found with
 // runtime/stepscan.c). The game updates on that thread at the pace of its rate fields, apart from the presents.
 #define GAME_UPDATES 0x7002780448ull
+// main+0x2756220: 2 from boot until the first scene is loaded, so through the title screen and its Continue zoom. That
+// camera snaps in most runs above 60 fps whichever way the step is given (issue #10), and never at 60.
+#define TITLE_STATE 0x7002756220ull
 
 // ACR_FPS_LIMIT: 30, or 60 to 240 (one game update per frame, see SPEED_SCALE). "display" gives 60, other rates below
 // 60 give 30.
@@ -104,6 +107,7 @@ double frame_step_limit_hz(void) { return fps_hz < 0 ? 0 : fps_hz; }
 static void fps_block(double dt) {
     static double acc;   // vsyncs stepped by the float readers that the integer ones have not had yet
     int n = frame_step_interval(), fps = n == 2 ? 30 : fps_hz;
+    if (fps > 60 && *(volatile uint32_t *)(uintptr_t)TITLE_STATE == 2) fps = 60;
     double vs = n;
     if (fps > 60) {
         // As TotK's frame_rate.c, the real time of the last presents, restarted after a gap (a load), clamped; but per
