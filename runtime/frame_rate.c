@@ -177,6 +177,13 @@ static void fps_block(double dt) {
         int32_t step30 = (int32_t)acc30;
         acc30 -= step30;
         memcpy(page + 4, &step30, sizeof step30);
+        // patch page +8: the step last added to a camera timer (set vsync); one vsync until the first one is
+        static int step_set;
+        if (!step_set) {
+            float one = 1.0f;
+            memcpy(page + 8, &one, sizeof one);
+            step_set = 1;
+        }
     }
 }
 

@@ -288,6 +288,24 @@ site vsync main f9b418 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
 site vsync main f9b420 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
 site vsync main fa5d90 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
 site vsync main fa5da4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+# The camera timelines (main+0xf9d000..0xfa2100) fire their events when the timer at +0x268 EQUALS a key (fcmp ; b.ne). It
+# steps by whole vsyncs at 30 and 60 fps, so it lands on every key; by a fraction above 60 it stepped over them, and the
+# title's Continue and the take-off at the start of a mission never ended (issue #10). Each compare is now a crossing
+# test, t - step < key <= t, with the step last added to the timer (main+0xfa2970 keeps it at page +8). x17, s30 and s31 are
+# free at these sites (no read of either before their next write).
+site vsync main f9e350 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
+site vsync main f9e354 54000201 34000211   # b.ne -> cbz w17: not crossed
+site vsync main f9eb60 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
+site vsync main f9eb64 540003a1 340003b1   # b.ne -> cbz w17: not crossed
+site vsync main f9f790 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
+site vsync main f9f794 54000361 34000371   # b.ne -> cbz w17: not crossed
+site vsync main fa00e4 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
+site vsync main fa00e8 54000201 34000211   # b.ne -> cbz w17: not crossed
+site vsync main fa1e60 1e2a2060 @page:x17 bd400a3f 1e3f387f 7ebfe55f 7e2ae47e 0e3e1fff 1e2603f1 1e2a2060   # w17 = t - step < key <= t
+site vsync main fa1e64 54000101 34000111   # b.ne -> cbz w17: not crossed
+site vsync main fa1fcc 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
+site vsync main fa1fd0 54000221 34000231   # b.ne -> cbz w17: not crossed
+site vsync main fa2970 bd46e100 bd46e100 @page:x8 bd000900   # ldr s0,[x8,#0x6e0] ; the step added to t, to page +8
 # The free cursor (world map, and the other menus that move a pointer with the stick): main+0xce4c00 adds the stick's
 # step ([this+0xb4], [this+0xb8], integers set from the stick by main+0xce71e0) times a speed from the game's parameter
 # table ([param+0x1e0]) to the cursor's position once per update, with no frame time: at 60 fps it crossed the map in

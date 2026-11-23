@@ -8,6 +8,8 @@
 
 - **Title screen above 60 fps** (#10): Continue played the camera zoom twice and never reached the world map. It now
   plays once, without a jump, and goes to the map at every frame rate. The title screen itself runs at 60 fps.
+- **Cutscene cameras above 60 fps**: a camera timeline could step past the moment that starts its next part. The
+  take-off at the start of a mission now ends, and Link no longer shakes during it.
 
 ### Added
 - **Compressed dumps**: NSZ and XCZ files are accepted. The setup unpacks them and checks every file against its hash.
