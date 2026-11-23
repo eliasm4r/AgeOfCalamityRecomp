@@ -14,6 +14,10 @@
 ### Added
 - **Compressed dumps**: NSZ and XCZ files are accepted. The setup unpacks them and checks every file against its hash.
 
+### Known issues
+- **Magnesis** (#8) only works correctly at 30 fps. At 60 fps a caught object flies off and disappears, and above 60 fps
+  the rune can freeze the game. Switch to 30 fps with L3 + R3 before using it.
+
 ## 0.3.2
 
 ### Fixed
