@@ -141,8 +141,8 @@ TEXT = {
     "p_updates": "there is more than one update 1.3.0 among your NSPs; keep one",
     "p_wrong_update": "your update is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
                        "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and build again",
-    "no_nsp": "there are no .nsp or .xci files in the chosen folder or files",
-    "archive": "{} is a compressed archive: unpack it first, then choose the .nsp or .xci inside",
+    "no_nsp": "there are no .nsp, .xci, .nsz or .xcz files in the chosen folder or files",
+    "archive": "{} is a compressed archive: unpack it first, then choose the .nsp, .xci, .nsz or .xcz inside",
     "wrong_build": "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
                     "1.4.1 is not accepted yet. Replace the update NSP and build again",
     "stale_exefs": "the game code extracted by an earlier attempt is not version 1.3.0: extracting again",
@@ -452,6 +452,8 @@ def s_check(args) -> None:
         raise StepFailed(tr("send_deck"))
     # Space: the RomFS merge holds the NCAs (~11 GB) and the image (10.9 GB) at once; each build ~6-8 GB.
     need = (23 if not (ROOT / "build/v130/romfs.bin").is_file() else 0) + 7 * args.deck + 9 * args.windows
+    if not args.update and any(p.suffix.lower() in COMPRESSED for p in dump_nsps(args)):
+        need += 13   # the unpacked NSPs, until the DLC step
     if WIN:
         fs = volume_fs(ROOT)
         if fs in ("FAT", "FAT32"):
@@ -488,13 +490,17 @@ def game_open() -> bool:
     return False
 
 
+COMPRESSED = (".nsz", ".xcz")
+UNPACKED = ROOT / "build/v130/tmp/unpacked"
+
+
 def dump_nsps(args) -> list:
-    """The NSPs and XCIs of the game folder (subfolders included) and the ones chosen on their own, each once (the same
-    set as tools/extract.py package_paths, which cannot be imported here: it needs cryptography)."""
+    """The NSPs, XCIs, NSZs and XCZs of the game folder (subfolders included) and the ones chosen on their own, each
+    once (tools/extract.py package_paths without the compressed ones, which plain_dump unpacks first)."""
     paths = {}
     if args.game_dir:
         for p in args.game_dir.rglob("*"):
-            if p.suffix.lower() in (".nsp", ".xci") and p.is_file():
+            if p.suffix.lower() in (".nsp", ".xci") + COMPRESSED and p.is_file():
                 paths.setdefault(p.resolve(), p)
     for p in args.nsp:
         paths.setdefault(p.resolve(), p)
@@ -517,27 +523,46 @@ def check_dump(args) -> None:
             raise StepFailed(tr("archive", n.name))
     nsps = dump_nsps(args)
     where = " and ".join(([str(g)] if g else []) + (["the chosen files"] if args.nsp else []))
-    out(f"{where}: {len(nsps)} NSP/XCI; prod.keys {'ok' if args.keys.is_file() else '--'}")
+    out(f"{where}: {len(nsps)} game files; prod.keys {'ok' if args.keys.is_file() else '--'}")
     if not args.keys.is_file():
         raise StepFailed(tr("missing", "prod.keys"))
     if not nsps:
         raise StepFailed(tr("no_nsp"))
     # The inventory identifies each package by what its NCAs say (title id and version), whatever the file is called;
-    # it needs cryptography: on Linux only once the venv exists, and until then the names are the hint.
+    # it needs cryptography: on Linux only once the venv exists, and until then the names are the hint. Compressed
+    # files can only be identified once unpacked (plain_dump, after the tools step).
+    if any(p.suffix.lower() in COMPRESSED for p in nsps):
+        return
     if WIN or VENV_PY.is_file():
-        found = []
-        try:
-            run([tool_python(), ROOT / "tools/extract.py", "inventory", *dump_args(args), "--keys", args.keys],
-                problems=found)
-        except StepFailed:
-            if found and "p_" + found[0][0] in TEXT:
-                raise StepFailed(tr("p_" + found[0][0], found[0][1]))
-            raise
+        inventory(args)
     elif not args.nsp:   # files chosen one by one may have any name: the inventory checks them once it can
         miss = [tr("base")] * (not any(BASE_ID in p.name.upper() for p in nsps)) + \
                [tr("update")] * (not any(UPDATE_ID in p.name.upper() for p in nsps))
         if miss:
             raise StepFailed(tr("missing", ", ".join(miss)))
+
+
+def inventory(args) -> None:
+    found = []
+    try:
+        run([tool_python(), ROOT / "tools/extract.py", "inventory", *dump_args(args), "--keys", args.keys], problems=found)
+    except StepFailed:
+        if found and "p_" + found[0][0] in TEXT:
+            raise StepFailed(tr("p_" + found[0][0], found[0][1]))
+        raise
+
+
+def plain_dump(args) -> None:
+    """NSZ and XCZ into plain NSPs (tools/unpack_nsz.py); the steps after this one read those. Removed after the DLC step."""
+    import unpack_nsz
+    packages = dump_nsps(args)
+    compressed = [p for p in packages if p.suffix.lower() in COMPRESSED]
+    if not compressed:
+        return
+    run([tool_python(), ROOT / "tools/unpack_nsz.py", "--out", UNPACKED, *compressed])
+    args.nsp = [unpack_nsz.plain_path(UNPACKED, p) if p in compressed else p for p in packages]
+    args.game_dir = None
+    inventory(args)
 
 
 def wsl_ready() -> bool:
@@ -751,6 +776,8 @@ def s_tools(args) -> str:
 
 
 def s_extract(args) -> str:
+    if not args.update:
+        plain_dump(args)
     # An ExeFS on disk counts only when its build IDs are the 1.3.0 ones (tools/data/known-builds.json): an earlier
     # attempt with another update leaves one that would be skipped here and fail later, at the code generator.
     exefs = ROOT / "build/v130/exefs"
@@ -807,6 +834,7 @@ def s_dlc(args) -> str:
         out(tr("dlc_kept"))
         return "skip"
     run([tool_python(), ROOT / "tools/extract_dlc.py", *dump_args(args), "--keys", args.keys])
+    shutil.rmtree(UNPACKED, ignore_errors=True)
     return "ok"
 
 

@@ -50,7 +50,7 @@ PY_EMBED = ("https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-amd6
 # Tcl/Tk for tkinter (the setup window), from the same Python release; unpacked with msiexec /a, never installed.
 TCLTK = ("https://www.python.org/ftp/python/3.13.17/amd64/tcltk.msi",
          "ae3e5f9dd998b36d14655cd3444d0af906c1849c60aee40994eeb1e460a3cabf")
-WHEELS = ["cryptography", "lz4", "numpy"]
+WHEELS = ["cryptography", "lz4", "numpy", "zstandard"]
 # MSYS2 has no git of its own by default: Git for Windows, else the one on PATH.
 GIT = next((g for g in ("C:/Program Files/Git/cmd/git.exe",) if Path(g).is_file()), None) or shutil.which("git") or "git"
 # Python's search path for every exe in python/: with a ._pth file the embeddable Python ignores the script's folder, so

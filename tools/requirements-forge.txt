@@ -3,3 +3,4 @@
 cryptography>=42
 lz4>=4.3
 numpy>=1.26
+zstandard>=0.22

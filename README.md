@@ -68,7 +68,7 @@ yet (above 60 the game steps by the real time of each frame, as in the TotK reco
 2. Start **`AgeOfCalamityRecomp Setup.exe`** (on Linux, `sh setup.sh`; it needs `python3-tk`, or `tk` on Arch and SteamOS).
 3. In the setup window:
    - on Windows, choose where to install the game (about 26 GB; `%LOCALAPPDATA%\AgeOfCalamityRecomp` by default);
-   - pick the folder holding your NSPs and `prod.keys` with **Browse...**. A check mark next to the base game,
+   - pick the folder holding your game files (NSP, XCI, NSZ or XCZ) and `prod.keys` with **Browse...**. A check mark next to the base game,
      update 1.3.0 and `prod.keys` means they were found (DLC are optional). The files can have any name: the build
      identifies them by their contents. If your files are in different places, choose **I choose each file on its
      own** and pick the base game, the update, `prod.keys` and each DLC (**Add...**) where they are;

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import io
 import json
 import struct
@@ -81,6 +82,74 @@ class XciTest(unittest.TestCase):
             xci.write_bytes(whole[:-10])
             with self.assertRaises((OSError, ValueError)):
                 merge_romfs.copy_entries(xci, Path(t) / "out")
+
+
+@unittest.skipUnless(importlib.util.find_spec("zstandard") and importlib.util.find_spec("cryptography"),
+                     "no zstandard or cryptography package")
+class NszTest(unittest.TestCase):
+    """An NCZ made by hand, in both layouts of nsz: unpacked back to the very NCA."""
+
+    def make(self, blocks):
+        import hashlib
+        import zstandard
+        import nx
+        key, nonce = bytes(range(16)), bytes(range(16, 32))
+        header = bytes(0x4000 - 3) + b"hdr"
+        plain = (b"age of calamity " * 9000)[:0x20000]
+        sections = [(0x4000, 0x10000, 3), (0x14000, len(plain) - 0x10000, 1)]
+        crypt = b"".join(
+            nx.decrypt(key, nx.modes().CTR(nonce[:8] + (o >> 4).to_bytes(8, "big")), plain[o - 0x4000:o - 0x4000 + s]) if c == 3
+            else plain[o - 0x4000:o - 0x4000 + s] for o, s, c in sections)
+        nca = header + crypt
+        table = b"NCZSECTN" + struct.pack("<Q", 2) + b"".join(
+            struct.pack("<QQQQ", o, s, c, 0) + key + nonce for o, s, c in sections)
+        z = zstandard.ZstdCompressor()
+        if blocks:
+            parts = [z.compress(plain[i:i + 0x4000]) for i in range(0, len(plain), 0x4000)]
+            body = b"NCZBLOCK" + struct.pack("<BBBBIQ", 2, 1, 0, 14, len(parts), len(plain)) + \
+                b"".join(struct.pack("<I", len(p)) for p in parts) + b"".join(parts)
+        else:
+            body = z.compress(plain)
+        return nca, hashlib.sha256(nca).hexdigest()[:32] + ".ncz", header + table + body
+
+    def round_trip(self, blocks):
+        import nx
+        import unpack_nsz
+        nca, name, ncz = self.make(blocks)
+        table_end = 16 + 24 * 2
+        names = name.encode() + b"\0ticket.tik\0"
+        pfs = b"PFS0" + struct.pack("<III", 2, len(names), 0) + struct.pack("<QQII", 0, len(ncz), 0, 0) + \
+            struct.pack("<QQII", len(ncz), 3, len(name) + 1, 0) + names + ncz + b"tik"
+        self.assertEqual(pfs[:4], b"PFS0")
+        self.assertGreater(len(pfs), table_end)
+        with tempfile.TemporaryDirectory() as t:
+            src, dst = Path(t) / "game.nsz", Path(t) / "game.nsp"
+            src.write_bytes(pfs)
+            unpack_nsz.unpack(src, dst)
+            with dst.open("rb") as f:
+                kind, entries = nx.container_entries(f, dst.stat().st_size)
+                self.assertEqual(kind, "nsp")
+                got = {n: nx.read_at(f, o, s) for n, o, s in entries}
+            self.assertEqual(got, {name[:-4] + ".nca": nca, "ticket.tik": b"tik"})
+
+    def test_stream(self):
+        self.round_trip(False)
+
+    def test_blocks(self):
+        self.round_trip(True)
+
+    def test_damaged_is_refused(self):
+        import unpack_nsz
+        nca, name, ncz = self.make(False)
+        name = "0" * 32 + ".ncz"
+        names = name.encode() + b"\0"
+        pfs = b"PFS0" + struct.pack("<III", 1, len(names), 0) + struct.pack("<QQII", 0, len(ncz), 0, 0) + names + ncz
+        with tempfile.TemporaryDirectory() as t:
+            src, dst = Path(t) / "game.nsz", Path(t) / "game.nsp"
+            src.write_bytes(pfs)
+            with self.assertRaises(ValueError):
+                unpack_nsz.unpack(src, dst)
+            self.assertFalse(dst.exists())
 
 
 class InspectDumpTest(unittest.TestCase):

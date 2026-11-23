@@ -114,7 +114,7 @@ def main(argv=None) -> int:
     except (OSError, ValueError, KeyError):
         old = {}
     found = []
-    for path in (p for p in extract.package_paths(game_dir, args.nsp) if p.suffix.lower() == ".nsp"):
+    for path in (p for p in extract.package_paths(game_dir, args.nsp) if p.suffix.lower() in (".nsp", ".xci")):
         with path.open("rb") as f:
             _, entries = nx.container_entries(f, path.stat().st_size)
             tickets = nx.common_tickets(f, entries)
