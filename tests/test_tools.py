@@ -44,6 +44,45 @@ def fake_npdm(sys_res=0) -> bytes:
     return bytes(meta)
 
 
+def fake_xci(files: dict) -> bytes:
+    """An XCI with one secure HFS0 partition holding files (issue #12)."""
+    def hfs0(items):
+        names = b"".join(n.encode() + b"\0" for n, _ in items)
+        table, off, name_off = b"", 0, 0
+        for n, data in items:
+            table += struct.pack("<QQIIQ", off, len(data), name_off, 0, 0) + bytes(32)
+            off += len(data)
+            name_off += len(n) + 1
+        return b"HFS0" + struct.pack("<III", len(items), len(names), 0) + table + names + b"".join(d for _, d in items)
+    root = hfs0([("secure", hfs0(list(files.items())))])
+    head = bytearray(0x200)
+    head[0x100:0x104] = b"HEAD"
+    struct.pack_into("<Q", head, 0x130, len(head))
+    return bytes(head) + root
+
+
+class XciTest(unittest.TestCase):
+    def test_copy_entries(self):
+        import merge_romfs
+        files = {"a.nca": b"first" * 1000, "b.nca": b"second", "c.cnmt.nca": b"x"}
+        with tempfile.TemporaryDirectory() as t:
+            xci = Path(t) / "game.xci"
+            xci.write_bytes(fake_xci(files))
+            self.assertTrue(merge_romfs.is_xci(xci))
+            merge_romfs.copy_entries(xci, Path(t) / "out")
+            self.assertEqual({p.name: p.read_bytes() for p in (Path(t) / "out").iterdir()}, files)
+            self.assertEqual(merge_romfs.extraction_gap(xci, Path(t) / "out"), "")
+
+    def test_cut_xci_fails(self):
+        import merge_romfs
+        with tempfile.TemporaryDirectory() as t:
+            xci = Path(t) / "game.xci"
+            whole = fake_xci({"a.nca": b"data" * 100})
+            xci.write_bytes(whole[:-10])
+            with self.assertRaises((OSError, ValueError)):
+                merge_romfs.copy_entries(xci, Path(t) / "out")
+
+
 class InspectDumpTest(unittest.TestCase):
     def make_exefs(self, d: Path, ids: dict[str, str]) -> None:
         for m, bid in ids.items():
@@ -261,7 +300,7 @@ class DumpSourcesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             d = self.layout(d)
             args = SimpleNamespace(game_dir=d / "dump", nsp=[d / "elsewhere.nsp", d / "dump" / "a.nsp"])
-            self.assertEqual(sorted(p.name for p in make_build.dump_nsps(args)), ["a.nsp", "elsewhere.nsp"])
+            self.assertEqual(sorted(p.name for p in make_build.dump_nsps(args)), ["a.nsp", "b.XCI", "elsewhere.nsp"])
             self.assertEqual(make_build.dump_args(args), ["--game-dir", d / "dump", "--nsp", d / "elsewhere.nsp",
                                                           "--nsp", d / "dump" / "a.nsp"])
             args = SimpleNamespace(game_dir=None, nsp=[d / "elsewhere.nsp"])

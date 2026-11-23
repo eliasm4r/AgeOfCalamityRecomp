@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.4.0
+## 0.3.3
 
 ### Fixed
+- **Build stopping at "Unpack the game data" with a cartridge dump** (#12): a base game in XCI format passed the check,
+  then was refused. XCI now works at every step, and choosing a `.7z`, `.zip` or `.rar` says to unpack it first.
 - **Title screen above 60 fps** (#10): Continue played the camera zoom twice and never reached the world map. It now
   plays once, without a jump, and goes to the map at every frame rate. The title screen itself runs at 60 fps.
 

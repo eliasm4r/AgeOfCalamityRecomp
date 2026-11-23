@@ -61,14 +61,14 @@ def hactool() -> Path:
 
 
 def find_nsps(game_dir: Path | None, nsps: list, keys: Path) -> tuple[Path, Path]:
-    """The base and update 1.3.0 NSPs of the folder and the files chosen on their own, found by their contents
-    (tools/extract.py scan: title id and version from the .cnmt), whatever the file name."""
-    pkgs = [p for p in extract.scan(extract.package_paths(game_dir, nsps), nx.load_keys(keys)) if p["container"] == "nsp"]
+    """The base and update 1.3.0 packages (NSP or XCI) of the folder and the files chosen on their own, found by their
+    contents (tools/extract.py scan: title id and version from the .cnmt), whatever the file name."""
+    pkgs = extract.scan(extract.package_paths(game_dir, nsps), nx.load_keys(keys))
     out = []
     for role, what in (("base", "of the base game (01002B00111A2000)"), ("update", "of update 1.3.0 (01002B00111A2800)")):
         found = [p["path"] for p in pkgs if p["role"] == role]
         if len(found) != 1:
-            fail(f"expected 1 NSP {what} in {extract.sources_text(game_dir, nsps)}, found {len(found)}")
+            fail(f"expected 1 NSP or XCI {what} in {extract.sources_text(game_dir, nsps)}, found {len(found)}")
         out.append(found[0])
     return out[0], out[1]
 
@@ -92,6 +92,27 @@ def link_or_copy(src: Path, dst: Path) -> Path:
     print(f"hard link failed; copying {dst.name} (this can take a while)...", flush=True)
     shutil.copyfile(src, dst)
     return dst
+
+
+def is_xci(path: Path) -> bool:
+    with path.open("rb") as f:
+        return nx.container_entries(f, path.stat().st_size)[0] == "xci"
+
+
+def copy_entries(package: Path, d: Path) -> None:
+    """The files of a package into d, by the table nx reads. For XCIs: `hactool -t pfs0` only opens NSPs (issue #12)."""
+    d.mkdir(parents=True)
+    with package.open("rb") as f:
+        for name, offset, size in nx.container_entries(f, package.stat().st_size)[1]:
+            f.seek(offset)
+            with (d / name).open("wb") as out:
+                left = size
+                while left:
+                    block = f.read(min(left, 1 << 22))
+                    if not block:
+                        raise OSError(f"{package.name} ends inside {name}")
+                    out.write(block)
+                    left -= len(block)
 
 
 def hactool_env() -> dict:
@@ -211,7 +232,8 @@ def main() -> int:
     inp = TMP / "in"
     inp.mkdir(parents=True, exist_ok=True)
     base_nsp, update_nsp = find_nsps(game_dir, args.nsp, keys)
-    nsps = {"base": link_or_copy(base_nsp, inp / "base.nsp"), "update": link_or_copy(update_nsp, inp / "update.nsp")}
+    # an XCI is read here, in Python, so it needs no ASCII name
+    nsps = {n: p if is_xci(p) else link_or_copy(p, inp / f"{n}.nsp") for n, p in (("base", base_nsp), ("update", update_nsp))}
 
     # 3. NCAs of both NSPs (the base is ~11 GB) and the merge. Each NSP is extracted into <name>.part, renamed once
     # every file is there at its size: a run cut short extracts again instead of merging half-written NCAs.
@@ -228,7 +250,15 @@ def main() -> int:
             shutil.rmtree(part, ignore_errors=True)
             log = WORK / f"extract-{name}.log"
             bytes_.watch(lambda part=part: tree_bytes(part))
-            code = run_hactool(["-t", "pfs0", "--disablekeywarns", f"--outdir={part}", str(nsps[name])], log)
+            if is_xci(nsps[name]):
+                try:
+                    copy_entries(nsps[name], part)
+                except OSError as e:
+                    shutil.rmtree(part, ignore_errors=True)
+                    fail(f"could not unpack the XCI of {name}: {e}")
+                code = 0
+            else:
+                code = run_hactool(["-t", "pfs0", "--disablekeywarns", f"--outdir={part}", str(nsps[name])], log)
             bytes_.done(nsps[name].stat().st_size)
             gap = "" if code else extraction_gap(nsps[name], part)
             if code or gap:

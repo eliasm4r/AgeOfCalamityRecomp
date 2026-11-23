@@ -141,7 +141,8 @@ TEXT = {
     "p_updates": "there is more than one update 1.3.0 among your NSPs; keep one",
     "p_wrong_update": "your update is another version (v{0}; 1.4.1 is v458752). AgeOfCalamityRecomp only works "
                        "with update 1.3.0 (v327680): replace the update NSP with the 1.3.0 one and build again",
-    "no_nsp": "there are no .nsp files in the chosen folder or files",
+    "no_nsp": "there are no .nsp or .xci files in the chosen folder or files",
+    "archive": "{} is a compressed archive: unpack it first, then choose the .nsp or .xci inside",
     "wrong_build": "the extracted game code is not version 1.3.0. AgeOfCalamityRecomp only works with update 1.3.0 (v327680); "
                     "1.4.1 is not accepted yet. Replace the update NSP and build again",
     "stale_exefs": "the game code extracted by an earlier attempt is not version 1.3.0: extracting again",
@@ -488,12 +489,13 @@ def game_open() -> bool:
 
 
 def dump_nsps(args) -> list:
-    """The NSPs of the game folder (subfolders included) and the ones chosen on their own, each once (the same set as
-    tools/extract.py package_paths, which cannot be imported here: it needs cryptography)."""
+    """The NSPs and XCIs of the game folder (subfolders included) and the ones chosen on their own, each once (the same
+    set as tools/extract.py package_paths, which cannot be imported here: it needs cryptography)."""
     paths = {}
     if args.game_dir:
-        for p in args.game_dir.rglob("*.nsp"):
-            paths.setdefault(p.resolve(), p)
+        for p in args.game_dir.rglob("*"):
+            if p.suffix.lower() in (".nsp", ".xci") and p.is_file():
+                paths.setdefault(p.resolve(), p)
     for p in args.nsp:
         paths.setdefault(p.resolve(), p)
     return sorted(paths.values(), key=lambda p: (p.name.lower(), str(p)))
@@ -511,9 +513,11 @@ def check_dump(args) -> None:
     for n in args.nsp:
         if not n.is_file():
             raise StepFailed(tr("missing", n))
+        if n.suffix.lower() in (".7z", ".zip", ".rar"):
+            raise StepFailed(tr("archive", n.name))
     nsps = dump_nsps(args)
     where = " and ".join(([str(g)] if g else []) + (["the chosen files"] if args.nsp else []))
-    out(f"{where}: {len(nsps)} NSP; prod.keys {'ok' if args.keys.is_file() else '--'}")
+    out(f"{where}: {len(nsps)} NSP/XCI; prod.keys {'ok' if args.keys.is_file() else '--'}")
     if not args.keys.is_file():
         raise StepFailed(tr("missing", "prod.keys"))
     if not nsps:

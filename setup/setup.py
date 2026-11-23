@@ -258,7 +258,7 @@ def scan_dump(folder):
         for name in files:
             seen += 1
             upper = name.upper()
-            if not upper.endswith(".NSP"):
+            if not upper.endswith((".NSP", ".XCI")):
                 continue
             found["nsp"] += 1
             if BASE_ID in upper:
@@ -664,7 +664,7 @@ class App:
 
     def choose_file(self, key, label):
         keys = key == "keys_file"
-        kinds = [(T["key_files"], "*.keys")] if keys else [(T["nsp_files"], "*.nsp *.NSP")]
+        kinds = [(T["key_files"], "*.keys")] if keys else [(T["nsp_files"], "*.nsp *.NSP *.xci *.XCI")]
         now = self.picks[key].get().strip().strip('"')
         path = filedialog.askopenfilename(parent=self.root, title=T["file_title"].format(what=label),
                                           initialdir=str(Path(now).parent) if now else None,
@@ -676,7 +676,7 @@ class App:
         start = self.dlcs[-1] if self.dlcs else self.picks["base_nsp"].get().strip().strip('"')
         paths = filedialog.askopenfilenames(parent=self.root, title=T["dlc_title"],
                                             initialdir=str(Path(start).parent) if start else None,
-                                            filetypes=[(T["nsp_files"], "*.nsp *.NSP"), (T["all_files"], "*")])
+                                            filetypes=[(T["nsp_files"], "*.nsp *.NSP *.xci *.XCI"), (T["all_files"], "*")])
         for path in paths or ():
             if str(Path(path)) not in self.dlcs:
                 self.dlcs.append(str(Path(path)))
