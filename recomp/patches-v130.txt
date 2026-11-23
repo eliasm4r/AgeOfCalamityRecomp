@@ -69,14 +69,12 @@ site output main 151e19c b94007e8 0e0c3e68                            # ldr w8,[
 set  hold   ACR_PATCH_HOLD   0
 site hold   main 161e888 910103e4 fd402eb0 fd402ed1 2e21da10 2e21da31 2e31fe10 0f03f611 0e31f610 6e180610 3dc013f1 4e21da31 6e30de31 4e21aa31 3d8017f1 910143e4   # add x4,sp,#0x40 -> scaled copy at sp+0x50
 # Frame rates above 60 (runtime/frame_rate.c). The game steps by whole 60 Hz vsyncs: its frame-rate block at
-# main+0x269e150 is {fps, vsyncs per update, fps, fps as a float}, and 159 instructions read the vsyncs (+0x154). 103 of
+# main+0x269e150 is {fps, vsyncs per update, fps, fps as a float}, and 159 instructions read the vsyncs (+0x154). 104 of
 # them load it into a float register and convert it (ucvtf / scvtf) in a straight line, without a branch or a branch
 # target between the two: those now read +0x158 and convert it as 16.16 fixed point, so they get the frame's real time
 # in vsyncs (1.5 for a 40 ms frame, 0.5 at 120 fps). +0x158 held the rate again: its one reader (main+0xb08118, a
 # timer stepped by -1/fps) reads +0x150 instead, and the game's two writes there are dropped. The 55 integer readers
 # (frame counters, compares) keep +0x154, which the runtime fills with whole vsyncs that add up to the real time.
-# main+0x534e8 is a float reader that stays on +0x154: with a fraction of a vsync, the Magnesis rune hitting enemies made
-# each frame about four times slower than the last until the game froze, above 60 fps.
 # Found with capstone over the 1.3.0 main; original words checked.
 set  vsync  ACR_PATCH_VSYNC  1
 site vsync main b08118 bd415901 bd415101   # ldr s1,[x8,#0x158] -> [x8,#0x150]: the rate as an integer
@@ -92,6 +90,8 @@ site vsync main 2e6d4 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
 site vsync main 2e6e0 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
 site vsync main 4af54 bd415521 bd415921   # ldr [#0x154] -> [#0x158]
 site vsync main 4af5c 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
+site vsync main 534e8 bd415501 bd415901   # ldr [#0x154] -> [#0x158]
+site vsync main 534f4 7e21d821 7f30e421   # ucvtf -> fixed point 16.16
 site vsync main 66704 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
 site vsync main 66710 7e21d800 7f30e400   # ucvtf -> fixed point 16.16
 site vsync main 687e4 bd415500 bd415900   # ldr [#0x154] -> [#0x158]
