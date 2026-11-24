@@ -55,5 +55,5 @@ body:
     attributes:
       label: Confirmation
       options:
-        - label: I use my own copy of the game and attached no game files, keys or saves.
+        - label: I attached no game files, keys or saves.
           required: true
