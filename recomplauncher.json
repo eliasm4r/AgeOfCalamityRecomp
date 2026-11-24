@@ -36,7 +36,7 @@
   "settings": [
     {
       "id": "window", "label": "Window",
-      "help": "Full screen fills the whole screen. F11 switches it at any time.",
+      "help": "Fills the whole screen. F11 also switches it.",
       "choices": [
         { "label": "Windowed", "set": { "display/fullscreen": "0" } },
         { "label": "Full screen", "set": { "display/fullscreen": "1" } }
@@ -45,7 +45,7 @@
     },
     {
       "id": "output_res", "label": "Game resolution",
-      "help": "The size the game draws its picture and interface in; 1920 x 1080 is the game's own. 2560 x 1440 and 3840 x 2160 draw the interface sharp on large screens, for more GPU work. 1280 x 720 matches the Steam Deck's screen.",
+      "help": "Size of the game's picture and interface. 1920 x 1080 is the default. Higher: sharper interface, more GPU load. 1280 x 720 suits the Steam Deck.",
       "choices": [
         { "label": "960 x 540", "set": { "display/output_res": "960x540" } },
         { "label": "1280 x 720", "set": { "display/output_res": "1280x720" } },
@@ -58,7 +58,7 @@
     },
     {
       "id": "render_scale", "label": "Render scale",
-      "help": "Size of the 3D scene relative to the game resolution: higher is sharper and heavier. Game keeps the Switch's own size.",
+      "help": "Sharpness of the 3D world, as a percentage of the game resolution. Higher is sharper but lowers FPS. 100 % is full size, 140 % needs about twice the GPU power, 200 % four times. Game keeps the Switch's own size.",
       "choices": [
         { "label": "Game", "set": { "display/render_scale": "game" } },
         { "label": "50 %", "set": { "display/render_scale": "50" } },
@@ -76,7 +76,7 @@
     },
     {
       "id": "dynamic_res", "label": "Dynamic resolution",
-      "help": "In heavy fights the game draws the 3D scene smaller for a moment to keep its frame rate. Off keeps it at full size: sharper, for more GPU work.",
+      "help": "Game: the 3D image gets less sharp for a moment in big fights to keep the frame rate. Off: always sharp, but heavier on the GPU.",
       "choices": [
         { "label": "Game", "set": { "display/dynamic_res": "game" } },
         { "label": "Off (full size)", "set": { "display/dynamic_res": "off" } }
@@ -85,7 +85,7 @@
     },
     {
       "id": "frame_rate", "label": "Frame rate",
-      "help": "30 is the Switch's own rate, 60 is steady on a recent PC. 120, 144 and 240 are experimental and depend on the processor.",
+      "help": "Images per second. 30 is the original game, 60 is smoother and uses about twice the CPU. 120 and up are experimental and need a fast monitor.",
       "choices": [
         { "label": "30", "set": { "frame rate/fps_limit": "30" } },
         { "label": "60", "set": { "frame rate/fps_limit": "60" } },
@@ -97,7 +97,7 @@
     },
     {
       "id": "fxaa", "label": "FXAA",
-      "help": "Light anti-aliasing that works on every graphics card.",
+      "help": "Smooths jagged edges and slightly softens detail. Not used while DLSS or FSR 3.1 is on.",
       "choices": [
         { "label": "Off", "set": { "display/fxaa": "0" } },
         { "label": "On", "set": { "display/fxaa": "1" } }
@@ -106,7 +106,7 @@
     },
     {
       "id": "dlaa", "label": "DLAA / FSR 3.1",
-      "help": "Temporal anti-aliasing: smooth edges and steady details. NVIDIA DLSS on RTX graphics cards (the setup downloads the DLSS library), AMD FSR 3.1 on the others.",
+      "help": "Smooths edges and reduces shimmer in the 3D image. Uses NVIDIA DLSS on RTX cards (the setup downloads it), AMD FSR 3.1 on the others.",
       "choices": [
         { "label": "Off", "set": { "display/dlaa": "0" } },
         { "label": "On", "set": { "display/dlaa": "1" } }
@@ -115,7 +115,7 @@
     },
     {
       "id": "dlaa_engine", "label": "Upscaler",
-      "help": "Automatic: NVIDIA DLSS where the graphics card has it, else AMD FSR 3.1 (AMD, Intel and NVIDIA cards).",
+      "help": "Automatic: DLSS if your card supports it, otherwise FSR 3.1. FSR 3.1 works on every graphics card.",
       "choices": [
         { "label": "Automatic", "set": { "display/dlaa_engine": "auto" } },
         { "label": "NVIDIA DLSS", "set": { "display/dlaa_engine": "dlss" } },
@@ -125,7 +125,7 @@
     },
     {
       "id": "vsync", "label": "V-Sync",
-      "help": "Mailbox: no tearing and little latency. FIFO: classic V-Sync. Immediate: no wait, may tear.",
+      "help": "How images reach the screen. Mailbox: smooth with low delay. VSync: no tearing, a little more delay. Immediate: lowest delay, the image can tear.",
       "choices": [
         { "label": "Mailbox", "set": { "display/vk_present": "mailbox" } },
         { "label": "FIFO", "set": { "display/vk_present": "fifo" } },
@@ -135,7 +135,7 @@
     },
     {
       "id": "filtering", "label": "Texture filtering",
-      "help": "Keeps textures sharp when seen at an angle, such as the ground in the distance.",
+      "help": "Keeps the ground and walls sharp in the distance. Game: the same level as on Switch.",
       "choices": [
         { "label": "Game", "set": { "display/aniso": "game" } },
         { "label": "2x", "set": { "display/aniso": "2" } },
@@ -147,7 +147,7 @@
     },
     {
       "id": "shadow_scale", "label": "Shadow quality",
-      "help": "Draws the shadows at a multiple of the Switch's size: sharper edges, heavier on the graphics card.",
+      "help": "Higher values make shadow edges sharper and use more GPU.",
       "choices": [
         { "label": "1x", "set": { "display/shadow_scale": "1" } },
         { "label": "2x", "set": { "display/shadow_scale": "2" } },
@@ -158,13 +158,13 @@
     },
     {
       "id": "soft_shadows", "label": "Soft shadows",
-      "help": "Shadows that soften with distance from what casts them. 0 keeps the game's own.",
+      "help": "Shadows stay sharp near objects and get softer further away. 0 keeps the game's original shadows.",
       "slider": { "key": "display/pcss", "min": 0, "max": 200, "step": 10, "format": "%d" },
       "defaults": { "display/pcss": "0" }
     },
     {
       "id": "color_preset", "label": "Colours",
-      "help": "Default is the game's own picture. Vivid and Clarity are tuned looks; Custom uses the four sliders below.",
+      "help": "Ready-made colour settings. Vivid: stronger colours and contrast, made for OLED. Clarity: slightly brighter and crisper. Custom uses the four sliders below.",
       "choices": [
         { "label": "Default", "set": { "display/color_preset": "default" } },
         { "label": "Vivid", "set": { "display/color_preset": "vivid" } },
@@ -175,25 +175,25 @@
     },
     {
       "id": "brightness", "label": "Brightness",
-      "help": "Makes the whole picture lighter or darker. 0 is the original picture.",
+      "help": "Makes the whole picture lighter or darker. 0 changes nothing.",
       "slider": { "key": "display/color_brightness", "min": -30, "max": 30, "step": 1, "format": "%d" },
       "defaults": { "display/color_brightness": "0" }
     },
     {
       "id": "contrast", "label": "Contrast",
-      "help": "Widens or narrows the gap between the dark and the light areas. 100% is the original picture.",
+      "help": "Difference between light and dark areas. 100 % changes nothing.",
       "slider": { "key": "display/color_contrast", "min": 70, "max": 150, "step": 5, "format": "%d" },
       "defaults": { "display/color_contrast": "100" }
     },
     {
       "id": "saturation", "label": "Saturation",
-      "help": "50% is washed out, 200% gives very vivid colours. 100% is the original picture.",
+      "help": "Strength of the colours. 100 % changes nothing.",
       "slider": { "key": "display/color_saturation", "min": 50, "max": 200, "step": 5, "format": "%d" },
       "defaults": { "display/color_saturation": "100" }
     },
     {
       "id": "gamma", "label": "Gamma",
-      "help": "Lightens or darkens the dark areas without burning out the light ones. 1.0 is the original picture.",
+      "help": "Below 1: brighter shadows and mid-tones. Above 1: darker. 1 changes nothing.",
       "choices": [
         { "label": "0.8", "set": { "display/color_gamma": "0.8" } },
         { "label": "0.9", "set": { "display/color_gamma": "0.9" } },
@@ -205,7 +205,7 @@
     },
     {
       "id": "overlay", "label": "Performance overlay",
-      "help": "Shows the frame rate, or every figure, in a corner of the window.",
+      "help": "Shows the frame rate in the corner. Full adds CPU, GPU, memory and temperatures. F10 changes the mode.",
       "choices": [
         { "label": "Off", "set": { "display/perf_overlay": "off" } },
         { "label": "FPS", "set": { "display/perf_overlay": "fps" } },
@@ -215,7 +215,7 @@
     },
     {
       "id": "console_mode", "label": "Console mode",
-      "help": "Which Switch mode the game believes it runs in. It draws at the same size in both.",
+      "help": "Makes the game act as if the Switch is docked or in handheld.",
       "choices": [
         { "label": "TV (docked)", "set": { "language/operation_mode": "docked" } },
         { "label": "Handheld", "set": { "language/operation_mode": "handheld" } }
@@ -224,13 +224,13 @@
     },
     {
       "id": "volume", "label": "Volume",
-      "help": "Volume of the game's sound and music, in percent.",
+      "help": "Overall volume of the game.",
       "slider": { "key": "audio/volume", "min": 0, "max": 100, "step": 5, "format": "%d" },
       "defaults": { "audio/volume": "100" }
     },
     {
       "id": "mute_background", "label": "Mute in the background",
-      "help": "Silences the game while another window is active.",
+      "help": "Silences the game while you are in another window.",
       "choices": [
         { "label": "Off", "set": { "audio/mute_background": "0" } },
         { "label": "On", "set": { "audio/mute_background": "1" } }
@@ -238,8 +238,17 @@
       "defaults": { "audio/mute_background": "0" }
     },
     {
+      "id": "audio_surround", "label": "5.1 surround (experimental)",
+      "help": "Sends the game's six audio channels to a 5.1 system. Leave off for stereo speakers or headphones.",
+      "choices": [
+        { "label": "Off", "set": { "audio/audio_surround": "0" } },
+        { "label": "On", "set": { "audio/audio_surround": "1" } }
+      ],
+      "defaults": { "audio/audio_surround": "0" }
+    },
+    {
       "id": "prompts", "label": "Button prompts",
-      "help": "Which controller's buttons the game shows.",
+      "help": "Button icons shown in the game. A button you remap keeps its original icon.",
       "choices": [
         { "label": "Nintendo", "set": { "input/prompts": "nintendo" } },
         { "label": "Xbox", "set": { "input/prompts": "xbox" } },
@@ -249,13 +258,13 @@
     },
     {
       "id": "vibration", "label": "Vibration",
-      "help": "How strong the controller vibrates. 0 turns it off.",
+      "help": "How strongly the controller vibrates. 0 turns it off.",
       "slider": { "key": "input/rumble_strength", "min": 0, "max": 300, "step": 10, "format": "%d" },
       "defaults": { "input/rumble_strength": "130" }
     },
     {
       "id": "motion", "label": "Motion controls",
-      "help": "Passes the controller's gyroscope to the game.",
+      "help": "Aim by tilting the controller (gyroscope).",
       "choices": [
         { "label": "Off", "set": { "input/motion": "0" } },
         { "label": "On", "set": { "input/motion": "1" } }
@@ -264,7 +273,7 @@
     },
     {
       "id": "aim_left_stick", "label": "Aim with the left stick",
-      "help": "The game's original aiming: the left stick also moves the aim of the bow and the other aimed actions. Off: only the right stick aims.",
+      "help": "On: the left stick also aims the bow, as in the original game. Off: only the right stick aims.",
       "choices": [
         { "label": "Off", "set": { "input/aim_left_stick": "0" } },
         { "label": "On", "set": { "input/aim_left_stick": "1" } }
@@ -273,7 +282,7 @@
     },
     {
       "id": "gyro_calibration", "label": "Gyro calibration",
-      "help": "Takes the drift the in-game Calibrate gyro row measured (Controls tab, F1) off the gyroscope. Off: the raw gyroscope; the measure is kept.",
+      "help": "Corrects the gyroscope's drift measured with Calibrate gyro (F1, Controls tab). Off: raw gyroscope.",
       "choices": [
         { "label": "Off", "set": { "input/gyro_calibration": "0" } },
         { "label": "On", "set": { "input/gyro_calibration": "1" } }

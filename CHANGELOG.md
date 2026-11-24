@@ -13,6 +13,7 @@
 
 ### Changed
 - **Settings menu**: every setting has a shorter, clearer description, in English and French.
+- **RecompLauncher settings**: the same descriptions as the menu, and the 5.1 setting.
 
 ## 0.3.3
 
