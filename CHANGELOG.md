@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5
+
+### Fixed
+- **Endless loading screen**: starting a mission could, rarely and at random, stay on the black loading screen
+  forever (fine after a restart). The game's job system could leave a loading job queued with all its workers asleep;
+  a worker that sleeps for a quarter of a second is now woken to check for one.
+
 ## 0.3.4
 
 ### Fixed
