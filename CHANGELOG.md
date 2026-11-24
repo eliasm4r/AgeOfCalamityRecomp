@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **5.1 surround sound**: a new setting in the Sound tab sends the game's six audio channels to a 5.1 system. It is off
+  by default and applies after a restart.
+
 ## 0.3.3
 
 ### Fixed
