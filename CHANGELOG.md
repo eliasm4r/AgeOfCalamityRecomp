@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4
+
+### Fixed
+- **Magnesis** (#8): a caught object now stays in front of Link at every frame rate. At 60 fps it flew off and
+  disappeared, above 60 fps it shook in every direction and could freeze the game.
+- **Stasis above 60 fps**: casting it could freeze the game.
+
+### Changed
+- **Settings menu**: every setting has a shorter, clearer description, in English and French.
+
 ## 0.3.3
 
 ### Fixed
