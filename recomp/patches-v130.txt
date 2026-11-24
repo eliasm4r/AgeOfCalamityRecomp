@@ -311,13 +311,15 @@ site vsync main fa2970 bd46e100 bd46e100 @page:x8 bd000900   # ldr s0,[x8,#0x6e0
 # then added a step of 0 forever (a frozen game with Stasis). s9 already holds the first read times the rate.
 site vsync main 144d14 1e230842 1e204122   # fmul s2,s2,s3 -> fmov s2,s9: the step tested above
 # A carried object (Magnesis): these five store its velocity as last move / step, and the next update moves it by that
-# velocity without the step. With a step below 1 (above 60 fps) the move grew by 1 / step per update, until its collision
-# query covered the map and the game froze. The divisor stops at 1, so 30 and 60 fps (steps of 2 and 1) are unchanged.
-site vsync main 1cc0bc 1e201820 1e214800 1e201820   # fdiv s0,s1,s0 -> fmax s0,s0,s1 (s1 = 1.0) ; fdiv s0,s1,s0
-site vsync main 1caa90 1e201820 1e214800 1e201820   # same
-site vsync main 1cbfe4 1e201820 1e214800 1e201820   # same
-site vsync main 1cbc28 1e201820 1e214800 1e201820   # same
-site vsync main 1b2218 1e201820 1e214800 1e201820   # same
+# velocity without the step (measured: move = velocity at every rate). At 30 fps (step 2) each move is half the last one,
+# which holds the object in front of Link. At 60 (step 1) it kept its whole momentum and flew off (issue #8); above 60 it
+# grew by 1 / step per update until its collision query covered the map and the game froze. The divisor is now 2 at every
+# rate, the game's 30 fps behaviour; 30 fps is unchanged.
+site vsync main 1cc0bc 1e201820 1e2c1000   # fdiv s0,s1,s0 (1 / step) -> fmov s0,#0.5
+site vsync main 1caa90 1e201820 1e2c1000   # same
+site vsync main 1cbfe4 1e201820 1e2c1000   # same
+site vsync main 1cbc28 1e201820 1e2c1000   # same
+site vsync main 1b2218 1e201820 1e2c1000   # same
 # The free cursor (world map, and the other menus that move a pointer with the stick): main+0xce4c00 adds the stick's
 # step ([this+0xb4], [this+0xb8], integers set from the stick by main+0xce71e0) times a speed from the game's parameter
 # table ([param+0x1e0]) to the cursor's position once per update, with no frame time: at 60 fps it crossed the map in
