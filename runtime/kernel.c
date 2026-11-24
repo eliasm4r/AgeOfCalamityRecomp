@@ -90,6 +90,8 @@ struct RtThread {
     uint64_t lw_ns, lw_n, lw_max, lg_ns, lg_n, lg_max, sl_n, sl_req, sl_act;   // those latencies; SleepThread asked/took
     uint64_t sp_n, sp_ho, sp_site;   // spin wait passes and core handoffs, the last loop head (the thread writes them)
     uint64_t y_t0, y_last, y_ho;     // yield runs (SleepThread 0/-1/-2): start, last yield, handoffs to worse waiters
+    int kick;                  // this address wait is a game job worker's LightEvent (kern_job_kick, holding G)
+    uint64_t kick_seq;         // its wseq at the last kick pass
     RtThread *target;          // as a core waiter: the owner core_kick asked to give its core up for it (holding G)
     // ACR_ASYNC_PREEMPT (holding G)
     PlatIntr *hthr;            // the host thread, for plat_intr_stop / resume; open while it may own a core
@@ -1398,6 +1400,62 @@ static inline int cas32(uint64_t a, uint32_t *exp, uint32_t v) {
     return __atomic_compare_exchange_n((uint32_t *)(uintptr_t)a, exp, v, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
+// SignalToAddress (holding G): type 0 wake, 1 increment if equal, 2 if equal modify by the number of waiters.
+static uint32_t arb_signal(uint64_t addr, int type, int32_t val, int cnt) {
+    int nw = 0;
+    for (RtThread *w = g_wait; w; w = w->next) nw += w->wkind == W_ADDRESS && w->waddr == addr;
+    if (type != 0) {
+        int32_t nv = val + 1;
+        if (type == 2) {
+            if (cnt <= 0) nv = nw > 0 ? val - 1 : val + 1;
+            else nv = nw == 0 ? val + 1 : nw <= cnt ? val - 1 : val;
+        }
+        uint32_t e = (uint32_t)val;
+        if (!cas32(addr, &e, (uint32_t)nv)) return R_BAD_STATE;
+    }
+    for (int n = 0; cnt <= 0 || n < cnt; n++) {
+        RtThread *w = pick(W_ADDRESS, addr);
+        if (!w) break;
+        wake(w, 0);
+    }
+    return R_OK;
+}
+
+// Lost wake in the game's job system (1.3.0). A worker (main+0x104b520) looks for a job (main+0x1049dc0), finds none,
+// then sets its sleeping bit ([worker+0x1e4] bit 0) and waits on its LightEvent ([worker+0x1d8]); a pusher
+// (main+0x10493f0, main+0x104a7c0) signals only workers whose bit is set. A job pushed between the look and the bit
+// stays queued with every worker asleep, and a load waiting on it never ends (an endless loading screen, 2026-11-24).
+// Waits from the worker loop and the job scheduler (main+0x104b2a4) are flagged; one asleep through a whole kick (kern_job_kick)
+// period gets the signal a pusher sends (SignalLightEvent: SignalToAddress type 2, value 1, count 1). With no job it
+// finds none and sleeps again.
+static int job_wait_site(uint64_t ra) {
+    return ra == 0x7000000000ull + 0x104b5b4 || ra == 0x7000000000ull + 0x104b2a4;
+}
+
+#define JOB_KICK_NS 250000000ull
+static uint64_t g_kick_ns, g_kicks;
+
+void kern_job_kick(void) {
+    uint64_t now = kern_now_ns();
+    if (now - g_kick_ns < JOB_KICK_NS) return;
+    g_kick_ns = now;
+    lock();
+    for (;;) {   // wake() unlinks the thread: look again from the start after each
+        RtThread *k = NULL;
+        for (RtThread *t = g_wait; t && !k; t = t->next) {
+            if (t->wkind != W_ADDRESS || !t->kick) continue;
+            if (t->kick_seq == t->wseq) k = t;   // the same wait as at the last pass
+            else t->kick_seq = t->wseq;
+        }
+        if (!k) break;
+        k->kick = 0;
+        if (arb_signal(k->waddr, 2, 1, 1) == R_OK && ++g_kicks <= 3)
+            rt_log("kernel: job worker %#x woken after sleeping through %llu ms (%llu so far)", k->handle,
+                   (unsigned long long)(JOB_KICK_NS / 1000000), (unsigned long long)g_kicks);
+    }
+    unlock();
+}
+
 // Release the lock at addr: hand it to the best waiter, or clear it.
 static void lock_handoff(uint64_t addr) {
     RtThread *w = pick(W_LOCK, addr);
@@ -1934,6 +1992,8 @@ int kern_svc(Cpu *c, uint32_t imm) {
         else {
             t->waddr = addr;
             t->wobj = addr;
+            // WaitLightEvent (sdk+0xcac50) keeps its frame in x29; [x29+8] is where it returns to in the game
+            t->kick = type == 2 && val == 1 && x[29] && job_wait_site(LD64(x[29] + 8));
             r = block(t, W_ADDRESS, (int64_t)x[3]);
         }
         unlock();
@@ -1942,32 +2002,13 @@ int kern_svc(Cpu *c, uint32_t imm) {
     }
     case 0x35: {   // SignalToAddress(x0 address, w1 type, w2 value, w3 count): 0 wake, 1 increment if equal,
                    // 2 if equal modify by the number of waiters
-        uint64_t addr = x[0];
-        int type = (int)x[1], cnt = (int)x[3];
-        int32_t val = (int32_t)x[2];
+        int type = (int)x[1];
         if (type < 0 || type > 2) {
             x[0] = R_INVALID_ENUM;
             return 1;
         }
         lock();
-        int nw = 0;
-        for (RtThread *w = g_wait; w; w = w->next) nw += w->wkind == W_ADDRESS && w->waddr == addr;
-        uint32_t r = R_OK;
-        if (type != 0) {
-            int32_t nv = val + 1;
-            if (type == 2) {
-                if (cnt <= 0) nv = nw > 0 ? val - 1 : val + 1;
-                else nv = nw == 0 ? val + 1 : nw <= cnt ? val - 1 : val;
-            }
-            uint32_t e = (uint32_t)val;
-            if (!cas32(addr, &e, (uint32_t)nv)) r = R_BAD_STATE;
-        }
-        if (!r)
-            for (int n = 0; cnt <= 0 || n < cnt; n++) {
-                RtThread *w = pick(W_ADDRESS, addr);
-                if (!w) break;
-                wake(w, 0);
-            }
+        uint32_t r = arb_signal(x[0], type, (int32_t)x[2], (int)x[3]);
         unlock();
         x[0] = r;
         return 1;
@@ -2443,4 +2484,5 @@ uint64_t kern_last_present_ns(void) { return g_present_ns; }
 void kern_watch_present(void) {
     g_present_ns = kern_now_ns();
     diag_start();
+    kern_job_kick();
 }

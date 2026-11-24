@@ -224,6 +224,7 @@ int kern_core_diag_on(void);                               // ACR_CORE_DIAG
 void kern_core_diag_frame(uint64_t frame, uint64_t interval_ns);   // perf_present, every present (also logs the
                                                            // asynchronous preemption counters)
 void kern_watch_present(void);                            // every guest present: stamps the time, starts diag.c
+void kern_job_kick(void);                                 // wakes game job workers asleep through a kick period (kernel.c)
 uint64_t kern_last_present_ns(void);                       // kern_now_ns of the latest guest present, 0 before the first
 void kern_threads_report(const char *tag);                 // every guest thread to the log, lines prefixed "<tag>:"
 int kern_diag_brief(char *main_state, size_t cap);         // the main thread's state in a word; returns cores held

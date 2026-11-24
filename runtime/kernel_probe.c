@@ -25,7 +25,7 @@ static int failures;
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("  FAIL: " __VA_ARGS__); putchar('\n'); } } while (0)
 
 static uint64_t a_lock_waiter, a_cv_waiter, a_cv_order_waiter, a_arb_waiter, a_event_waiter, a_core_worker,
-    a_exit_entry, a_exit_nested, a_fiber_fn, a_fiber_exit_thread, a_fiber_exit_fn, a_tick_worker;
+    a_exit_entry, a_exit_nested, a_fiber_fn, a_fiber_exit_thread, a_fiber_exit_fn, a_tick_worker, a_kick_waiter;
 static uint64_t a_fib_init, a_fib_fin, a_fib_switch, a_fib_cur, tick_stub;
 
 // ---- helpers: SVCs through rt_svc, thread start and join
@@ -266,6 +266,47 @@ static uint32_t arb_spawn(Cpu *c, ArbJob *j) {
 
 static uint32_t sig(Cpu *c, int type, int value, int count) {
     return sv(c, 0x35, ga(&g_arb), (uint64_t)type, (uint64_t)(int64_t)value, (uint64_t)(int64_t)count);
+}
+
+// A LightEvent wait (type 2, value 1) whose frame returns to `ra`: kern_job_kick wakes it only from a job worker site.
+typedef struct { uint64_t frame[2]; uint32_t r; } KickJob;
+static volatile uint32_t g_kick_word __attribute__((aligned(8)));
+
+static void kick_waiter(Cpu *c) {
+    KickJob *j = arg_p(c, 0);
+    c->x[29] = ga(j->frame);
+    j->r = sv(c, 0x34, ga(&g_kick_word), 2, 1, (uint64_t)-1);
+    exit_thread(c);
+}
+
+static void test_job_kick(Cpu *c) {
+    int before = failures;
+    KickJob other = {{0, 0x7000000000ull + 0x104b5b8}, ~0u}, worker = {{0, 0x7000000000ull + 0x104b5b4}, ~0u};
+    g_kick_word = 1;
+    uint32_t ho = create(c, a_kick_waiter, &other, 44, -2);
+    start(c, ho);
+    wait_state(c, ho, KERN_WAIT_ADDRESS);
+    kern_job_kick();
+    sleep_ms(c, 300);
+    kern_job_kick();
+    sleep_ms(c, 300);
+    kern_job_kick();
+    CHECK(kern_thread_state(ho) == KERN_WAIT_ADDRESS && g_kick_word == 1, "a wait from another site was woken");
+    CHECK(sv(c, 0x35, ga(&g_kick_word), 2, 1, 1) == 0, "signal the other waiter");
+    join(c, ho);
+    g_kick_word = 1;
+    uint32_t hw = create(c, a_kick_waiter, &worker, 44, -2);
+    start(c, hw);
+    wait_state(c, hw, KERN_WAIT_ADDRESS);
+    sleep_ms(c, 300);   // one kick pass per period: this one sees the wait, the next one wakes it
+    kern_job_kick();
+    sleep_ms(c, 300);
+    kern_job_kick();
+    CHECK(wait_state(c, hw, KERN_THREAD_EXITED), "a job worker asleep through a kick period was not woken");
+    join(c, hw);
+    CHECK(worker.r == 0 && g_kick_word == 0, "job worker kick: result %#x, word %u (want 0, 0)", worker.r, g_kick_word);
+    printf("job worker kick: a worker asleep through a period woken, another wait left alone: %s\n",
+           failures == before ? "ok" : "FAIL");
 }
 
 static void test_arbiter(Cpu *c) {
@@ -618,6 +659,7 @@ static void probe_main(Cpu *c) {
     test_cv_wake_order(c);
     test_cv_key_order(c);
     test_arbiter(c);
+    test_job_kick(c);
     test_events(c);
     test_cores(c);
     test_fibers(c);
@@ -688,6 +730,7 @@ int probe_kernel(void) {
     a_cv_waiter = hostfn_register("probe-kernel condvar waiter", cv_waiter);
     a_cv_order_waiter = hostfn_register("probe-kernel condvar order waiter", cv_order_waiter);
     a_arb_waiter = hostfn_register("probe-kernel arbiter waiter", arb_waiter);
+    a_kick_waiter = hostfn_register("probe-kernel job kick waiter", kick_waiter);
     a_event_waiter = hostfn_register("probe-kernel event waiter", event_waiter);
     a_core_worker = hostfn_register("probe-kernel core worker", core_worker);
     a_exit_entry = hostfn_register("probe-kernel exit entry", exit_entry);
