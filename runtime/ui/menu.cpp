@@ -788,6 +788,7 @@ static void tab_sound(float scale) {
     opt_toggle("ACR_MUTE", UI_MENU_MUTE, UI_MENU_MUTE_DESC);
     opt_toggle("ACR_MUTE_BACKGROUND", UI_MENU_MUTE_BG, UI_MENU_MUTE_BG_DESC);
     row_audio_device();
+    opt_toggle("ACR_AUDIO_SURROUND", UI_MENU_AUDIO_SURROUND, UI_MENU_AUDIO_SURROUND_DESC);
     opt_end();
 }
 

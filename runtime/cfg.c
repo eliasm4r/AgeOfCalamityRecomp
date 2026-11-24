@@ -75,7 +75,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"PCSS", "display"},
     {"MODS_DIR", "mods"}, {"MODS_ORDER", "mods"}, {"MODS_DISABLED", "mods"}, {"MODS_REBUILD", "mods"},
     {"MENU_LANG", "language"}, {"LANG", "language"}, {"OPERATION_MODE", "language"},
-    {"VOLUME", "audio"}, {"MUTE", "audio"}, {"MUTE_BACKGROUND", "audio"}, {"AUDIO_DEVICE", "audio"},
+    {"VOLUME", "audio"}, {"MUTE", "audio"}, {"MUTE_BACKGROUND", "audio"}, {"AUDIO_DEVICE", "audio"}, {"AUDIO_SURROUND", "audio"},
     {"INVERT_LX", "input"}, {"INVERT_LY", "input"}, {"INVERT_RX", "input"}, {"INVERT_RY", "input"},
     {"AIM_LEFT_STICK", "input"}, {"MOTION", "input"}, {"GYRO_CALIBRATION", "input"}, {"GYRO_BIAS_X", "input"}, {"GYRO_BIAS_Y", "input"},
     {"GYRO_BIAS_Z", "input"}, {"GYRO_BIAS_PAD", "input"}, {"RUMBLE_STRENGTH", "input"}, {"RUMBLE_CURVE", "input"}, {"RUMBLE_TRIGGERS", "input"},
@@ -138,6 +138,7 @@ static const CfgMeta metas[] = {
     {"ASSUME_FOCUS", "1", "0|1", LIVE},   // read on every focus change (ov_system.c)
     // Sound, Controls, Menu
     {"VOLUME", "100", "0..100", LIVE}, {"MUTE", "0", "0|1", LIVE}, {"MUTE_BACKGROUND", "0", "0|1", LIVE},
+    {"AUDIO_SURROUND", "0", "0|1", RESTART},   // audio_mixer.c output_open: 5.1 output
     {"AUDIO_DEVICE", "", NULL, LIVE},   // audio_mixer.c output_worker: a device name, empty for the system default
     {"INVERT_LX", "0", "0|1", LIVE}, {"INVERT_LY", "0", "0|1", LIVE}, {"INVERT_RX", "0", "0|1", LIVE},
     {"INVERT_RY", "0", "0|1", LIVE},
