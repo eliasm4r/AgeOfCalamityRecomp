@@ -306,6 +306,18 @@ site vsync main fa1e64 54000101 34000111   # b.ne -> cbz w17: not crossed
 site vsync main fa1fcc 1e212000 @page:x17 bd400a3f 1e3f381f 7ebfe43f 7e21e41e 0e3e1fff 1e2603f1 1e212000   # w17 = t - step < key <= t
 site vsync main fa1fd0 54000221 34000231   # b.ne -> cbz w17: not crossed
 site vsync main fa2970 bd46e100 bd46e100 @page:x8 bd000900   # ldr s0,[x8,#0x6e0] ; the step added to t, to page +8
+# A rune's timer (main+0x144c98) reads the integer vsyncs twice. Above 60 fps they go 1, 0, 1, 0, written at each present
+# by another thread: the first read saw 1 and passed the "step > 0" test, the second saw 0, and the loop at main+0x144d54
+# then added a step of 0 forever (a frozen game with Stasis). s9 already holds the first read times the rate.
+site vsync main 144d14 1e230842 1e204122   # fmul s2,s2,s3 -> fmov s2,s9: the step tested above
+# A carried object (Magnesis): these five store its velocity as last move / step, and the next update moves it by that
+# velocity without the step. With a step below 1 (above 60 fps) the move grew by 1 / step per update, until its collision
+# query covered the map and the game froze. The divisor stops at 1, so 30 and 60 fps (steps of 2 and 1) are unchanged.
+site vsync main 1cc0bc 1e201820 1e214800 1e201820   # fdiv s0,s1,s0 -> fmax s0,s0,s1 (s1 = 1.0) ; fdiv s0,s1,s0
+site vsync main 1caa90 1e201820 1e214800 1e201820   # same
+site vsync main 1cbfe4 1e201820 1e214800 1e201820   # same
+site vsync main 1cbc28 1e201820 1e214800 1e201820   # same
+site vsync main 1b2218 1e201820 1e214800 1e201820   # same
 # The free cursor (world map, and the other menus that move a pointer with the stick): main+0xce4c00 adds the stick's
 # step ([this+0xb4], [this+0xb8], integers set from the stick by main+0xce71e0) times a speed from the game's parameter
 # table ([param+0x1e0]) to the cursor's position once per update, with no frame time: at 60 fps it crossed the map in
