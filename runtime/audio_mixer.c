@@ -69,6 +69,7 @@ typedef struct Mixer {
     float *voice_peak; uint32_t *voice_frames;     // ACR_TRACE=audio: per voice since the last census (voice_census)
     float mix_peak_in[256], mix_peak_out[256];     // ACR_TRACE=audio: per mix, before and after its effects
     int prefill;                                   // render blocks
+    uint64_t health_underruns;                     // underruns at the last once-a-minute line (level_note)
 } Mixer;
 
 static _Atomic float device_volume = 1.0f;
@@ -347,7 +348,13 @@ int64_t audio_mixer_pace_ns(AudioRenderer *r, uint64_t now) {
     if (!pulled || (now > pulled && now - pulled > __atomic_load_n(&m->stall_ns, __ATOMIC_RELAXED))) return -1;
     uint64_t have = atomic_load(&m->wr) - atomic_load_explicit(&m->rd, memory_order_acquire);
     // one more render fits above the target
-    uint64_t full = (uint64_t)__atomic_load_n(&m->target, __ATOMIC_RELAXED) + (uint64_t)m->frame;
+    uint64_t target = (uint64_t)__atomic_load_n(&m->target, __ATOMIC_RELAXED), full = target + (uint64_t)m->frame;
+    // Below the target by more than a device period: the device's clock runs faster than the host's, which caps the
+    // renders at one per frame_ns, and the queue has drained that far. Render at once, off the host's slots, so the
+    // queue climbs back; left alone it reaches one device period after a few minutes and every request then finds
+    // part of its audio missing (chopped, metallic sound: issue #13, SteamOS and a Linux desktop). At the target the
+    // queue never goes this low between two requests, so a device as fast as the host or slower never gets here.
+    if (have + (uint64_t)m->period < target) return AUDIO_PACE_BEHIND;
     if (have < full) return 0;
     int64_t ns = (int64_t)((have - full + 1) * 1000000000ull / (uint64_t)m->rate);
     return ns < 500000 ? 500000 : ns;   // until the device has taken it below the target again
@@ -475,6 +482,18 @@ static void voice_census(AudioRenderer *r, Mixer *m) {
 // Level meter (ACR_TRACE=audio): one line per 5 s of output, and the first nonzero frame.
 static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) {
     diag_audio(lr, frames);
+    // Without ACR_TRACE=audio as well: once a minute, when the device found audio missing since the last line, so a
+    // player's log shows a starved output (issue #13 had none of it).
+    if (m->device_ok && r->elapsed_frames % ((uint64_t)r->param.sample_rate * 60 / (uint64_t)m->frame) == 0) {
+        uint64_t under = atomic_load(&m->underruns);
+        if (under != m->health_underruns) {
+            rt_log("audio: %llu underruns in the last minute (%llu frames missing in all, %llu skipped), %.1f ms queued, "
+                   "target %.1f ms", (unsigned long long)(under - m->health_underruns),
+                   (unsigned long long)atomic_load(&m->missing_frames), (unsigned long long)atomic_load(&m->skipped_frames),
+                   (atomic_load(&m->wr) - atomic_load(&m->rd)) * 1000.0 / m->rate, m->target * 1000.0 / m->rate);
+            m->health_underruns = under;
+        }
+    }
     if (!(rt_trace & RT_TRACE_AUDIO)) return;
     int sound = 0;
     for (int k = 0; k < 2 * frames; k++) {

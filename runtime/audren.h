@@ -184,7 +184,9 @@ uint32_t audio_mixer_sink_written(AudioRenderer *r, int id);
 void audio_mixer_render(AudioRenderer *r, double seconds);   // after audio_voices_prepare, before voices advance
 // Device pacing for the render thread at kern_now_ns `now`: 0 renders the next frame now, a positive value waits that
 // many ns (the ring is at its target), -1 leaves the pace to the render thread's timer (no device, renderer stopped,
-// device stalled).
+// device stalled), AUDIO_PACE_BEHIND renders now even before the host's next slot (the device takes audio faster than
+// the host clock gives it).
+enum { AUDIO_PACE_BEHIND = -2 };
 int64_t audio_mixer_pace_ns(AudioRenderer *r, uint64_t now);
 // The playback devices SDL lists now, by name (ACR_AUDIO_DEVICE takes one), at most max; 0 while SDL audio is not up
 // (ACR_AUDIO=none). Any thread; the Sound tab of the menu lists them.

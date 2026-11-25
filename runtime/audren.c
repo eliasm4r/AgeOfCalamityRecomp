@@ -377,7 +377,9 @@ static void render_thread(void *p) {
             plat_wait_ns((uint64_t)pace);
             continue;
         }
-        if (pace == 0) {
+        if (pace == AUDIO_PACE_BEHIND) {
+            if (next > now) next = now;   // the device's clock is ahead of the host's: follow it, keep no debt of slots
+        } else if (pace == 0) {
             if (now < next) {
                 plat_wait_ns(next - now);   // the Switch DSP renders one frame per frame_ns: wait for our slot
                 continue;
