@@ -69,7 +69,7 @@ typedef struct Mixer {
     float *voice_peak; uint32_t *voice_frames;     // ACR_TRACE=audio: per voice since the last census (voice_census)
     float mix_peak_in[256], mix_peak_out[256];     // ACR_TRACE=audio: per mix, before and after its effects
     int prefill;                                   // render blocks
-    uint64_t health_underruns;                     // underruns at the last once-a-minute line (level_note)
+    uint64_t health_underruns, health_skipped, health_overruns, health_dry;   // at the last once-a-minute line (level_note)
 } Mixer;
 
 static _Atomic float device_volume = 1.0f;
@@ -482,16 +482,21 @@ static void voice_census(AudioRenderer *r, Mixer *m) {
 // Level meter (ACR_TRACE=audio): one line per 5 s of output, and the first nonzero frame.
 static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) {
     diag_audio(lr, frames);
-    // Without ACR_TRACE=audio as well: once a minute, when the device found audio missing since the last line, so a
-    // player's log shows a starved output (issue #13 had none of it).
+    // Without ACR_TRACE=audio as well: once a minute, when something was heard wrong since the last line, so a
+    // player's log shows it (issue #13): the device found audio missing (underruns), queued audio was skipped after a
+    // stall, a render found the queue full and was dropped, or a playing voice ran out of the game's wave buffers.
     if (m->device_ok && r->elapsed_frames % ((uint64_t)r->param.sample_rate * 60 / (uint64_t)m->frame) == 0) {
-        uint64_t under = atomic_load(&m->underruns);
-        if (under != m->health_underruns) {
-            rt_log("audio: %llu underruns in the last minute (%llu frames missing in all, %llu skipped), %.1f ms queued, "
-                   "target %.1f ms", (unsigned long long)(under - m->health_underruns),
-                   (unsigned long long)atomic_load(&m->missing_frames), (unsigned long long)atomic_load(&m->skipped_frames),
-                   (atomic_load(&m->wr) - atomic_load(&m->rd)) * 1000.0 / m->rate, m->target * 1000.0 / m->rate);
-            m->health_underruns = under;
+        uint64_t under = atomic_load(&m->underruns), skipped = atomic_load(&m->skipped_frames),
+                 over = atomic_load(&m->overruns), dry = r->dry_voices;
+        if (under != m->health_underruns || skipped != m->health_skipped || over != m->health_overruns ||
+            dry != m->health_dry) {
+            rt_log("audio: in the last minute: %llu underruns (%llu frames missing in all), %llu frames skipped, %llu "
+                   "renders dropped, %llu times a voice ran out of the game's audio; %.1f ms queued, target %.1f ms",
+                   (unsigned long long)(under - m->health_underruns), (unsigned long long)atomic_load(&m->missing_frames),
+                   (unsigned long long)(skipped - m->health_skipped), (unsigned long long)(over - m->health_overruns),
+                   (unsigned long long)(dry - m->health_dry), (atomic_load(&m->wr) - atomic_load(&m->rd)) * 1000.0 / m->rate,
+                   m->target * 1000.0 / m->rate);
+            m->health_underruns = under, m->health_skipped = skipped, m->health_overruns = over, m->health_dry = dry;
         }
     }
     if (!(rt_trace & RT_TRACE_AUDIO)) return;
