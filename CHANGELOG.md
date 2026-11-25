@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.6
+
+### Fixed
+- **Sound turning choppy and robotic after a few minutes** (#13, seen on Steam Deck and Linux): when the sound card
+  plays slightly faster than the PC's clock, the queued audio slowly ran out and, after 4 to 5 minutes, every bit of
+  sound came with a gap. The audio now follows the sound card's pace when it falls behind. The log also notes, once a
+  minute, any audio that went missing.
+
 ## 0.3.5
 
 ### Fixed
