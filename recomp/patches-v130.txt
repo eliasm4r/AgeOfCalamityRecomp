@@ -114,11 +114,11 @@ site aspect main 17e16c0 fc1c0fe8 @page:x17 fd406e30 bd40e231 2d405434 2d415c36 
 site aspect main 18ac480 1e2518c5 @page:x17 bd40de30 bd40e631 5e30e4b2 2eb21e25 1e2518c5   # fmov s5,s6 -> width 1920 -> max(width, 1920)
 site aspect main 18fdde4 1e3a1b9a @page:x8 bd40dd04 bd40e505 5e24e746 2ea61cba 1e3a1b9a   # the same; x8 and s4-s6 are dead here
 # UI panes 1920 wide and centred (main+0x18f1fa8, the 4 vertices written) widen to the output: the pause menu's blurred
-# background, a subtitle's shadow. Their u spreads by the same factor (the texels keep their size) when u
-# covers a whole texture on a quad lower than the screen (a subtitle's shadow) or is the crop of a picture as wide as
-# the output (the pause background); a full-height layer and a piece of an atlas stretch instead, as spreading them
-# read past their picture (streaks in the mission menu, 2026-11-26). The stride is (x8 - 0x24) / 3, x8 0x9c or 0xa8.
-site aspect main 18f1fa8 f9400268 @page:x17 d100910c d280006d 9acd098c 8b0c030d 8b0c01ae 8b0c01cf bd40de34 bd40e635 1e341ab5 bd400310 bd4001b1 1e312a12 1e303a33 5e34e673 5ea0da52 0e331e52 1e2e1016 2eb21eb6 bd400710 bd4005d1 1e313a10 1e20c210 bd40a631 5e31e610 bd400f13 bd400db1 1e333a33 1e281018 1e380b18 1e380b18 1e2e1011 1e313a7b 7ebbef1b 0e701f7b 1e351a31 1e313a73 7eb3ef13 0eb31f7b 1e2e1017 2ebb1ed7 bd400f10 bd400db1 1e312a19 1e2c101a 1e3a0b39 bd400310 1e360a10 bd000310 bd400f10 1e393a10 1f176610 bd000f10 bd4001b0 1e360a10 bd0001b0 bd400db0 1e393a10 1f176610 bd000db0 bd4001d0 1e360a10 bd0001d0 bd400dd0 1e393a10 1f176610 bd000dd0 bd4001f0 1e360a10 bd0001f0 bd400df0 1e393a10 1f176610 bd000df0 f9400268
+# background, a subtitle's shadow, the loading screen's black box. Their u spreads by the same factor (the texels
+# keep their size) only when it is the 1/r crop of a picture as wide as the output (the pause background); every
+# other pane stretches: spread, atlas pieces read past their picture (streaks in the mission menu) and whole textures
+# with a clamp-to-border sampler drew 16:9 wide (the loading screen's box, 2026-11-26). The stride is (x8 - 0x24) / 3, x8 0x9c or 0xa8.
+site aspect main 18f1fa8 f9400268 @page:x17 d100910c d280006d 9acd098c 8b0c030d 8b0c01ae 8b0c01cf bd40de34 bd40e635 1e341ab5 bd400310 bd4001b1 1e312a12 1e303a33 5e34e673 5ea0da52 0e331e52 1e2e1016 2eb21eb6 bd400f13 bd400db1 1e333a33 1e281018 1e380b18 1e380b18 1e2e1011 1e351a31 1e313a73 7eb3ef13 1e2e1017 2eb31ed7 bd400f10 bd400db1 1e312a19 1e2c101a 1e3a0b39 bd400310 1e360a10 bd000310 bd400f10 1e393a10 1f176610 bd000f10 bd4001b0 1e360a10 bd0001b0 bd400db0 1e393a10 1f176610 bd000db0 bd4001d0 1e360a10 bd0001d0 bd400dd0 1e393a10 1f176610 bd000dd0 bd4001f0 1e360a10 bd0001f0 bd400df0 1e393a10 1f176610 bd000df0 f9400268
 # The pause background's blur clamps its samples to the centred 1920/width of its target (ints at obj+0x1420 over the
 # width at +0x1430): such a rectangle, centred and of that share within 1/64 (the rectangle is in whole texels: 357
 # of 480 at 3440x1440), becomes the whole target, else the blur's sides were streaks.
