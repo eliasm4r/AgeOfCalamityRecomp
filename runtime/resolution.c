@@ -74,6 +74,14 @@ static void decide(void) {
     } else {
         rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..3840x2160; 1920x1080", o);
     }
+    // An output narrower than 16:9 (16:10: 1920x1200, 2560x1600) draws 16:9 at its width, and the window puts bars above
+    // and below it, as on the Steam Deck: the game's UI is 1920 wide, and on such a shape its sides were cut off and the
+    // 3D view lost its sides (seen at 1920x1200, 2026-11-26). Wider outputs widen the view (set aspect, res_init).
+    if (R.ow * 9 < R.oh * 16) {
+        unsigned h = (R.ow * 9 / 16) & ~1u;
+        rt_log("resolution: %ux%u is narrower than 16:9; the game draws %ux%u in it", R.ow, R.oh, R.ow, h);
+        R.oh = h;
+    }
     const char *s = cfg_value("ACR_RENDER_SCALE");
     double k = (double)SCENE_W / BASE_W;
     const char *m = cfg_value("ACR_DLSS");   // a DLSS mode other than dlaa sets the scene size
@@ -193,11 +201,33 @@ void res_init(void) {
     // of a target as large as the output (recomp/patches-v130.txt, the output sites in main+0x17def58 and on)
     uint64_t layout = pack(BASE_W, BASE_H);
     memcpy(page + 104, &layout, 8);
-    // +120: the window's images, the output's size when it is larger than the game's 1920x1080, else that
-    uint64_t win = R.ow > BASE_W && R.oh > BASE_H ? out : layout;
+    // +120: the window's images, the output's size when it is at least the game's 1920x1080 on both axes (2560x1080
+    // too, which drew at 1920x1080 and was stretched), else that
+    uint64_t win = R.ow >= BASE_W && R.oh >= BASE_H ? out : layout;
     memcpy(page + 120, &win, 8);
     rt_patch_switch(output, R.ow != BASE_W || R.oh != BASE_H);
     rt_patch_switch(scene, scene_on);
+    // +136: the 3D cameras' aspect ratio, the output's (recomp/patches-v130.txt, set aspect), when it is not 16:9.
+    // +192: 16/9, which the cameras built with it compare against.
+    float aspect = (float)R.ow / (float)R.oh;
+    memcpy(page + 136, &aspect, sizeof aspect);
+    const float wide169 = 16.0f / 9.0f;
+    memcpy(page + 192, &wide169, sizeof wide169);
+    int aspect_set = rt_patch_set("aspect");
+    if (aspect_set >= 0 && fabsf(aspect - 16.0f / 9.0f) > 0.01f) {
+        // The UI keeps its 1920x1080 layout, centred in a layout of the output's shape at 1080 units high (lw wide).
+        // +200: the 2D projection's x scale and offset there, the margin, 1920, the margin's share of 1920, and the
+        // wider of lw and 1920. +160: lw, 1080, their inverses (+164, 1080, is the panes' full height).
+        unsigned lw = (unsigned)lroundf(BASE_H * aspect);
+        float k = lw > BASE_W ? BASE_W / (float)lw : 1.0f;
+        float margin = lw > BASE_W ? (lw - (float)BASE_W) / 2.0f : 0.0f;
+        float cen[8] = {k, -k, 1.0f, -1.0f, margin, (float)BASE_W, 2 * margin / BASE_W, (float)(lw > BASE_W ? lw : BASE_W)};
+        memcpy(page + 200, cen, sizeof cen);
+        float screen[8] = {(float)lw, (float)BASE_H, 1.0f / lw, 1.0f / BASE_H, (float)lw, (float)BASE_H, 0, 0};
+        memcpy(page + 160, screen, sizeof screen);
+        rt_patch_switch(aspect_set, 1);
+        rt_log("resolution: 3D aspect ratio %.3f (the output's), the 1920x1080 UI centred in %ux%u", aspect, lw, BASE_H);
+    }
     // The held picture covers a target larger than the output (recomp/patches-v130.txt, set hold; ACR_PATCH_HOLD=0
     // turns it off)
     const char *h = cfg_get("ACR_PATCH_HOLD");

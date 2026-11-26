@@ -439,6 +439,28 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
 - Scene at 1920x1080 (`render_scale` 100) with a 1920x1080 output: the application pool grows by 89,088 KiB; the
   process uses 3.4 GB of RAM and 3.7 GB of VRAM on the title screen.
 
+### Ultrawide
+
+- The 3D cameras take a fixed 16/9 that `nnMain` stores at `[x21+0x1dd8]` (`main+0x89cb88`), next to their near, far
+  and 45 degree field of view. The `aspect` set (`recomp/patches-v130.txt`) reads the output's width over its height
+  from patch page +136 instead, and two camera builders that compare against 16/9 (`main+0x189ea34`, `0x189eaa4`)
+  take it too. Horizontal field of view grows, vertical stays the game's (Hor+).
+- The UI stays a 1920x1080 layout, centred: the KTGL 2D projection sites take their x scale and offset from page +200
+  on a target of the output's size. A layout of the output's shape at 1080 units high (2560x1080 for 21:9) put the
+  HUD at the screen's far sides but broke the pause menu's markers, which the game places in 1920x1080 units.
+- Full-width 2D pieces: quads drawn from x 0 to 1920 reach the edges (`main+0x17e16c0`); the UI ortho cameras
+  (`main+0x18ac480`, inlined at `main+0x18fdde4` for the pause menu) take the output's width; UI panes 1920 wide and
+  centred (`main+0x18f1fa8`) widen. A pane's u spreads with it (texels keep their size) only when u covers a whole
+  texture on a quad lower than the screen, or is the 1920/width crop of a picture as wide as the output; a full-height
+  layer or an atlas piece stretches, as spreading it read past its picture (streaks in the mission select menu).
+- The pause background's blur clamps its samples to a centred 1920/width rectangle of its target (ints at
+  `obj+0x1420`, `main+0x18fe60c`); that rectangle becomes the whole target. Its test allows 1/64, as the rectangle
+  is in whole texels (357 of 480 at 3440x1440).
+- Outputs narrower than 16:9 (16:10) draw 16:9 at their width with bars, as on the Steam Deck: the 1920-wide UI lost
+  its sides at 1920x1200.
+- Checked 2026-11-26 at 2560x1080, 3440x1440 and 3840x1080 (battle HUD, minimap, dialogue boxes, pause menu and its
+  markers, mission select menu, cutscene subtitles) and 1920x1200.
+
 ### Audio
 
 - Music and cutscenes: **PCM16 48 kHz** voices of **6 channels** (mixes 12 and 14) and **2 channels** (mix 10), fed by

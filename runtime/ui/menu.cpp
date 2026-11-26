@@ -512,9 +512,9 @@ static void list_gpus(VkInstance inst) {
     g_gpu_n = (int)n;
 }
 
-// Window sizes: the common 16:9 sizes that fit the monitor, the 1920x1080 default and the current size.
-static const int kSizes[][2] = {{1280, 720}, {1366, 768}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3200, 1800},
-                                {3840, 2160}};
+// Window sizes: the common 16:9, 21:9 and 32:9 sizes that fit the monitor, the 1920x1080 default and the current size.
+static const int kSizes[][2] = {{1280, 720}, {1366, 768}, {1600, 900}, {1920, 1080}, {2560, 1080}, {2560, 1440},
+                                {3440, 1440}, {3200, 1800}, {3840, 1600}, {3840, 2160}, {5120, 1440}};
 enum { MAX_SIZES = sizeof kSizes / sizeof *kSizes + 1 };
 
 static void row_window_size(void) {
@@ -546,10 +546,11 @@ static void row_window_size(void) {
     opt_choice_list("ACR_WINDOW_SIZE", UI_MENU_WINDOW_SIZE, pv, pn, n, UI_MENU_WINDOW_SIZE_DESC);
 }
 
-// The game resolution (resolution.c): 16:9 sizes from 960x540 to 3840x2160 (the game's own is 1920x1080), and the
-// current value when it is another size.
+// The game resolution (resolution.c): 16:9 sizes from 960x540 to 3840x2160 (the game's own is 1920x1080), the 21:9 and
+// 32:9 ones up to 3840 wide, the largest output (the 3D view widens to them), and the current value when it is another size.
 static void row_output_res(void) {
-    static const char *const vals[] = {"960x540", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
+    static const char *const vals[] = {"960x540",   "1280x720",  "1600x900",  "1920x1080", "2560x1080", "2560x1440",
+                                       "3440x1440", "3840x1080", "3840x1600", "3840x2160"};
     enum { N = sizeof vals / sizeof *vals };
     char shown[N][32];
     const char *names[N];
