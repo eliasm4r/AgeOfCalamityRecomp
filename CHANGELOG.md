@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.8
+
+### Added
+- **Ultrawide screens** (#7): at 21:9 (2560x1080, 3440x1440, 3840x1600) and 32:9 (3840x1080) the 3D view widens to
+  the whole screen instead of being stretched, and the HUD and menus keep their shape, centred as on a 16:9 screen.
+  The new sizes are in the resolution list. Screens narrower than 16:9 (16:10, such as 1920x1200) show the game at
+  16:9 with bars above and below instead of cutting its sides. This is new: reports from players with such a screen
+  are welcome.
+
+### Fixed
+- A rare crash while loading, in the update of a unit's marker.
+
 ## 0.3.7
 
 ### Fixed
