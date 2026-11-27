@@ -715,6 +715,7 @@ static void tab_screen(float scale) {
     opt_choice("ACR_DLSS", UI_MENU_DLSS, dlss, 4, UI_MENU_DLSS_DESC);
     static const UiTextId preset[] = {UI_MENU_DLSS_PRESET_DEFAULT, UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J};
     opt_choice("ACR_DLSS_PRESET", UI_MENU_DLSS_PRESET, preset, 3, UI_MENU_DLSS_PRESET_DESC);
+    if (cfg_bool("ACR_DLAA") && !vk_dlaa_missing()) opt_disable_next(UI_MENU_FXAA_DLAA_ON);   // vk_fxaa.c stays off
     opt_toggle("ACR_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
     rows_color();
     opt_group(UI_MENU_HDR_GROUP);

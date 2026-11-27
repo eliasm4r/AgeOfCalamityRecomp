@@ -1,17 +1,18 @@
 // FXAA on the 3D picture (ACR_FXAA, live; shaders/fxaa.frag), where the game keeps the slot of its own.
-// Age of Calamity's frame ends its scene like Astral Chain's: after the tonemap writes the 8-bit output, one pass copies
-// the output into a scratch target of the same size and the next draws it back, then the HUD is drawn over the output
-// (measured with ACR_DUMP in the Hyrule Field battle: one full-screen draw of the game's copy shader each). In Astral
-// Chain that pair was the game's FXAA; Age of Calamity ships with it switched off. Neither copy is texel for texel: they
-// carry the game's screen transforms (dynamic resolution, camera zooms) in their vertex uniforms, the copy back undoing
-// what the copy out did (replacing either one showed the scene in a corner, or zoomed). So both stay the game's, and
-// FXAA runs on the output just before the copy out reads it: the replay's pass is closed, the output is copied into a
-// work image, FXAA draws from it back into the output, and the game's pass opens again. The HUD stays sharp.
-// The pair is recognised without shader hashes (they change with the translator): two consecutive passes, each with one
-// sRGB 8-bit colour target of the same size (different images) and a full-screen first draw of at most six vertices,
-// the copy out with no depth attached. Each pair seen names the scratch target; the next pass into it with no depth,
-// whose fragment shader samples an output-sized texture of the same kind, is a copy out, and that texture the output.
-// At most once a frame, and not in a frame DLAA or DLSS ran (they already anti-alias the scene).
+// Age of Calamity's frame ends its scene with a tonemap: one full-screen draw from the HDR scene (B10G11R11) into an
+// sRGB 8-bit target of the scene's size. When the scene is the output's size that target is the output, and a pair of
+// copies follows (out to a scratch target and back: in Astral Chain that pair was the game's FXAA, switched off here);
+// at any other size one draw scales the target onto the output (measured with ACR_DUMP in the Hyrule Field battle).
+// Those draws carry the game's screen transforms (dynamic resolution, camera zooms) in their vertex uniforms, so they
+// stay the game's (replacing one showed the scene in a corner, or zoomed), and FXAA runs on the tonemap's target just
+// before the first pass that reads it: the replay's pass is closed, the target is copied into a work image, FXAA draws
+// from it back into the target, and the game's pass opens again. The HUD, drawn after, stays sharp.
+// Recognised without shader hashes (they change with the translator): the tonemap is a pass with one sRGB 8-bit colour
+// target (the depth attached at 100 %) whose first draw is full-screen (at most six vertices) and samples, in the
+// fragment shader's slot 0, a B10G11R11 texture of the target's size; the reader is the next pass of the same command
+// buffer whose first draw samples that target in slot 0. Matching the pair of copies instead, FXAA ran at one size
+// alone (1920x1080 output, render scale 100 %). At most once a frame, and not in a frame DLAA or DLSS ran (they already
+// anti-alias it).
 #include "vk_fxaa.h"
 
 #include <string.h>
@@ -33,12 +34,12 @@ static struct {
     VkSampler sampler;
     VkPipeline pipe;          // for these attachment formats
     VkFormat pipe_fmt[3];     // colour, depth, stencil (VK_FORMAT_UNDEFINED: none)
-    // the last pass that could be the copy out
+    // the last pass looked at (its first draw)
     uint64_t fence;           // its command buffer's timeline value
     uint32_t serial;          // its VkExec.pass_serial
-    VkExecTarget src;         // its target
-    int src_depthless;        // and it had no depth attached
-    VkImage scratch;          // the copy out's target in the last pair seen
+    VkImage tm;               // the tonemap's target, until a pass reads it
+    VkFormat tm_fmt;          // its format (sRGB)
+    uint64_t tm_fence;        // its command buffer
     VkImage work;             // a copy of the output for FXAA to read (the output's size and image format)
     VmaAllocation work_mem;
     VkImageView work_view;    // in the target's format
@@ -198,8 +199,8 @@ static int same_kind(VkFormat img, VkFormat target) {
            (target == VK_FORMAT_B8G8R8A8_SRGB && img == VK_FORMAT_B8G8R8A8_UNORM);
 }
 
-// A pass that can be either half of the pair: one sRGB 8-bit colour target (a whole 2D level, never in the feedback-loop
-// layout), its first draw full-screen.
+// A pass that can be the tonemap: one sRGB 8-bit colour target (a whole 2D level, never in the feedback-loop layout), its
+// first draw full-screen.
 static int candidate(const VkExec *ex, int32_t count) {
     const VkExecTarget *t = &ex->color[0];
     return ex->pass_ncolor == 1 && ex->pass_samples <= 1 && !ex->fbl_mask && t->image && t->img &&
@@ -213,33 +214,35 @@ int vk_fxaa_draw(VkExec *ex, int32_t count) {
     if (frame != F.frame_read) F.frame_read = frame, F.on = cfg_bool("ACR_FXAA");   // once a frame: the menu switches it live
     if (!F.on) return 0;
     if (F.fence == ex->fence && F.serial == ex->pass_serial) return 0;   // a later draw of a pass already looked at
-    if (!candidate(ex, count)) return 0;
-    const VkExecTarget *t = &ex->color[0];
-    if (F.fence == ex->fence && F.serial + 1 == ex->pass_serial && F.src_depthless && F.src.image != t->image &&
-        F.src.width == t->width && F.src.height == t->height && F.src.format == t->format)
-        F.scratch = F.src.image;   // a copy back: the pass before it was the copy out
-    F.fence = ex->fence, F.serial = ex->pass_serial, F.src = *t, F.src_depthless = !ex->depth.image;
-    if (ex->depth.image || t->image != F.scratch || frame == F.frame_done || vk_dlaa_ran()) return 0;
-    // The copy out: its source is the texture of the fragment shader's slot 0 (stage 1), the output.
-    uint64_t h = ex->tex[1][0];
+    F.fence = ex->fence, F.serial = ex->pass_serial;
+    uint64_t h = ex->tex[1][0];   // the fragment shader's slot 0 (stage 1)
     if (!h) return 0;
     view_t tv;
     int has_view = 0;
     const VkTexImage *s = vk_texture_by_id(NVN_HANDLE_TEX(h), &tv, &has_view);
-    if (!s || !s->image || s->image == t->image || s->fb_learned || s->width != t->width || s->height != t->height ||
-        s->layers != 1 || s->samples > 1 || s->depth > 1 || !same_kind(s->format, t->format))
+    if (!s || !s->image) return 0;
+    const VkExecTarget *t = &ex->color[0];
+    if (candidate(ex, count) && s->format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 &&
+        s->width == t->width && s->height == t->height) {   // the tonemap
+        F.tm = t->image, F.tm_fmt = t->format, F.tm_fence = ex->fence;
+        return 0;
+    }
+    if (!F.tm || s->image != F.tm || ex->fence != F.tm_fence) return 0;
+    F.tm = VK_NULL_HANDLE;   // its first reader
+    if (frame == F.frame_done || vk_dlaa_ran() || (ex->pass_ncolor && t->image == s->image) || s->fb_learned ||
+        s->layers != 1 || s->samples > 1 || s->depth > 1 || !same_kind(s->format, F.tm_fmt))
         return 0;
     VkCtx *c = vk_ctx();
     if (!F.tried) init(c);
-    VkFormat fmt[3] = {t->format, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};   // our own pass: the output alone
+    VkFormat fmt[3] = {F.tm_fmt, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};   // our own pass: the target alone
     int fresh;
-    if (!F.ok || !pipeline(c, fmt) || !ensure_work(c, s->width, s->height, s->format, t->format, &fresh)) return 0;
-    // the output through a view of the target's format (colour images are created mutable, vk_texture.c)
-    VkImageView out = vk_exec_target_view(s, t->format, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1, 0);
+    if (!F.ok || !pipeline(c, fmt) || !ensure_work(c, s->width, s->height, s->format, F.tm_fmt, &fresh)) return 0;
+    // the tonemap's target through a view of its format (colour images are created mutable, vk_texture.c)
+    VkImageView out = vk_exec_target_view(s, F.tm_fmt, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1, 0);
     VkCommandBuffer cb = ex->cb;
     uint32_t w = s->width, hgt = s->height;
     vk_exec_pass_end(ex);
-    // the output, as the tonemap left it, into the work image
+    // the target, as the tonemap left it, into the work image
     barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
             VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
     barrier(cb, F.work, fresh ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -251,7 +254,7 @@ int vk_fxaa_draw(VkExec *ex, int32_t count) {
             VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-    // FXAA from the work image back into the output
+    // FXAA from the work image back into the target
     VkRenderingAttachmentInfo ca = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = out,
                                     .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                                     .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
@@ -274,14 +277,14 @@ int vk_fxaa_draw(VkExec *ex, int32_t count) {
     barrier(cb, s->image, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT);
     ex->recorded += 14;
-    // the game's copy out goes on in its pass, opened again, with everything bound again
+    // the game's reader goes on in its pass, opened again, with everything bound again
     ex->dirty |= VK_EXEC_DIRTY_ALL;
     vk_exec_draw_new_cb();
     vk_exec_pass_begin(ex);
-    F.serial = ex->pass_serial;   // its pass serial moved: the copy back must still follow it
+    F.serial = ex->pass_serial;   // its pass serial moved: its later draws are not looked at again
     F.frame_done = frame;
     if (++F.runs == 1 || F.runs % 1800 == 0)
-        rt_log("fxaa: %llu frames before the game's copy out (%ux%u, format %d; frame %llu)", (unsigned long long)F.runs,
-               w, hgt, (int)t->format, (unsigned long long)frame);
+        rt_log("fxaa: %llu frames on the tonemap's target (%ux%u, format %d; frame %llu)", (unsigned long long)F.runs, w,
+               hgt, (int)F.tm_fmt, (unsigned long long)frame);
     return 0;   // the game's draw goes on
 }
