@@ -547,10 +547,11 @@ static void row_window_size(void) {
 }
 
 // The game resolution (resolution.c): 16:9 sizes from 960x540 to 3840x2160 (the game's own is 1920x1080), the 21:9 and
-// 32:9 ones up to 3840 wide, the largest output (the 3D view widens to them), and the current value when it is another size.
+// 32:9 ones up to 5120x1440 (no more pixels than 3840x2160; the 3D view widens to them), and the current value when it is
+// another size.
 static void row_output_res(void) {
     static const char *const vals[] = {"960x540",   "1280x720",  "1600x900",  "1920x1080", "2560x1080", "2560x1440",
-                                       "3440x1440", "3840x1080", "3840x1600", "3840x2160"};
+                                       "3440x1440", "3840x1080", "3840x1600", "3840x2160", "5120x1440"};
     enum { N = sizeof vals / sizeof *vals };
     char shown[N][32];
     const char *names[N];

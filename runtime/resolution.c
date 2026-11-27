@@ -6,7 +6,8 @@
 // game itself renders at the size asked for: on the Steam Deck 1280x720, shown texel for texel on the 1280x800 screen
 // in place of a 1.5x reduction of a 1080p frame, at less than half the pixels.
 //
-// Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 3840x2160: above
+// Settings, read at start: ACR_OUTPUT_RES = <w>x<h> (default 1920x1080, the game's own; 960x540 to 3840x2160, or up to
+// 5120 wide with no more pixels than 3840x2160 (5120x1440, 32:9): above
 // 1920x1080 the window's images take the output's size too, set output, and the HUD is drawn at that size from its
 // 1920x1080 layout), ACR_RENDER_SCALE = the scene's size relative to the output: "game" (default, 3/4, the game's
 // 1440x810 at 1080p) or a percentage up to 200, the scene keeping at most 3840x2160 pixels (SCENE_PIXELS).
@@ -49,8 +50,9 @@
 #define DTA_KIB 113664u      // DynamicTextureAllocatorMem, shipped
 #define SCENE_MAX 4096       // per side, as MacNativeGames' ACR_RENDER_RES
 #define SCENE_PIXELS (3840.0 * 2160.0)   // the largest scene measured (header)
-#define OUT_MAX_W 3840
+#define OUT_MAX_W 5120     // 32:9 at 1440 (5120x1440), within the pixels of 3840x2160 (OUT_MAX_PIXELS)
 #define OUT_MAX_H 2160
+#define OUT_MAX_PIXELS (3840u * 2160u)   // the largest output measured: the heaps grow with the pixels (header)
 
 static struct {
     int decided;
@@ -68,11 +70,13 @@ static void decide(void) {
     const char *o = cfg_value("ACR_OUTPUT_RES");
     unsigned w = 0, h = 0;
     char tail;
-    if (sscanf(o, "%ux%u%c", &w, &h, &tail) == 2 && w >= 960 && h >= 540 && w <= OUT_MAX_W && h <= OUT_MAX_H) {
+    if (sscanf(o, "%ux%u%c", &w, &h, &tail) == 2 && w >= 960 && h >= 540 && w <= OUT_MAX_W && h <= OUT_MAX_H &&
+        w * h <= OUT_MAX_PIXELS) {
         R.ow = w & ~1u;
         R.oh = h & ~1u;
     } else {
-        rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..3840x2160; 1920x1080", o);
+        rt_log("resolution: ACR_OUTPUT_RES=%s is not <width>x<height> in 960x540..5120x2160 with at most the pixels of "
+               "3840x2160; 1920x1080", o);
     }
     // An output narrower than 16:9 (16:10: 1920x1200, 2560x1600) draws 16:9 at its width, and the window puts bars above
     // and below it, as on the Steam Deck: the game's UI is 1920 wide, and on such a shape its sides were cut off and the

@@ -454,6 +454,12 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   crop of a picture as wide as the output (the pause background); every other pane stretches, as spreading read past
   atlas pieces (streaks in the mission select menu) and, with clamp-to-border samplers, left the loading screen's
   black box 16:9 wide.
+- Movies keep 16:9: the player draws each frame over a target of the scene's shape (4096x1152 at 32:9) and a centred
+  1920-wide pane shows it whole, so a widened pane stretched the video. That pane (name hash `0x66c038a9` at
+  pane+0xc0, drawn by `main+0x18d1450`) keeps its width in the `main+0x18f1fa8` site; the black pane behind it widens,
+  which gives the bars.
+- Outputs up to 5120 wide with no more pixels than 3840x2160 (5120x1440): the heaps grow with the pixel count, and
+  5120x1440 has fewer pixels than the 3840x2160 output measured.
 - The pause background's blur clamps its samples to a centred 1920/width rectangle of its target (ints at
   `obj+0x1420`, `main+0x18fe60c`); that rectangle becomes the whole target. Its test allows 1/64, as the rectangle
   is in whole texels (357 of 480 at 3440x1440).
