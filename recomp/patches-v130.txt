@@ -122,8 +122,12 @@ site aspect main 18fdde4 1e3a1b9a @page:x8 bd40dd04 bd40e505 5e24e746 2ea61cba 1
 # whole, so widened it was the video stretched (the logos at 32:9, 2026-11-27). Its pane is the one named 0x66c038a9
 # (the name's hash at pane+0xc0) drawn by main+0x18d1450 (the return address main+0x18d1978 at [sp+0x98]; that
 # caller's drawer, its x20, at [sp+0x80], the pane at drawer+8); the black pane behind it still widens, so the movie
-# gets black bars. Branchless: a pointer that is not that caller's reads the patch page instead.
-site aspect main 18f1fa8 f9400268 @page:x17 d100910c d280006d 9acd098c 8b0c030d 8b0c01ae 8b0c01cf bd40de34 bd40e635 1e341ab5 bd400310 bd4001b1 1e312a12 1e303a33 5e34e673 5ea0da52 0e331e52 f9404fe9 10efce8b cb0b0129 dac01129 d346fd29 cb0903e9 f94043eb 8a09016b 8a290230 aa10016b f940056b 8a09016b aa10016b b940c16b 52871530 72acd810 4b10016b 5ac0116b 53057d6b 0a09016b 4b0b03eb 1e27017b 0e7b1e52 1e2e1016 2eb21eb6 bd400f13 bd400db1 1e333a33 1e281018 1e380b18 1e380b18 1e2e1011 1e351a31 1e313a73 7eb3ef13 1e2e1017 2eb31ed7 bd400f10 bd400db1 1e312a19 1e2c101a 1e3a0b39 bd400310 1e360a10 bd000310 bd400f10 1e393a10 1f176610 bd000f10 bd4001b0 1e360a10 bd0001b0 bd400db0 1e393a10 1f176610 bd000db0 bd4001d0 1e360a10 bd0001d0 bd400dd0 1e393a10 1f176610 bd000dd0 bd4001f0 1e360a10 bd0001f0 bd400df0 1e393a10 1f176610 bd000df0 f9400268
+# gets black bars. The pause menu's background is a pane of that name too (the 32:9 pause menu lost its sides,
+# 2026-11-27): it has a word 1 at pane+0xd4 (a pointer before it), a movie's pane 0 (logos, prologue). The title screen's haze behind its menu (the pane 0x366fa271, same drawer), a quad from 1080 left of
+# the layout's right edge to that edge, ended at the 16:9 area's right edge with the bare scene beyond (#7): its right
+# vertices move out by the margin (page +216), to the output's edge. Branchless: a pointer that is not that caller's
+# reads the patch page instead.
+site aspect main 18f1fa8 f9400268 @page:x17 d100910c d280006d 9acd098c 8b0c030d 8b0c01ae 8b0c01cf bd40de34 bd40e635 1e341ab5 bd400310 bd4001b1 1e312a12 1e303a33 5e34e673 5ea0da52 0e331e52 f9404fe9 10efce8b cb0b0129 dac01129 d346fd29 cb0903e9 f94043eb 8a09016b 8a290230 aa10016b f940056b 8a09016b aa10016b bd40d57e b940c16b 52944e30 72a6cdf0 4b10016c 5ac0118c 53057d8c 0a09018c 4b0c03ec bd40da3c 1e27019d 0e3d1f9c 52871530 72acd810 4b10016b 5ac0116b 53057d6b 1e2603cc 5ac0118c 53057d8c 0a0c016b 0a09016b 4b0b03eb 1e27017b bd400f13 bd400db1 1e333a33 1e281018 1e380b18 1e380b18 1e2e1011 1e351a31 1e313a73 7eb3ef13 0e7b1e52 1e2e1016 2eb21eb6 1e2e1017 2eb31ed7 bd400f10 bd400db1 1e312a19 1e2c101a 1e3a0b39 bd400310 1e360a10 bd000310 bd400f10 1e393a10 1f176610 bd000f10 bd4001b0 1e360a10 bd0001b0 bd400db0 1e393a10 1f176610 bd000db0 bd4001d0 1e360a10 bd0001d0 bd400dd0 1e393a10 1f176610 bd000dd0 bd4001f0 1e360a10 bd0001f0 bd400df0 1e393a10 1f176610 bd000df0 bd4001b0 1e3c2a10 bd0001b0 bd4001f0 1e3c2a10 bd0001f0 f9400268
 # The pause background's blur clamps its samples to the centred 1920/width of its target (ints at obj+0x1420 over the
 # width at +0x1430): such a rectangle, centred and of that share within 1/64 (the rectangle is in whole texels: 357
 # of 480 at 3440x1440), becomes the whole target, else the blur's sides were streaks.
@@ -132,6 +136,12 @@ site aspect main 18fe60c 394263e9 @page:x10 bd40dd55 bd40e556 1e361ab6 1e223875 
 # 16/9 to compare, +136 the aspect).
 site aspect main 189ea34 bd414e68 bd414e68 @page:x17 bd40c230 bd408a31 5e30e512 2eb21e28   # ldr s8,[x19,#0x14c] -> the output's aspect when it is 16/9
 site aspect main 189eaa4 bd414e61 bd414e61 @page:x17 bd40c230 bd408a31 5e30e432 2eb21e21   # the same, ortho path
+# Markers over units (an enemy's name and gauge, issue #7) sat at half their distance from the centre at 32:9. The game
+# camera's update (main+0xf97270) builds a viewport matrix from its layout size (1920x1080 at +0x2e8): x scale W/2 at
+# +0x1b0, offset W/2 at +0x1e0, and from it the world-to-layout matrix (+0x1f0) the markers are placed with. With the
+# wide projection that maps the screen's edges to 0 and 1920, the 16:9 area's edges; the x scale is now W/2 over k
+# (page +200), so the screen's edges land at the layout's centred 16:9 area widened to the output. x9 and v31 are free.
+site aspect main f976b0 bd01b274 @page:x9 bd40c93f 1e3f1a9f bd01b27f   # str s20,[x19,#0x1b0] -> W/2 / k
 # Frame rates above 60 (runtime/frame_rate.c). The game steps by whole 60 Hz vsyncs: its frame-rate block at
 # main+0x269e150 is {fps, vsyncs per update, fps, fps as a float}, and 159 instructions read the vsyncs (+0x154). 104 of
 # them load it into a float register and convert it (ucvtf / scvtf) in a straight line, without a branch or a branch

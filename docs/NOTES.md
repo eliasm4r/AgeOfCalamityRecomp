@@ -457,7 +457,15 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
 - Movies keep 16:9: the player draws each frame over a target of the scene's shape (4096x1152 at 32:9) and a centred
   1920-wide pane shows it whole, so a widened pane stretched the video. That pane (name hash `0x66c038a9` at
   pane+0xc0, drawn by `main+0x18d1450`) keeps its width in the `main+0x18f1fa8` site; the black pane behind it widens,
-  which gives the bars.
+  which gives the bars. The pause menu's background is a pane of the same name and drawer (it lost its sides with the
+  first version of this): it has a word 1 at pane+0xd4, a movie's pane 0 (logos, prologue).
+- The title screen's haze behind the menu (pane `0x366fa271`, drawn like the movie's, a 1080-wide quad ending at the
+  layout's right edge) ended at the 16:9 area's right edge; the same site moves its right vertices out by the margin.
+- Markers over units (an enemy's name and gauge) sat at half their distance from the centre at 32:9. The game
+  camera's update (`main+0xf97270`) builds a viewport matrix from its layout size (1920x1080 at camera+0x2e8), and from
+  it the world-to-layout matrix (+0x1f0) the markers use. With the wide projection the screen's edges mapped to the
+  16:9 area's edges; the x scale (+0x1b0, site `main+0xf976b0`) is divided by 1920/width. Found by scanning guest
+  memory for the floats 1920,1080 and a hardware write watch on the hits.
 - Outputs up to 5120 wide with no more pixels than 3840x2160 (5120x1440): the heaps grow with the pixel count, and
   5120x1440 has fewer pixels than the 3840x2160 output measured.
 - The pause background's blur clamps its samples to a centred 1920/width rectangle of its target (ints at
@@ -466,8 +474,7 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
 - Outputs narrower than 16:9 (16:10) draw 16:9 at their width with bars, as on the Steam Deck: the 1920-wide UI lost
   its sides at 1920x1200.
 - Checked 2026-11-26 at 2560x1080, 3440x1440 and 3840x1080 (battle HUD, minimap, dialogue boxes, pause menu and its
-  markers, mission select menu, cutscene subtitles, title screen, loading screens) and 1920x1200. Left: the title
-  screen's white haze is drawn by a perspective camera and ends at the 16:9 area's right edge.
+  markers, mission select menu, cutscene subtitles, title screen, loading screens) and 1920x1200.
 
 ### Audio
 
