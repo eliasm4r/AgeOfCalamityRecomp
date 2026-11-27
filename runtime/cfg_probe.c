@@ -270,17 +270,26 @@ int probe_cfg(void) {
     CHECK((int64_t)st[0] * st[0] + (int64_t)st[1] * st[1] <= 32768ll * 32768, "mouse: clamped to the unit circle");
     input_mouse_stick(30, 0, 1.0 / 60, 0, st);
     CHECK(st[0] == 0 && st[1] == 0, "mouse: sensitivity 0 is off");
-    input_pad_stick(3000, -2000, 0.15f, st);
+    input_pad_stick(3000, -2000, 0.15f, 0, st);
     CHECK(st[0] == 0 && st[1] == 0, "pad stick: an 11% drift inside a 15% dead zone reads centred");
-    input_pad_stick(4000, -3000, 0, st);
+    input_pad_stick(4000, -3000, 0, 0, st);
     CHECK(st[0] == 4000 && st[1] == -3000, "pad stick: dead zone 0 passes the stick unchanged");
-    input_pad_stick(32767, 0, 0.15f, st);
+    input_pad_stick(32767, 0, 0.15f, 0, st);
     CHECK(st[0] == 32767 && st[1] == 0, "pad stick: full deflection still reaches full");
-    input_pad_stick(-32768, -32768, 0.15f, st);
+    input_pad_stick(-32768, -32768, 0.15f, 0, st);
     CHECK(st[0] < 0 && st[1] < 0 && st[0] >= -32767 && (int64_t)st[0] * st[0] + (int64_t)st[1] * st[1] <= 32768ll * 32768,
           "pad stick: a square gate's corner stays on the unit circle");
-    input_pad_stick(0, 32767 / 2 + 1, 0.2f, st);
+    input_pad_stick(0, 32767 / 2 + 1, 0.2f, 0, st);
     CHECK(abs(st[1] - 32767 * 3 / 8) <= 3, "pad stick: half deflection past a 20% zone is (0.5 - 0.2) / 0.8 of full");
+    input_pad_stick(3000, -2000, 0.15f, INPUT_GAME_DEAD_EDGE, st);
+    CHECK(st[0] == 0 && st[1] == 0, "pad stick, game dead zone off: inside the dead zone still reads centred");
+    input_pad_stick(0, 5300, 0.15f, INPUT_GAME_DEAD_EDGE, st);
+    CHECK(st[1] >= (int32_t)(32767 * 66 / 127) && st[1] < 32767 * 53 / 100,
+          "pad stick, game dead zone off: just past the dead zone starts at the game's own edge");
+    input_pad_stick(23170, 23170, 0.15f, INPUT_GAME_DEAD_EDGE, st);
+    CHECK(abs(st[0] - 23170) <= 2 && abs(st[1] - 23170) <= 2, "pad stick, game dead zone off: full deflection is unchanged");
+    input_pad_stick(100, 0, 0, INPUT_GAME_DEAD_EDGE, st);
+    CHECK(st[0] == 0 && st[1] == 0, "pad stick, game dead zone off: a 2 % dead zone at least");
     plat_setenv("ACR_STICK_DEADZONE", "12");
     plat_setenv("ACR_LSTICK_DEADZONE", NULL);
     plat_setenv("ACR_RSTICK_DEADZONE", NULL);

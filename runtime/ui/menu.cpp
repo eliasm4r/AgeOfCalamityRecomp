@@ -933,6 +933,7 @@ static void tab_controls(float scale) {
                pad ? stick_note[0] : nullptr, "ACR_STICK_DEADZONE");
     opt_slider("ACR_RSTICK_DEADZONE", UI_MENU_RSTICK_DEADZONE, 0, 50, UI_MENU_STICK_DEADZONE_DESC, 1, "%.0f %%",
                pad ? stick_note[1] : nullptr, "ACR_STICK_DEADZONE");
+    opt_toggle("ACR_GAME_DEADZONE", UI_MENU_GAME_DEADZONE, UI_MENU_GAME_DEADZONE_DESC);
     opt_toggle("ACR_INVERT_RX", UI_MENU_INVERT_RX, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_RY", UI_MENU_INVERT_RY, UI_MENU_INVERT_DESC);
     opt_toggle("ACR_INVERT_LX", UI_MENU_INVERT_LX, UI_MENU_INVERT_DESC);

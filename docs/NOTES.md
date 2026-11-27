@@ -488,6 +488,14 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   for 20-35 s a minute, #13). An output limiter (`audio_mixer.c` output_limit) holds it at 0.95: down at once for a
   5 ms frame, back over about 150 ms; below the ceiling the output is unchanged. The log counts its time once a minute.
 
+### Controller
+
+- The game's own stick dead zone is half the travel. `main+0x8c0f90` turns each stick into 0..254 (127 at rest) and
+  puts it back to rest while it is within 64 of the centre. The stick queries at `main+0x19f750` count it as tilted
+  from 60 and fully tilted from 120. In the Death Mountain battle a scripted stick moved Link at 52 and 55 % and not at
+  45 %, whatever that radius was patched to. `ACR_GAME_DEADZONE=0` therefore works on the host side: past our own dead
+  zone the stick starts at 66 / 127, enough to clear 64 after the game truncates each axis.
+
 ### Steam Deck
 
 | Item | Measured |

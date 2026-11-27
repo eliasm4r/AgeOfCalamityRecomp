@@ -331,6 +331,7 @@ static void mouse_camera(int32_t out[2]) {
 }
 
 static float stick_dead[2] = {-1, -1};     // input_pad_deadzone of the left and right stick; live (cfg_version)
+static float stick_lift;                   // ACR_GAME_DEADZONE=0: INPUT_GAME_DEAD_EDGE, else 0
 static unsigned stick_dead_seen;
 
 static float stick_dead_get(int s) {
@@ -339,13 +340,14 @@ static float stick_dead_get(int s) {
         stick_dead_seen = ver;
         stick_dead[0] = input_pad_deadzone(0);
         stick_dead[1] = input_pad_deadzone(1);
+        stick_lift = cfg_bool("ACR_GAME_DEADZONE") ? 0 : INPUT_GAME_DEAD_EDGE;
     }
     return stick_dead[s];
 }
 
 // One gamepad stick through the dead zone; SDL's Y grows downwards, the Switch's upwards.
 static void stick_of(SDL_Gamepad *g, SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) {
-    input_pad_stick(SDL_GetGamepadAxis(g, ax), -(int32_t)SDL_GetGamepadAxis(g, ay), dead, out);
+    input_pad_stick(SDL_GetGamepadAxis(g, ax), -(int32_t)SDL_GetGamepadAxis(g, ay), dead, stick_lift, out);
 }
 static void stick(SDL_GamepadAxis ax, SDL_GamepadAxis ay, float dead, int32_t out[2]) { stick_of(pad, ax, ay, dead, out); }
 

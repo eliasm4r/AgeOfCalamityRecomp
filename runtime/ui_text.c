@@ -241,6 +241,9 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_STICK_DEADZONE_DESC] = "How far a stick must move to count. If the character or camera moves alone, set it"
                                     " a little above the \"stick now\" value.",
     [UI_MENU_STICK_DEADZONE_NOW] = "stick now: %.0f %%",
+    [UI_MENU_GAME_DEADZONE] = "Game's own dead zone",
+    [UI_MENU_GAME_DEADZONE_DESC] = "On: as in the original game, a stick tilted less than half way does nothing. Off: the"
+                                   " slightest tilt past the dead zones above already moves and turns the camera.",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "Camera speed with the mouse.",
     [UI_MENU_WALK_KEY] = "Walk key",
@@ -689,6 +692,10 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_STICK_DEADZONE_DESC] = "Distance à parcourir pour que le stick compte. Si le personnage ou la caméra bouge"
                                     " seul, réglez un peu au-dessus de la valeur \"stick actuel\".",
     [UI_MENU_STICK_DEADZONE_NOW] = "stick actuel : %.0f %%",
+    [UI_MENU_GAME_DEADZONE] = "Zone morte du jeu",
+    [UI_MENU_GAME_DEADZONE_DESC] = "Activé : comme dans le jeu d'origine, un stick incliné à moins de la moitié ne fait"
+                                   " rien. Désactivé : la moindre inclinaison au-delà des zones mortes ci-dessus fait"
+                                   " déjà bouger le personnage et la caméra.",
     [UI_MENU_MOUSE_SENS] = "Sensibilité de la caméra à la souris",
     [UI_MENU_MOUSE_SENS_DESC] = "Vitesse de la caméra à la souris.",
     [UI_MENU_WALK_KEY] = "Touche de marche",

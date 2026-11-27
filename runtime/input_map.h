@@ -113,9 +113,15 @@ void input_map_stick(const uint8_t down[KEY_COUNT], int stick, int32_t out[2]);
 // Clamped to the unit circle, up (negative dy) is +y.
 void input_mouse_stick(int32_t dx, int32_t dy, double dt_s, float sens, int32_t out[2]);
 // A gamepad stick (x, y in -32768..32767, up is +y) through a round dead zone of `dead` (fraction of full deflection,
-// 0..0.5): inside the circle the stick reads 0, and the rest of the travel is scaled to start at 0 at the edge, so a
-// drifting stick rests at 0 and full deflection still reaches full. The result stays inside the unit square.
-void input_pad_stick(int32_t x, int32_t y, float dead, int32_t out[2]);
+// 0..0.5): inside the circle the stick reads 0, and the rest of the travel is scaled to start at `lift` at the edge
+// (0, or INPUT_GAME_DEAD_EDGE to step over the game's own dead zone), so a drifting stick rests at 0 and full deflection
+// still reaches full. With a lift the dead zone is at least 2 %, or the slightest noise would move. The result stays
+// inside the unit square.
+void input_pad_stick(int32_t x, int32_t y, float dead, float lift, int32_t out[2]);
+// The game's own dead zone: main+0x8c0f90 turns each stick into 0..254 (127 at rest) and puts it back to rest while it
+// is within 64 of the centre, and main+0x19f750 counts a stick as tilted from 60 and fully from 120. A stick less than
+// half tilted did nothing. 66 / 127 clears 64 even after the game truncates each axis (a loss under 1.42).
+#define INPUT_GAME_DEAD_EDGE (66.0f / 127.0f)
 // The dead zone of gamepad stick 0 (left) or 1 (right) for input_pad_stick, as a fraction of full deflection:
 // ACR_LSTICK_DEADZONE or ACR_RSTICK_DEADZONE when set, else ACR_STICK_DEADZONE (both sticks), percent clamped to 0..50.
 float input_pad_deadzone(int stick);
