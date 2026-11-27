@@ -72,6 +72,8 @@ typedef struct Mixer {
     float mix_peak_in[256], mix_peak_out[256];     // ACR_TRACE=audio: per mix, before and after its effects
     int prefill;                                   // render blocks
     uint64_t health_underruns, health_skipped, health_overruns, health_dry, health_unanswered;   // at the last once-a-minute line (level_note)
+    float limit_gain;                              // the output limiter's gain after the last frame (output_limit)
+    uint64_t limited_frames;                       // frames it turned down, since the last once-a-minute line
 } Mixer;
 
 static _Atomic float device_volume = 1.0f;
@@ -504,6 +506,11 @@ static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) 
             m->health_unanswered = lone;
         }
     }
+    if (m->limited_frames && r->elapsed_frames % ((uint64_t)r->param.sample_rate * 60 / (uint64_t)m->frame) == 0) {
+        rt_log("audio: in the last minute the output limiter turned the sound down for %.2f s (the mix went past full "
+               "scale)", m->limited_frames / (double)m->rate);
+        m->limited_frames = 0;
+    }
     if (!(rt_trace & RT_TRACE_AUDIO)) return;
     int sound = 0;
     for (int k = 0; k < 2 * frames; k++) {
@@ -537,6 +544,7 @@ void audio_mixer_open(AudioRenderer *r) {
     Mixer *m = calloc(1, sizeof *m);
     if (!m) rt_fatal("audio mixer allocation");
     m->frame = r->param.sample_count;
+    m->limit_gain = 1.0f;
     m->nbuf = r->param.mix_buffer_count;
     m->rate = r->param.sample_rate;
     if (m->frame <= 0 || m->frame > MAX_FRAME || m->nbuf <= 0 || m->nbuf > 512) rt_fatal("audio mixer frame / buffer count");
@@ -1003,6 +1011,35 @@ typedef struct {
     uint64_t address;uint32_t size,channels,samples,last_read;
     uint8_t format,reserved[3],input[6],padding[2];
 } CircularSinkParam;
+
+// The output limiter. The device sink's mix reaches past full scale: a battle's 5.1 music at 0.45 a channel folds to
+// stereo as front + 0.707 centre + 0.707 rear, and the clamp at 1 then clipped (#13: peaks at 1.0 for 20-35 s a minute
+// on the Steam Deck, heard as crackles). Below LIMIT_CEILING the output is the mix as before; a frame (5 ms) whose peak
+// goes over it gets the gain that brings it to the ceiling at once, and the gain comes back to 1 over about 150 ms
+// (LIMIT_RELEASE a frame), rising across each frame so that it never steps up. The clamp after it stays, for safety.
+#define LIMIT_CEILING 0.95f
+#define LIMIT_RELEASE 0.033f
+static void output_limit(Mixer *m, float *lr, float *six, int frames) {
+    float peak = 0;
+    for (int i = 0; i < 2 * frames; i++) peak = fmaxf(peak, fabsf(lr[i]));
+    if (six) for (int i = 0; i < 6 * frames; i++) peak = fmaxf(peak, fabsf(six[i]));
+    float g0 = m->limit_gain, g1 = g0 + (1.0f - g0) * LIMIT_RELEASE;
+    if (g1 > 0.9999f) g1 = 1.0f;
+    if (peak * g1 > LIMIT_CEILING) g1 = LIMIT_CEILING / peak;
+    m->limit_gain = g1;
+    if (g0 == 1.0f && g1 == 1.0f) {   // the usual case: nothing to turn down, only the clamp
+        for (int i = 0; i < 2 * frames; i++) lr[i] = lr[i] > 1 ? 1 : lr[i] < -1 ? -1 : lr[i];
+        if (six) for (int i = 0; i < 6 * frames; i++) six[i] = six[i] > 1 ? 1 : six[i] < -1 ? -1 : six[i];
+        return;
+    }
+    if (g1 < g0 || peak * g0 > LIMIT_CEILING) m->limited_frames += (uint64_t)frames;
+    for (int k = 0; k < frames; k++) {
+        float g = g1 <= g0 ? g1 : g0 + (g1 - g0) * (float)(k + 1) / (float)frames;   // down at once, up over the frame
+        for (int c = 0; c < 2; c++) { float x = lr[2 * k + c] * g; lr[2 * k + c] = x > 1 ? 1 : x < -1 ? -1 : x; }
+        if (six) for (int c = 0; c < 6; c++) { float x = six[6 * k + c] * g; six[6 * k + c] = x > 1 ? 1 : x < -1 ? -1 : x; }
+    }
+}
+
 _Static_assert(__builtin_offsetof(CircularSinkParam,input)==28,"circular sink wire layout");
 static void mix_circular_sink(AudioRenderer *r,int id) {
     Mixer *m=r->mixer;CircularSinkParam p;memcpy(&p,r->sinks[id].name,sizeof p);
@@ -1126,15 +1163,13 @@ void audio_mixer_render(AudioRenderer *r, double seconds) {
                 rr = ff * (ch[1] ? ch[1][k] : 0) + cf * C + sf * (ch[5] ? ch[5][k] : 0);
             } else if (sink->input_count >= 2) { l = ch[0] ? ch[0][k] : 0; rr = ch[1] ? ch[1][k] : 0; }
             else l = rr = ch[0] ? ch[0][k] : 0;
-            l *= gain; rr *= gain;
-            lr[2 * k] = l > 1 ? 1 : l < -1 ? -1 : l; lr[2 * k + 1] = rr > 1 ? 1 : rr < -1 ? -1 : rr;
+            lr[2 * k] = l * gain; lr[2 * k + 1] = rr * gain;   // clamped by output_limit
             if (m->out_ch == 6 && sink->input_count >= 6) {
-                for (int c = 0; c < 6; c++) {   // SDL's 5.1 order is the sink's: FL FR C LFE RL RR
-                    float x = (ch[c] ? ch[c][k] : 0) * gain;
-                    six[6 * k + c] = x > 1 ? 1 : x < -1 ? -1 : x;
-                }
+                for (int c = 0; c < 6; c++)   // SDL's 5.1 order is the sink's: FL FR C LFE RL RR
+                    six[6 * k + c] = (ch[c] ? ch[c][k] : 0) * gain;
             } else if (m->out_ch == 6) six[6 * k] = lr[2 * k], six[6 * k + 1] = lr[2 * k + 1];
         }
+        output_limit(m, lr, m->out_ch == 6 ? six : NULL, frames);
     } else if (!sink && !circular) report_once(m, 5, "no device sink in use", r->param.sink_count);
     level_note(r, m, lr, frames);
     output_push(m, m->out_ch == 6 ? six : lr, frames);

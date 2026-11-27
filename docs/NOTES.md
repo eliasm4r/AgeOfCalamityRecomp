@@ -483,6 +483,10 @@ Fixes the boot needed in the inherited runtime: `fsp-srv` as a CMIF domain (the 
   **ADPCM 32 kHz mono**, up to about 35 at once in a battle.
 - Track mixes go out through splitters (mix 10 to splitter 3 with 4 destinations, mix 12 to splitter 5 with 12).
   Getting the mix order right took the silent 5 s windows of a 175 s route from 21 of 37 down to 1.
+- The device sink's mix goes past full scale: the 5.1 music folds to stereo as front + 0.707 centre + 0.707 rear, and a
+  battle's 0.45 a channel then reaches 1 (bench at volume 100: 0.957; on the Steam Deck the per-second peak sat at 1.0
+  for 20-35 s a minute, #13). An output limiter (`audio_mixer.c` output_limit) holds it at 0.95: down at once for a
+  5 ms frame, back over about 150 ms; below the ceiling the output is unchanged. The log counts its time once a minute.
 
 ### Steam Deck
 
