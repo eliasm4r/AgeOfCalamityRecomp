@@ -29,6 +29,9 @@ static PlatMutex lock = PLAT_MUTEX_INIT;
 static int state;                    // 0 not started, 1 running, -1 disabled or SDL failed
 static SDL_Gamepad *pad;
 static uint64_t next_scan;
+// Player 1's gamepad went away and no other took its place: the game hears its controller disconnected (ov_input.c),
+// as on a Switch, until a gamepad is connected again or a key or mouse button is pressed (keyboard play). Any thread.
+static volatile int32_t pad_lost;
 // Player 2 (co-op): the second connected gamepad, read on its own (no keyboard, no script, no binds of its own: the
 // same ACR_BIND_* pad rows and layout setting as player 1). ACR_PLAYER2=0: never opened.
 static SDL_Gamepad *pad2;
@@ -364,6 +367,7 @@ static void scan_pads(void) {
         plat_xchg32(&pad_layout_shown, -1);
         for (int i = 0; i < 4; i++) plat_xchg32(&pad_labels[i], PAD_LABEL_NONE);
         rt_log("input: gamepad disconnected");
+        plat_xchg32(&pad_lost, 1);
     }
     if (pad2 && SDL_GamepadConnected(pad2)) {   // player 1's gamepad went away: player 2's becomes player 1's
         pad = pad2;
@@ -375,6 +379,7 @@ static void scan_pads(void) {
         if (!test_pads_only() || SDL_IsJoystickVirtual(ids[i])) pad = SDL_OpenGamepad(ids[i]);
     SDL_free(ids);
     if (!pad) return;
+    if (plat_xchg32(&pad_lost, 0)) rt_log("input: a gamepad is back");
     pad_rumble = SDL_GetBooleanProperty(SDL_GetGamepadProperties(pad), SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
     // A Nintendo pad plays by label, which is by position; a PlayStation pad plays by position too, as the Switch
     // buttons sit (circle A, cross B, square Y, triangle X), since its shapes name no Switch button.
@@ -516,10 +521,41 @@ static void test_pad_attach_one(const char *var, SDL_Joystick **keep) {
 }
 
 // ACR_TEST_PAD2: a second virtual gamepad the same way (player 2, co-op), attached after the first.
+static SDL_Joystick *test_joy[2];
 static void test_pad_attach(void) {
-    static SDL_Joystick *joy[2];
-    test_pad_attach_one("ACR_TEST_PAD", &joy[0]);
-    test_pad_attach_one("ACR_TEST_PAD2", &joy[1]);
+    test_pad_attach_one("ACR_TEST_PAD", &test_joy[0]);
+    test_pad_attach_one("ACR_TEST_PAD2", &test_joy[1]);
+}
+
+// ACR_TEST_PAD_DETACH=<s>[-<s>]: the ACR_TEST_PAD gamepad goes away at that world-clock second, as a controller whose
+// battery died, and comes back at the second one (the pause while it is gone, input_wait_pad). Under lock.
+static void test_pad_detach_tick(void) {
+    static int parsed, done;
+    static double off_s = -1, on_s = -1;
+    if (!parsed) {
+        parsed = 1;
+        const char *e = cfg_get("ACR_TEST_PAD_DETACH");
+        if (e && sscanf(e, "%lf-%lf", &off_s, &on_s) < 1) off_s = -1;
+    }
+    if (off_s < 0 || done == 2) return;
+    int64_t w = frame_step_world_us();
+    if (!done && w >= (int64_t)(off_s * 1e6) && test_joy[0]) {
+        SDL_JoystickID id = SDL_GetJoystickID(test_joy[0]);
+        SDL_CloseJoystick(test_joy[0]);
+        test_joy[0] = NULL;
+        SDL_DetachVirtualJoystick(id);
+        rt_log("input: test gamepad detached at %.2f s", w / 1e6);
+        done = 1;
+    } else if (done == 1 && on_s > off_s) {
+        static uint64_t gone_ns;
+        if (!gone_ns) gone_ns = plat_now_ns();
+        // the world clock stands still while the game waits: the second time counts on the wall clock from the detach
+        if (plat_now_ns() - gone_ns >= (uint64_t)((on_s - off_s) * 1e9)) {
+            test_pad_attach_one("ACR_TEST_PAD", &test_joy[0]);
+            rt_log("input: test gamepad attached again");
+            done = 2;
+        }
+    }
 }
 
 static void start(void) {
@@ -557,6 +593,7 @@ static void physical_of(SDL_Gamepad *g, uint8_t pd[PAD_COUNT]) {
 }
 
 static int pad_physical(uint8_t pd[PAD_COUNT]) {
+    test_pad_detach_tick();
     if ((!pad || !SDL_GamepadConnected(pad)) && plat_now_ns() / 1000000u >= next_scan) { next_scan = plat_now_ns() / 1000000u + RESCAN_MS; scan_pads(); }
     SDL_UpdateGamepads();
     if (!pad || !SDL_GamepadConnected(pad)) return 0;
@@ -674,6 +711,35 @@ int input_player2_connected(void) {
     return ok;
 }
 
+int input_pad_lost(void) { return __atomic_load_n(&pad_lost, __ATOMIC_ACQUIRE); }
+
+// The controller applet (ov_input.c) while player 1's gamepad is gone: returns once a gamepad is connected or a key or
+// mouse button is pressed in the game window. The game's main thread waits here, so the game stands still, as a
+// Switch suspends it under its controller screen.
+void input_wait_pad(void) {
+    rt_log("input: waiting for a gamepad or a key (the game is paused)");
+    menu_pad_notice(1);
+    while (__atomic_load_n(&pad_lost, __ATOMIC_ACQUIRE)) {
+        vk_present_again();   // the picture stays on screen with the notice over it
+        plat_mutex_lock(&lock);
+        if (state == 1) {
+            test_pad_detach_tick();
+            uint64_t now_ms = plat_now_ns() / 1000000u;
+            if ((!pad || !SDL_GamepadConnected(pad)) && now_ms >= next_scan) next_scan = now_ms + RESCAN_MS, scan_pads();
+            SDL_UpdateGamepads();
+        } else {
+            plat_xchg32(&pad_lost, 0);
+        }
+        if (ikb_foreground())
+            for (int k = 1; k < KEY_COUNT; k++)
+                if (ikb_down(k)) { plat_xchg32(&pad_lost, 0); break; }
+        plat_mutex_unlock(&lock);
+        plat_sleep_ms(50);
+    }
+    menu_pad_notice(0);
+    rt_log("input: the game goes on");
+}
+
 int input_pad_stick_percent(double pct[2]) {
     int ok = 0;
     pct[0] = pct[1] = 0;
@@ -730,6 +796,9 @@ static void poll_merged(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx
                 if (!cap || mouse_ignore[k]) down[k] = 0;
             }
             was_captured = cap;
+            if (__atomic_load_n(&pad_lost, __ATOMIC_RELAXED))
+                for (int k = 1; k < KEY_COUNT; k++)
+                    if (down[k]) { plat_xchg32(&pad_lost, 0); rt_log("input: keyboard play after the gamepad left"); break; }
             b |= input_map_buttons(down);
             int32_t k[2];
             walk_get();

@@ -38,6 +38,8 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_QUICK_RES_DOCKED] = "TV (docked)",
     [UI_MENU_QUICK_FULL] = "Full menu",
     [UI_MENU_QUICK_MARK] = "Mark this moment",
+    [UI_MENU_PAD_LOST] = "Controller disconnected",
+    [UI_MENU_PAD_LOST_HINT] = "The game is paused. Connect a controller, or press a key to play on the keyboard.",
     SWKBD("Text entry", "Enter a name", "Horse", "OK", "Cancel", "Controller: A = OK, B = Cancel"),
 
     [UI_MENU_TITLE] = "Age of Calamity Recomp",
@@ -485,6 +487,8 @@ static const char *const text_fr[UI_TEXT_COUNT] = {
     [UI_MENU_QUICK_RES_DOCKED] = "TV (station)",
     [UI_MENU_QUICK_FULL] = "Menu complet",
     [UI_MENU_QUICK_MARK] = "Marquer ce moment",
+    [UI_MENU_PAD_LOST] = "Manette déconnectée",
+    [UI_MENU_PAD_LOST_HINT] = "Le jeu est en pause. Connectez une manette, ou appuyez sur une touche pour jouer au clavier.",
     SWKBD("Saisie de texte", "Entrez un nom", "Cheval", "OK", "Annuler", "Manette : A = OK, B = Annuler"),
 
     [UI_MENU_TITLE] = "Age of Calamity Recomp",

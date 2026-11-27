@@ -651,11 +651,16 @@ static VkFormat unorm_view_format(VkFormat fmt) {
     return srgb ? twin : fmt;
 }
 
+// The last picture presented, for vk_present_again (under g_pl)
+static struct { VkImage src; VkImageLayout layout; VkFormat fmt; int w, h, crop[4], has_crop; } g_last;
+
 static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4], int defer) {
     int general = layout == VK_IMAGE_LAYOUT_GENERAL;
     gfx_window_start();
     VkCtx *c = vk_ctx();
     plat_rmutex_lock(&g_pl);
+    g_last.src = src, g_last.layout = layout, g_last.fmt = fmt, g_last.w = w, g_last.h = h, g_last.has_crop = crop != NULL;
+    if (crop) memcpy(g_last.crop, crop, sizeof g_last.crop);
     flip_locked();
     if (!g_sc || plat_cas32(&g_dirty, 0, 0)) {
         if (!wsys_minimized() && !create_swapchain() && !g_sc) goto out;
@@ -879,6 +884,12 @@ void vk_present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w, in
 
 void vk_present_blit(VkImage src, VkImageLayout layout, VkFormat fmt, int w, int h, const int crop[4]) {
     present_image(src, layout, fmt, w, h, crop, 1);
+}
+
+void vk_present_again(void) {
+    plat_rmutex_lock(&g_pl);
+    if (g_last.src) present_image(g_last.src, g_last.layout, g_last.fmt, g_last.w, g_last.h, g_last.has_crop ? g_last.crop : NULL, 0);
+    plat_rmutex_unlock(&g_pl);
 }
 
 void vk_present_flip(void) {

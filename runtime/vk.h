@@ -150,6 +150,9 @@ void vk_hdr_support(float out[4]);
 int vk_contact_strength(void);   // percent, 0 = off
 void vk_contact_release(void);   // before the device goes away
 void vk_present_flip(void);
+// The last game picture presented once more (with the overlay): a pause in which the game draws nothing (the
+// controller applet, input_wait_pad). Nothing before the first present.
+void vk_present_again(void);
 // Every submission to ctx->gfx_queue (and xfer_queue when shared) takes this lock; vk_present_image and the swapchain
 // rebuild do. Recursive.
 void vk_queue_lock(void);

@@ -38,6 +38,9 @@ static int64_t sample;
 
 static uint32_t pad_id(void) { return ov_handheld() ? 0x20u : 0u; }
 static uint32_t pad_style(void) { return ov_handheld() ? STYLE_HANDHELD : STYLE_FULL_KEY; }
+// Player 1's gamepad left with nothing in its place (input.c): the game hears the controller disconnected, then opens
+// its controller applet, which waits for one (controller_support).
+static int pad_gone(void) { return input_pad_lost(); }
 // Under lock: player 2 is there for the game (connected, supported, not dropped, docked)
 static int p2_live(void) { return !ov_handheld() && enabled && allowed2 && !dropped2 && input_player2_connected(); }
 
@@ -81,7 +84,7 @@ static void ov_supported_styles(Cpu *c) {
 static void ov_style_set(Cpu *c) {
     uint32_t id = *need_id(c, 0, "GetNpadStyleSet");
     plat_mutex_lock_shared(&lock);
-    uint32_t v = enabled && allowed && id == pad_id() ? styles & pad_style() : 0;
+    uint32_t v = enabled && allowed && id == pad_id() && !pad_gone() ? styles & pad_style() : 0;
     if (id == PLAYER2_ID && id != pad_id() && p2_live()) v = styles & STYLE_FULL_KEY;
     plat_mutex_unlock_shared(&lock);
     ret_x(c, v);
@@ -92,9 +95,14 @@ static void ov_style_set(Cpu *c) {
 static int npad_state(uint32_t want, uint32_t id, NpadState *s) {
     plat_mutex_lock(&lock);
     *s = (NpadState){.sampling = ++sample};
-    int live = want && enabled && allowed && id == pad_id() && want == pad_style() && (styles & want);
+    int mine = want && enabled && allowed && id == pad_id() && want == pad_style() && (styles & want);
+    int live = mine && !pad_gone();
     int live2 = !live && id == PLAYER2_ID && want == STYLE_FULL_KEY && (styles & want) && p2_live();
     plat_mutex_unlock(&lock);
+    if (mine && !live) {   // still polled while it is gone: the poll finds a gamepad coming back, or a key
+        NpadState gone;
+        input_poll(&gone.buttons, &gone.lx, &gone.ly, &gone.rx, &gone.ry);
+    }
     if (live) {
         s->attributes = ATTR_CONNECTED;
         input_poll(&s->buttons, &s->lx, &s->ly, &s->rx, &s->ry);
@@ -194,6 +202,7 @@ static int controller_support(const int8_t *arg) {
     int players = hi >= 2 && p2_live() ? 2 : 1;
     plat_mutex_unlock(&lock);
     rt_log("hid: controller applet for %d to %d players: %d connected", lo, hi, players);
+    if (input_pad_lost()) input_wait_pad();
     return players;
 }
 

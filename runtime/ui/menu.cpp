@@ -1336,6 +1336,22 @@ static char g_perf_text[96];
 
 static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
 
+// The notice while the game waits for a controller: a box in the middle of the picture, drawn without the menu open.
+static std::atomic<int> g_pad_notice{0};
+extern "C" void menu_pad_notice(int on) { g_pad_notice.store(on); }
+
+static void pad_notice_draw(const MenuTarget *t, float scale) {
+    if (!g_pad_notice.load()) return;
+    const char *title = menu_text(UI_MENU_PAD_LOST), *hint = menu_text(UI_MENU_PAD_LOST_HINT);
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
+    ImVec2 a = ImGui::CalcTextSize(title), b = ImGui::CalcTextSize(hint);
+    float pad = 18 * scale, gap = 8 * scale, w = (a.x > b.x ? a.x : b.x) + pad * 2, h = a.y + gap + b.y + pad * 2;
+    ImVec2 p((t->width - w) / 2, (t->height - h) / 2);
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), IM_COL32(0, 0, 0, 200), 6 * scale);
+    dl->AddText(ImVec2(p.x + (w - a.x) / 2, p.y + pad), IM_COL32(255, 255, 255, 255), title);
+    dl->AddText(ImVec2(p.x + (w - b.x) / 2, p.y + pad + a.y + gap), IM_COL32(220, 220, 220, 235), hint);
+}
+
 extern "C" void menu_perf_cycle(void) {
     static const char *const modes[] = {"off", "fps", "full"};
     cfg_set("ACR_PERF_OVERLAY", modes[(perf_mode_of(cfg_value("ACR_PERF_OVERLAY")) + 1) % 3]);
@@ -1590,7 +1606,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             if (fk && *fk) opt_focus_key(fk);   // its tab's shot shows it, scrolled into view
             set_open(1);
             open = true;
-        } else if (!g_perf_mode) {
+        } else if (!g_perf_mode && !g_pad_notice.load()) {
             return 0;
         }
     }
@@ -1643,6 +1659,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
         else layout_menu(t->width, t->height, scale);
     }
     perf_draw(t, scale);
+    pad_notice_draw(t, scale);
     ImGui::Render();
     if (open) g_save_pending = opt_save_tick(0);
     g_cost_ns += plat_now_ns() - t0;

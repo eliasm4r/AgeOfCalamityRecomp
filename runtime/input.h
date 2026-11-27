@@ -26,6 +26,10 @@ int input_pad_read(uint64_t *buttons, int32_t *lx, int32_t *ly);
 // Nothing while a menu or a text entry is open. Any thread.
 int input_poll_player2(uint64_t *buttons, int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
 int input_player2_connected(void);
+// Player 1's gamepad left and nothing replaced it yet (no gamepad, no key since): the game hears it disconnected.
+int input_pad_lost(void);
+// Blocks until a gamepad is connected or a key is pressed (the controller applet while input_pad_lost). Any thread.
+void input_wait_pad(void);
 int input_rumble2(uint16_t low, uint16_t high, uint32_t ms);   // input_rumble on player 2's gamepad
 // The gamepad layout in effect (PAD_LAYOUT_*, input_map.h; ACR_PAD_LAYOUT, live); -1 without a gamepad. Any thread.
 int input_pad_layout(void);
