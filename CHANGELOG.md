@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.9
+
+### Added
+- **Game's own dead zone** (Controls tab of the F1 menu): the original game ignores a stick tilted less than about half
+  way, whatever the dead zone set in the menu, so walking slowly or steering finely was impossible. Turn it off to have
+  the slightest tilt past your own dead zone move Link and the camera. On by default, as in the original game.
+- **Controller disconnected**: when the gamepad of player 1 is lost, the game pauses with a notice and resumes once a
+  gamepad is back (or a key is pressed), as on the Switch.
+- 5120x1440 in the resolution list.
+
+### Fixed
+- **Flurry Rush pausing at 60 fps** (#20): after two or three blows, Link hung in slow motion for almost two seconds
+  before the rest of the rush. A hit's short stop now lasts as long as at 30 fps, at every frame rate.
+- **Ultrawide** (#7, #22): videos keep their 16:9 picture with bars at the sides instead of being stretched; the unit
+  markers line up with the units; the haze of the title screen reaches the edges.
+- **FXAA** now works at every output size and render scale (it only worked at 1080p with the scale at 100 %). It is
+  greyed out in the menu while DLSS or FSR 3.1 is on, which already smooth the edges.
+- **Sound crackling on loud moments** (#13): the mix, folded from 5.1 to stereo, could clip at full volume. A limiter
+  now keeps it just under full scale.
+
 ## 0.3.8
 
 ### Added
