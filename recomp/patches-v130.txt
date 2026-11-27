@@ -1549,3 +1549,14 @@ site aimstick main 12ce70 540001e5 d503201f
 site aimstick main 12ce78 540001a5 d503201f
 site aimstick main 12cf8c 540001e5 d503201f
 site aimstick main 12cf94 540001a5 d503201f
+# Hit-stop (issue #20, the Flurry Rush). A hit pauses its actor with a modifier object (vtable main+0x263f520, Link's at
+# +0x128): main+0x1403b0 starts it {+8 duration, +0xc speed, +0x18 first-update flag}, and main+0x140e30 multiplies the
+# animation's speed by every active modifier's speed (getter main+0x140410). In the Flurry Rush the stop (speed 0.01)
+# starts at frame 16 of each blow and the blow ends at frame 17. At 30 fps one update steps 2 frames, 15 to 17: the blow
+# ended in the same update, so the stop was never seen. At 60 the update ending at 16 started it, and the last frame
+# then crawled at 0.01, 100 updates (1.7 s) between the second blow and the third. The stop now takes hold once the 30 Hz
+# frame it started in is over: the getter adds the 30 Hz ratio (page +0) to a count at +0x1c (padding, zeroed by the
+# start) and gives 1.0 while the count is below 1. At 30 fps the count is 1 at the first read, so nothing changes.
+set  hitstop ACR_PATCH_HITSTOP 1
+site hitstop main 1403c0 39006008 f9000c08   # strb w8,[x0,#0x18] -> str x8,[x0,#0x18]: the flag, and +0x1c = 0
+site hitstop main 140410 bd400c00 bd400c00 @page:x17 bd401c1e bd40023f 1e3f2bde bd001c1e 1e2e101f 7ebee7fd 2e601ffd 1e2043a0   # speed; count += ratio; 1.0 while count < 1
